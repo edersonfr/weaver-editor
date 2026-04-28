@@ -5,7 +5,18 @@
   <title>Editor Example</title>
 
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+  <!-- CORE -->
+  <script src="../src/core/commands.js"></script>
+  <script src="../src/core/plugin.js"></script>
+
+  <!-- EDITOR -->
   <script src="../src/editor.js"></script>
+
+  <!-- PLUGINS -->
+  <script src="../src/plugins/toolbar.js"></script>
+  <script src="../src/plugins/basic-commands.js"></script>
+
 </head>
 <body>
 
@@ -14,7 +25,12 @@
   <div id="editor"></div>
 
   <script>
-    $('#editor').wysiwygEditor();
+    $('#editor').wysiwygEditor({
+      plugins: [
+        ToolbarPlugin,
+        BasicCommandsPlugin
+      ]
+    });
   </script>
 
 </body>
