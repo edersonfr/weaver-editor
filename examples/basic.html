@@ -16,6 +16,13 @@
       content: attr(data-placeholder);
       color: #999;
     }
+
+    .editor-preview {
+      min-height: 200px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      background: #fff;
+    }
   </style>
 
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -31,6 +38,7 @@
   <script src="../src/plugins/toolbar.js"></script>
   <script src="../src/plugins/basic-commands.js"></script>
   <script src="../src/plugins/sanitizer.js"></script>
+  <script src="../src/plugins/preview.js"></script>
 
 </head>
 <body>
@@ -44,7 +52,8 @@
       plugins: [
         ToolbarPlugin,
         BasicCommandsPlugin,
-        SanitizerPlugin
+        SanitizerPlugin,
+        PreviewPlugin
       ]
     });
   </script>

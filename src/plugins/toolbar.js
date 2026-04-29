@@ -13,7 +13,8 @@ ToolbarPlugin.prototype.render = function () {
 
   var buttons = [
     { name: 'bold', label: '<b>B</b>' },
-    { name: 'italic', label: '<i>I</i>' }
+    { name: 'italic', label: '<i>I</i>' },
+    { name: 'preview', label: '👁️' }
   ];
 
   for (var i = 0; i < buttons.length; i++) {
