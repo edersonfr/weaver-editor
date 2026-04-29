@@ -4,6 +4,20 @@
   <meta charset="UTF-8">
   <title>Editor Example</title>
 
+  <style>
+    .editor-content {
+      min-height: 200px;
+      padding: 10px;
+      outline: none;
+      border: 1px solid #ddd;
+    }
+
+    .editor-content:empty:before {
+      content: attr(data-placeholder);
+      color: #999;
+    }
+  </style>
+
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
   <!-- CORE -->

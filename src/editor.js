@@ -23,7 +23,7 @@
   Editor.prototype.buildLayout = function () {
     this.$container = $('<div class="wysiwyg-editor"/>');
     this.$toolbar = $('<div class="editor-toolbar"/>');
-    this.$content = $('<div contenteditable="true" class="editor-content"/>');
+    this.$content = $('<div contenteditable="true" class="editor-content"/>').attr('data-placeholder', 'Digite aqui...');
 
     this.$container.append(this.$toolbar, this.$content);
     this.$el.append(this.$container);
