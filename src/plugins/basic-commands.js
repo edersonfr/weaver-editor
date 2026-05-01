@@ -7,11 +7,13 @@ function BasicCommandsPlugin(editor) {
 BasicCommandsPlugin.prototype.init = function () {
   var editor = this.editor;
 
-  editor.registerCommand('bold', function () {
-    document.execCommand('bold', false, null);
+  editor.registerCommand('bold', function (editor) {
+    if (!editor.selection.isInsideEditor()) return;
+    editor.selection.wrap('b');
   });
 
-  editor.registerCommand('italic', function () {
-    document.execCommand('italic', false, null);
+  editor.registerCommand('italic', function (editor) {
+    if (!editor.selection.isInsideEditor()) return;
+    editor.selection.wrap('i');
   });
 };

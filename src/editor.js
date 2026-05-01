@@ -34,6 +34,7 @@
   // =========================
   Editor.prototype.initCore = function () {
     this.commandRegistry = new CommandRegistry(this);
+    this.selection = new SelectionManager(this);
   };
 
   // =========================
