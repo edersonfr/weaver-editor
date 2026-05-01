@@ -47,13 +47,32 @@ SelectionManager.prototype.unwrap = function (tag) {
 
   while (node && node !== this.editor.$content[0]) {
     if (node.nodeType === 1 && node.tagName.toLowerCase() === tag) {
+
       var parent = node.parentNode;
 
+      // salva referência do conteúdo
+      var firstChild = node.firstChild;
+      var lastChild = node.lastChild;
+
+      // move filhos pra fora
       while (node.firstChild) {
         parent.insertBefore(node.firstChild, node);
       }
 
       parent.removeChild(node);
+
+      // restaura seleção
+      var newRange = document.createRange();
+
+      if (firstChild && lastChild) {
+        newRange.setStartBefore(firstChild);
+        newRange.setEndAfter(lastChild);
+      }
+
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+
       return;
     }
 
@@ -83,6 +102,23 @@ SelectionManager.prototype.toggle = function (tag) {
   } else {
     this.wrap(tag);
   }
+};
+
+SelectionManager.prototype.getActiveFormats = function () {
+  var formats = {};
+  var node = this.getRange() ? this.getRange().commonAncestorContainer : null;
+
+  while (node && node !== this.editor.$content[0]) {
+    if (node.nodeType === 1) {
+      var tag = node.tagName.toLowerCase();
+
+      if (tag === 'b' || tag === 'strong') formats.bold = true;
+      if (tag === 'i' || tag === 'em') formats.italic = true;
+    }
+    node = node.parentNode;
+  }
+
+  return formats;
 };
 
 window.SelectionManager = SelectionManager;

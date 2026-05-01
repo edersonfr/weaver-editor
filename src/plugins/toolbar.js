@@ -2,6 +2,7 @@ window.ToolbarPlugin = ToolbarPlugin;
 
 function ToolbarPlugin(editor) {
   this.editor = editor;
+  this.buttons = {};
 }
 
 ToolbarPlugin.prototype.init = function () {
@@ -17,17 +18,40 @@ ToolbarPlugin.prototype.render = function () {
     { name: 'preview', label: '👁️' }
   ];
 
+  var self = this;
+
   for (var i = 0; i < buttons.length; i++) {
-    (function (btn) {
+    (function (btn, self) {
 
       var $btn = $('<button type="button"/>')
         .html(btn.label)
         .on('click', function () {
           editor.exec(btn.name);
+          self.updateState();
         });
+
+      self.buttons[btn.name] = $btn;
 
       editor.$toolbar.append($btn);
 
-    })(buttons[i]);
+    })(buttons[i], this);
+  }
+};
+
+ToolbarPlugin.prototype.updateState = function () {
+  if (!this.editor.selection) return;
+
+  var formats = this.editor.selection.getActiveFormats();
+
+  for (var key in this.buttons) {
+    this.buttons[key].removeClass('active');
+  }
+
+  if (formats.bold && this.buttons.bold) {
+    this.buttons.bold.addClass('active');
+  }
+
+  if (formats.italic && this.buttons.italic) {
+    this.buttons.italic.addClass('active');
   }
 };

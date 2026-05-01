@@ -67,6 +67,10 @@
     this.$content.on('input', function () {
       self.trigger('change');
     });
+
+    this.$content.on('keyup mouseup', function () {
+      self.updateToolbar();
+    });
   };
 
   Editor.prototype.trigger = function (event) {
@@ -96,6 +100,14 @@
   Editor.prototype.setContent = function (html) {
     this.$content.html(html);
   };
+
+  Editor.prototype.updateToolbar = function () {
+  for (var i = 0; i < this.plugins.length; i++) {
+    if (this.plugins[i].updateState) {
+      this.plugins[i].updateState();
+    }
+  }
+};
 
   // =========================
   // DEFAULTS
