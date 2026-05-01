@@ -8,12 +8,16 @@ BasicCommandsPlugin.prototype.init = function () {
   var editor = this.editor;
 
   editor.registerCommand('bold', function (editor) {
+    if (!editor.selection) return;
     if (!editor.selection.isInsideEditor()) return;
-    editor.selection.wrap('b');
+
+    editor.selection.toggle('b');
   });
 
   editor.registerCommand('italic', function (editor) {
+    if (!editor.selection) return;
     if (!editor.selection.isInsideEditor()) return;
-    editor.selection.wrap('i');
+
+    editor.selection.toggle('i');
   });
 };
