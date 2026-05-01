@@ -23,11 +23,9 @@ PreviewPlugin.prototype.bind = function () {
 };
 
 PreviewPlugin.prototype.toggle = function () {
-  if (this.active) {
-    this.disable();
-  } else {
-    this.enable();
-  }
+  if (!this.editor.$content.length) return;
+
+  this.active ? this.disable() : this.enable();
 };
 
 PreviewPlugin.prototype.enable = function () {
