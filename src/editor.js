@@ -91,7 +91,8 @@
 
   Editor.prototype.getPlugin = function (name) {
     for (var i = 0; i < this.plugins.length; i++) {
-      if (this.plugins[i].constructor.name === name) {
+      // Evita falhas caso o código seja minificado, buscando a propriedade `name`
+      if (this.plugins[i].name === name || this.plugins[i].constructor.name === name) {
         return this.plugins[i];
       }
     }
@@ -117,44 +118,38 @@
   Editor.prototype.injectStyles = function () {
     if (document.getElementById('wysiwyg-editor-styles')) return;
 
-    var css = `
-      .wysiwyg-editor { border:1px solid #ccc; font-family:Arial; }
-
-      .editor-toolbar {
-        border-bottom:1px solid #ddd;
-        padding:5px;
-        background:#f5f5f5;
-      }
-
-      .editor-toolbar button {
-        margin-right:5px;
-        cursor:pointer;
-      }
-
-      .editor-toolbar button.active {
-        background:#333;
-        color:#fff;
-      }
-
-      .editor-content {
-        min-height:200px;
-        padding:10px;
-        outline:none;
-        border:1px solid #ddd;
-      }
-
-      .editor-content:empty:before {
-        content: attr(data-placeholder);
-        color:#999;
-      }
-
-      .editor-preview-frame {
-        width:100%;
-        height:300px;
-        border:1px solid #ddd;
-        background:#fff;
-      }
-    `;
+    // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
+    var css = 
+      '.wysiwyg-editor { border:1px solid #ccc; font-family:Arial; }\n' +
+      '.editor-toolbar {\n' +
+      '  border-bottom:1px solid #ddd;\n' +
+      '  padding:5px;\n' +
+      '  background:#f5f5f5;\n' +
+      '}\n' +
+      '.editor-toolbar button {\n' +
+      '  margin-right:5px;\n' +
+      '  cursor:pointer;\n' +
+      '}\n' +
+      '.editor-toolbar button.active {\n' +
+      '  background:#333;\n' +
+      '  color:#fff;\n' +
+      '}\n' +
+      '.editor-content {\n' +
+      '  min-height:200px;\n' +
+      '  padding:10px;\n' +
+      '  outline:none;\n' +
+      '  border:1px solid #ddd;\n' +
+      '}\n' +
+      '.editor-content:empty:before {\n' +
+      '  content: attr(data-placeholder);\n' +
+      '  color:#999;\n' +
+      '}\n' +
+      '.editor-preview-frame {\n' +
+      '  width:100%;\n' +
+      '  height:300px;\n' +
+      '  border:1px solid #ddd;\n' +
+      '  background:#fff;\n' +
+      '}';
 
     var style = document.createElement('style');
     style.id = 'wysiwyg-editor-styles';
