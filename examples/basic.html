@@ -20,6 +20,7 @@
   <script src="../src/plugins/sanitizer.js"></script>
   <script src="../src/plugins/preview.js"></script>
   <script src="../src/plugins/normalizer.js"></script>
+  <script src="../src/plugins/image.js"></script>
 
 </head>
 <body>
@@ -30,14 +31,35 @@
 
   <script>
     $('#editor').wysiwygEditor({
+      uploadImage: function (file, callback) {
+        // mock: simula upload async
+        setTimeout(function () {
+          var fakeUrl = URL.createObjectURL(file);
+          callback(fakeUrl);
+        }, 500);
+      },
       plugins: [
         ToolbarPlugin,
         BasicCommandsPlugin,
         SanitizerPlugin,
         PreviewPlugin,
-        NormalizerPlugin
+        NormalizerPlugin,
+        ImagePlugin
       ]
     });
+
+    // exemplo de função de upload personalizada (substitua pela sua implementação real)
+    // uploadImage: function(file, callback) {
+    //   var formData = new FormData();
+    //   formData.append('file', file);
+
+    //   fetch('/upload', {
+    //     method: 'POST',
+    //     body: formData
+    //   })
+    //   .then(res => res.json())
+    //   .then(data => callback(data.url));
+    // }
   </script>
 
 </body>

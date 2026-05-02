@@ -15,6 +15,7 @@ ToolbarPlugin.prototype.render = function () {
   var buttons = [
     { name: 'bold', label: '<b>B</b>' },
     { name: 'italic', label: '<i>I</i>' },
+    { name: 'image', label: '🖼️' },
     { name: 'preview', label: '👁️' },
     { name: 'desktop', label: '🖥️' },
     { name: 'tablet', label: '📱' },
