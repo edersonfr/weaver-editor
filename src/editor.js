@@ -150,6 +150,10 @@
       '  border:1px solid #ddd;\n' +
       '  background:#fff;\n' +
       '  transition: width 0.3s ease; \n' +
+      '}\n' +
+      '.editor-content.drag-over {\n' +
+      '  background: #f0f8ff; \n' +
+      '  border: 1px dashed #007bff; \n' +
       '}';
 
     var style = document.createElement('style');
