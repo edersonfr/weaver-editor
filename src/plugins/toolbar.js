@@ -15,7 +15,10 @@ ToolbarPlugin.prototype.render = function () {
   var buttons = [
     { name: 'bold', label: '<b>B</b>' },
     { name: 'italic', label: '<i>I</i>' },
-    { name: 'preview', label: '👁️' }
+    { name: 'preview', label: '👁️' },
+    { name: 'desktop', label: '🖥️' },
+    { name: 'tablet', label: '📱' },
+    { name: 'mobile', label: '📲' }
   ];
 
   var self = this;
@@ -26,7 +29,15 @@ ToolbarPlugin.prototype.render = function () {
       var $btn = $('<button type="button"/>')
         .html(btn.label)
         .on('click', function () {
-          editor.exec(btn.name);
+          if (btn.name === 'desktop' || btn.name === 'tablet' || btn.name === 'mobile') {
+            var preview = editor.getPlugin('PreviewPlugin');
+            if (preview && preview.active) {
+              preview.setViewport(btn.name);
+            }
+          } else {
+            editor.exec(btn.name);
+          }
+
           self.updateState();
         });
 

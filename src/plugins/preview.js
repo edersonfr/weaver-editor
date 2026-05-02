@@ -50,6 +50,8 @@ PreviewPlugin.prototype.enable = function () {
   this.editor.$content.hide();
   this.$preview.show();
 
+  this.setViewport('desktop');
+
   this.active = true;
 };
 
@@ -69,6 +71,20 @@ PreviewPlugin.prototype.buildCssLinks = function () {
   }
 
   return links;
+};
+
+PreviewPlugin.prototype.setViewport = function (size) {
+  var widthMap = {
+    desktop: '100%',
+    tablet: '768px',
+    mobile: '375px'
+  };
+
+  this.$preview.css({
+    width: widthMap[size] || '100%',
+    margin: '0 auto',
+    display: 'block'
+  });
 };
 
 window.PreviewPlugin = PreviewPlugin;

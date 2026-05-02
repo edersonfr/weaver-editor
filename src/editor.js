@@ -146,9 +146,10 @@
       '}\n' +
       '.editor-preview-frame {\n' +
       '  width:100%;\n' +
-      '  height:300px;\n' +
+      '  height:400px;\n' +
       '  border:1px solid #ddd;\n' +
       '  background:#fff;\n' +
+      '  transition: width 0.3s ease; \n' +
       '}';
 
     var style = document.createElement('style');
