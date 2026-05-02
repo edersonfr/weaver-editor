@@ -6,6 +6,7 @@ ImagePlugin.prototype.init = function () {
   this.registerCommand();
   this.bindDrop();
   this.bindPasteImage();
+  this.bindImageClick();
 };
 
 ImagePlugin.prototype.registerCommand = function () {
@@ -145,6 +146,72 @@ ImagePlugin.prototype.bindPasteImage = function () {
         self.handleUpload(file);
       }
     }
+  });
+};
+
+ImagePlugin.prototype.bindImageClick = function () {
+  var self = this;
+
+  this.editor.$content.on('click', 'img', function (e) {
+    e.stopPropagation();
+    self.activateResize($(this));
+  });
+
+  // clicar fora remove seleção
+  this.editor.$content.on('click', function () {
+    self.deactivateResize();
+  });
+};
+
+ImagePlugin.prototype.activateResize = function ($img) {
+  this.deactivateResize();
+
+  var wrapper = $('<span class="img-resize-wrapper"/>');
+  var handle = $('<span class="img-resize-handle"/>');
+
+  $img.wrap(wrapper);
+  $img.after(handle);
+
+  this.$activeWrapper = $img.parent();
+
+  this.bindResizeEvents($img, handle);
+};
+
+ImagePlugin.prototype.deactivateResize = function () {
+  if (!this.$activeWrapper) return;
+
+  var $img = this.$activeWrapper.find('img');
+
+  this.$activeWrapper.replaceWith($img);
+
+  this.$activeWrapper = null;
+};
+
+ImagePlugin.prototype.bindResizeEvents = function ($img, $handle) {
+  var startX, startWidth;
+
+  $handle.on('mousedown', function (e) {
+    e.preventDefault();
+
+    startX = e.clientX;
+    startWidth = $img.width();
+
+    function onMouseMove(e) {
+      var dx = e.clientX - startX;
+      var newWidth = startWidth + dx;
+
+      if (newWidth > 50) {
+        $img.css('width', newWidth + 'px');
+      }
+    }
+
+    function onMouseUp() {
+      $(document).off('mousemove', onMouseMove);
+      $(document).off('mouseup', onMouseUp);
+    }
+
+    $(document).on('mousemove', onMouseMove);
+    $(document).on('mouseup', onMouseUp);
   });
 };
 

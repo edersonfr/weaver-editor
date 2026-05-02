@@ -154,7 +154,25 @@
       '.editor-content.drag-over {\n' +
       '  background: #f0f8ff; \n' +
       '  border: 1px dashed #007bff; \n' +
-      '}';
+      '}\n' +
+      '.img-resize-wrapper {\n' +
+      '  display: inline-block;\n' +
+      '  position: relative;\n' +
+      '  border: 1px solid #007bff;\n' +
+      '}\n' +
+      '.img-resize-wrapper img {\n' +
+      '  display: block;\n' +
+      '  max-width: 100%;\n' +
+      '}\n' +
+      '.img-resize-handle {\n' +
+      '  width: 10px;\n' +
+      '  height: 10px;\n' +
+      '  background: #007bff;\n' +
+      '  position: absolute;\n' +
+      '  right: -5px;\n' +
+      '  bottom: -5px;\n' +
+      '  cursor: se-resize;\n' +
+      '}\n';
 
     var style = document.createElement('style');
     style.id = 'wysiwyg-editor-styles';
