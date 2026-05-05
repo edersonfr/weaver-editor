@@ -114,6 +114,7 @@ SelectionManager.prototype.getActiveFormats = function () {
 
       if (tag === 'b' || tag === 'strong') formats.bold = true;
       if (tag === 'i' || tag === 'em') formats.italic = true;
+      if (tag === 'a') formats.link = true;
     }
     node = node.parentNode;
   }

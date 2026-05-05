@@ -131,25 +131,41 @@
 
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
-      '.wysiwyg-editor { border:1px solid #ccc; font-family:Arial; }\n' +
+      '.wysiwyg-editor { border: 1px solid #a9a9a9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; border-radius: 4px; overflow: hidden; }\n' +
       '.editor-toolbar {\n' +
-      '  border-bottom:1px solid #ddd;\n' +
-      '  padding:5px;\n' +
-      '  background:#f5f5f5;\n' +
+      '  border-bottom: 1px solid #e5e5e5;\n' +
+      '  padding: 8px 8px 4px 8px;\n' +
+      '  background: #f8f9fa;\n' +
       '}\n' +
       '.editor-toolbar button {\n' +
-      '  margin-right:5px;\n' +
-      '  cursor:pointer;\n' +
+      '  margin-right: 4px;\n' +
+      '  margin-bottom: 4px;\n' +
+      '  cursor: pointer;\n' +
+      '  background: #fff;\n' +
+      '  border: 1px solid #dae0e5;\n' +
+      '  border-radius: 3px;\n' +
+      '  padding: 5px 10px;\n' +
+      '  font-size: 14px;\n' +
+      '  color: #333;\n' +
+      '  transition: all 0.2s;\n' +
+      '}\n' +
+      '.editor-toolbar button:hover:not(:disabled) {\n' +
+      '  background: #e2e6ea;\n' +
+      '  border-color: #dae0e5;\n' +
       '}\n' +
       '.editor-toolbar button.active {\n' +
-      '  background:#333;\n' +
-      '  color:#fff;\n' +
+      '  background: #dae0e5;\n' +
+      '  box-shadow: inset 0 3px 5px rgba(0,0,0,.125);\n' +
+      '}\n' +
+      '.editor-toolbar button:disabled {\n' +
+      '  opacity: 0.65;\n' +
+      '  cursor: not-allowed;\n' +
       '}\n' +
       '.editor-content {\n' +
-      '  min-height:200px;\n' +
-      '  padding:10px;\n' +
+      '  min-height: 200px;\n' +
+      '  padding: 15px;\n' +
       '  outline:none;\n' +
-      '  border:1px solid #ddd;\n' +
+      '  background: #fff;\n' +
       '}\n' +
       '.editor-content:empty:before {\n' +
       '  content: attr(data-placeholder);\n' +
@@ -183,6 +199,18 @@
       '  right: -5px;\n' +
       '  bottom: -5px;\n' +
       '  cursor: se-resize;\n' +
+      '}\n' +
+      '.editor-codeview {\n' +
+      '  width: 100%;\n' +
+      '  min-height: 200px;\n' +
+      '  padding: 15px;\n' +
+      '  border: none;\n' +
+      '  outline: none;\n' +
+      '  resize: vertical;\n' +
+      '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;\n' +
+      '  background: #f8f9fa;\n' +
+      '  color: #333;\n' +
+      '  box-sizing: border-box;\n' +
       '}\n';
 
     var style = document.createElement('style');
