@@ -1,29 +1,111 @@
 function TablePlugin(editor) {
   this.editor = editor;
+  this.$grid = null;
 }
 
 TablePlugin.prototype.init = function () {
   var self = this;
 
   this.editor.registerCommand('table', function () {
-    self.insertTable();
+    self.toggleGrid();
+  });
+
+  this.buildGrid();
+};
+
+TablePlugin.prototype.buildGrid = function () {
+  var self = this;
+
+  this.$grid = $('<div class="editor-table-grid" style="display: none; position: absolute; background: #fff; border: 1px solid #dae0e5; padding: 5px; border-radius: 3px; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"></div>');
+  var $gridInner = $('<div style="display: flex; flex-wrap: wrap; width: 150px;"></div>');
+
+  // Gera uma grade 10x10
+  for (var r = 1; r <= 10; r++) {
+    for (var c = 1; c <= 10; c++) {
+      var $cell = $('<div class="grid-cell" data-row="' + r + '" data-col="' + c + '" style="width: 15px; height: 15px; border: 1px solid #e5e5e5; box-sizing: border-box; cursor: pointer;"></div>');
+      $gridInner.append($cell);
+    }
+  }
+
+  var $label = $('<div class="grid-label" style="text-align: center; font-size: 12px; margin-top: 5px; color: #666;">0 x 0</div>');
+
+  this.$grid.append($gridInner).append($label);
+  this.editor.$container.append(this.$grid);
+
+  // Evita que clicar na grade faça o editor perder o foco
+  this.$grid.on('mousedown', function (e) {
+    e.preventDefault();
+  });
+
+  // Pinta de azul as células correspondentes ao passar o mouse
+  this.$grid.on('mouseover', '.grid-cell', function () {
+    var row = $(this).data('row');
+    var col = $(this).data('col');
+    
+    self.$grid.find('.grid-cell').each(function () {
+      var $this = $(this);
+      if ($this.data('row') <= row && $this.data('col') <= col) {
+        $this.css('background', '#007bff');
+      } else {
+        $this.css('background', 'transparent');
+      }
+    });
+    $label.text(col + ' x ' + row);
+  });
+
+  // Dispara a criação da tabela quando clicado e oculta o grid
+  this.$grid.on('click', '.grid-cell', function () {
+    var row = $(this).data('row');
+    var col = $(this).data('col');
+    self.insertTable(row, col);
+    self.toggleGrid(false);
+  });
+
+  // Esconde o menu de grade se clicar em outro lugar da tela
+  $(document).on('click', function (e) {
+    var $btn = self.editor.$toolbar.find('[data-name="table"]');
+    if (!self.$grid.is(e.target) && self.$grid.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
+      self.toggleGrid(false);
+    }
   });
 };
 
-TablePlugin.prototype.insertTable = function () {
-  if (!this.editor.selection || !this.editor.selection.isInsideEditor()) return;
+TablePlugin.prototype.toggleGrid = function (forceState) {
+  var $btn = this.editor.$toolbar.find('[data-name="table"]');
+  if ($btn.length === 0) return;
 
-  var rowsStr = prompt('Número de linhas:', '3');
-  if (!rowsStr) return;
-  
-  var colsStr = prompt('Número de colunas:', '3');
-  if (!colsStr) return;
+  var isVisible = forceState !== undefined ? forceState : !this.$grid.is(':visible');
 
-  var rows = parseInt(rowsStr, 10);
-  var cols = parseInt(colsStr, 10);
+  if (isVisible) {
+    // Salva a posição exata do cursor para usarmos depois
+    if (this.editor.selection && this.editor.selection.isInsideEditor()) {
+      this.savedRange = this.editor.selection.getRange();
+    }
+
+    var btnOffset = $btn.position();
+    this.$grid.css({
+      top: btnOffset.top + $btn.outerHeight() + 5,
+      left: btnOffset.left
+    });
+    this.$grid.show();
+    this.$grid.find('.grid-cell').css('background', 'transparent');
+    this.$grid.find('.grid-label').text('0 x 0');
+  } else {
+    this.$grid.hide();
+  }
+};
+
+TablePlugin.prototype.insertTable = function (rows, cols) {
+  // Restaura o cursor para o exato local antes do menu ser aberto
+  if (this.savedRange) {
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(this.savedRange);
+  } else if (!this.editor.selection || !this.editor.selection.isInsideEditor()) {
+    return;
+  }
 
   if (isNaN(rows) || isNaN(cols) || rows <= 0 || cols <= 0) {
-    alert('Valores de linhas ou colunas inválidos.');
     return;
   }
 

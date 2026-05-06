@@ -137,7 +137,7 @@
 
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
-      '.wysiwyg-editor { border: 1px solid #a9a9a9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; border-radius: 4px; overflow: hidden; }\n' +
+      '.wysiwyg-editor { border: 1px solid #a9a9a9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; border-radius: 4px; overflow: hidden; position: relative; }\n' +
       '.editor-toolbar {\n' +
       '  border-bottom: 1px solid #e5e5e5;\n' +
       '  padding: 8px 8px 4px 8px;\n' +
