@@ -22,13 +22,25 @@ ToolbarPlugin.prototype.render = function () {
       { label: 'Georgia', value: 'Georgia' },
       { label: 'Tahoma', value: 'Tahoma' },
       { label: 'Times New Roman', value: 'Times New Roman' },
-      { label: 'Verdana', value: 'Verdana' }
+      { label: 'Verdana', value: 'Verdana' },
+      { label: 'Roboto', value: 'Roboto' },
+      { label: 'Open Sans', value: 'Open Sans' },
+      { label: 'Lato', value: 'Lato' },
+      { label: 'Montserrat', value: 'Montserrat' },
+      { label: 'Poppins', value: 'Poppins' },
+      { label: 'Oswald', value: 'Oswald' }
     ]},
     { name: 'fontSize', type: 'select', title: 'Tamanho', options: [
-      { label: 'Pequeno', value: '2' },
-      { label: 'Normal', value: '3' },
-      { label: 'Grande', value: '5' },
-      { label: 'Máximo', value: '7' }
+      { label: '8px', value: '8' },
+      { label: '10px', value: '10' },
+      { label: '12px', value: '12' },
+      { label: '14px', value: '14' },
+      { label: 'Padrão (16px)', value: '16' },
+      { label: '18px', value: '18' },
+      { label: '24px', value: '24' },
+      { label: '36px', value: '36' },
+      { label: '48px', value: '48' },
+      { label: '72px', value: '72' }
     ]},
     { name: 'formatBlock', type: 'select', title: 'Formatos', options: [
       { label: 'Parágrafo', value: 'P' },

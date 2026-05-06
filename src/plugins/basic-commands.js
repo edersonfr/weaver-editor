@@ -94,13 +94,40 @@ BasicCommandsPlugin.prototype.init = function () {
 
   editor.registerCommand('fontName', function (editor, value) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
+    
+    document.execCommand('styleWithCSS', false, false);
     document.execCommand('fontName', false, value);
+
+    // Converte a tag legada <font face="..."> gerada pelo navegador em um <span style="font-family: ..."> (HTML5)
+    var fonts = editor.$content[0].querySelectorAll('font[face]');
+    for (var i = 0; i < fonts.length; i++) {
+      var fontEl = fonts[i];
+      var span = document.createElement('span');
+      span.style.fontFamily = fontEl.getAttribute('face');
+      span.innerHTML = fontEl.innerHTML; // Mantém o texto selecionado
+      fontEl.parentNode.replaceChild(span, fontEl);
+    }
   });
 
-  // Tamanho nativo (1 a 7). No polimento, mudaremos para 8px-72px.
   editor.registerCommand('fontSize', function (editor, value) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('fontSize', false, value);
+
+    // Desativa o styleWithCSS para forçar o navegador a gerar a tag genérica <font size="7">
+    document.execCommand('styleWithCSS', false, false);
+    
+    // Aplica o tamanho 7 como um "marcador" temporário
+    document.execCommand('fontSize', false, '7');
+
+    // Encontra a tag recém-criada pelo navegador e a converte para um SPAN válido (HTML5)
+    var fonts = editor.$content[0].querySelectorAll('font[size="7"]');
+    for (var i = 0; i < fonts.length; i++) {
+      var fontEl = fonts[i];
+      var span = document.createElement('span');
+      var remValue = (parseInt(value, 10) / 16) + 'rem'; // Converte de px para rem (base 16px)
+      span.style.fontSize = remValue;
+      span.innerHTML = fontEl.innerHTML; // Mantém textos e formatações internas
+      fontEl.parentNode.replaceChild(span, fontEl);
+    }
   });
 
   editor.registerCommand('showBlocks', function (editor) {

@@ -31,12 +31,14 @@ PreviewPlugin.prototype.enable = function () {
   var doc = this.$preview[0].contentWindow.document;
 
   var cssLinks = this.buildCssLinks();
+  var googleFonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato&family=Montserrat&family=Open+Sans&family=Oswald&family=Poppins&family=Roboto&display=swap">';
 
   doc.open();
   doc.write(
     '<!DOCTYPE html>' +
     '<html>' +
     '<head>' +
+    googleFonts +
     cssLinks +
     '<style>body{padding:20px;font-family:Arial}</style>' +
     '</head>' +

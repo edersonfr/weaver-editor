@@ -129,6 +129,12 @@
   Editor.prototype.injectStyles = function () {
     if (document.getElementById('wysiwyg-editor-styles')) return;
 
+    // Injeta a chamada do Google Fonts no cabeçalho da página
+    var fontLink = document.createElement('link');
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Lato&family=Montserrat&family=Open+Sans&family=Oswald&family=Poppins&family=Roboto&display=swap';
+    document.head.appendChild(fontLink);
+
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
       '.wysiwyg-editor { border: 1px solid #a9a9a9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; border-radius: 4px; overflow: hidden; }\n' +
