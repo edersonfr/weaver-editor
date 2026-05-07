@@ -13,24 +13,24 @@ ToolbarPlugin.prototype.render = function () {
   var editor = this.editor;
 
   var buttons = [
-    { name: 'undo', label: '↶' },
-    { name: 'redo', label: '↷' },
-    { name: 'removeFormat', label: '🧹', title: 'Remover Formatação' },
-    { name: 'fontName', type: 'select', title: 'Fonte', options: [
-      { label: 'Arial', value: 'Arial' },
-      { label: 'Courier New', value: 'Courier New' },
-      { label: 'Georgia', value: 'Georgia' },
-      { label: 'Tahoma', value: 'Tahoma' },
-      { label: 'Times New Roman', value: 'Times New Roman' },
-      { label: 'Verdana', value: 'Verdana' },
-      { label: 'Roboto', value: 'Roboto' },
-      { label: 'Open Sans', value: 'Open Sans' },
-      { label: 'Lato', value: 'Lato' },
-      { label: 'Montserrat', value: 'Montserrat' },
-      { label: 'Poppins', value: 'Poppins' },
-      { label: 'Oswald', value: 'Oswald' }
+    { name: 'undo', label: '<i data-lucide="undo"></i>', title: 'Desfazer' },
+    { name: 'redo', label: '<i data-lucide="redo"></i>', title: 'Refazer' },
+    { name: 'removeFormat', label: '<i data-lucide="eraser"></i>', title: 'Remover Formatação' },
+    { name: 'fontName', type: 'dropdown', title: 'Fonte', text: 'Fonte', options: [
+      { label: '<span style="font-family: Arial, sans-serif; font-size:14px;">Arial</span>', value: 'Arial' },
+      { label: '<span style="font-family: \'Courier New\', Courier, monospace; font-size:14px;">Courier New</span>', value: 'Courier New' },
+      { label: '<span style="font-family: Georgia, serif; font-size:14px;">Georgia</span>', value: 'Georgia' },
+      { label: '<span style="font-family: Tahoma, sans-serif; font-size:14px;">Tahoma</span>', value: 'Tahoma' },
+      { label: '<span style="font-family: \'Times New Roman\', Times, serif; font-size:14px;">Times New Roman</span>', value: 'Times New Roman' },
+      { label: '<span style="font-family: Verdana, sans-serif; font-size:14px;">Verdana</span>', value: 'Verdana' },
+      { label: '<span style="font-family: Roboto, sans-serif; font-size:14px;">Roboto</span>', value: 'Roboto' },
+      { label: '<span style="font-family: \'Open Sans\', sans-serif; font-size:14px;">Open Sans</span>', value: 'Open Sans' },
+      { label: '<span style="font-family: Lato, sans-serif; font-size:14px;">Lato</span>', value: 'Lato' },
+      { label: '<span style="font-family: Montserrat, sans-serif; font-size:14px;">Montserrat</span>', value: 'Montserrat' },
+      { label: '<span style="font-family: Poppins, sans-serif; font-size:14px;">Poppins</span>', value: 'Poppins' },
+      { label: '<span style="font-family: Oswald, sans-serif; font-size:14px;">Oswald</span>', value: 'Oswald' }
     ]},
-    { name: 'fontSize', type: 'select', title: 'Tamanho', options: [
+    { name: 'fontSize', type: 'dropdown', title: 'Tamanho', text: 'Tamanho', options: [
       { label: '8px', value: '8' },
       { label: '10px', value: '10' },
       { label: '12px', value: '12' },
@@ -42,41 +42,41 @@ ToolbarPlugin.prototype.render = function () {
       { label: '48px', value: '48' },
       { label: '72px', value: '72' }
     ]},
-    { name: 'formatBlock', type: 'select', title: 'Formatos', options: [
-      { label: 'Parágrafo', value: 'P' },
-      { label: 'Título 1', value: 'H1' },
-      { label: 'Título 2', value: 'H2' },
-      { label: 'Título 3', value: 'H3' },
-      { label: 'Título 4', value: 'H4' },
-      { label: 'Título 5', value: 'H5' },
-      { label: 'Título 6', value: 'H6' },
-      { label: 'Citação', value: 'BLOCKQUOTE' }
+    { name: 'formatBlock', type: 'dropdown', title: 'Formatos', text: 'Formatos', options: [
+      { label: '<p style="margin:0; font-size:14px;">Parágrafo</p>', value: 'P' },
+      { label: '<h1 style="margin:0; font-size:24px; font-weight:bold;">Título 1</h1>', value: 'H1' },
+      { label: '<h2 style="margin:0; font-size:20px; font-weight:bold;">Título 2</h2>', value: 'H2' },
+      { label: '<h3 style="margin:0; font-size:18px; font-weight:bold;">Título 3</h3>', value: 'H3' },
+      { label: '<h4 style="margin:0; font-size:16px; font-weight:bold;">Título 4</h4>', value: 'H4' },
+      { label: '<h5 style="margin:0; font-size:14px; font-weight:bold;">Título 5</h5>', value: 'H5' },
+      { label: '<h6 style="margin:0; font-size:12px; font-weight:bold;">Título 6</h6>', value: 'H6' },
+      { label: '<blockquote style="margin:0; border-left:3px solid #ccc; padding-left:8px; font-style:italic; color:#666; font-size:14px;">Citação</blockquote>', value: 'BLOCKQUOTE' }
     ]},
-    { name: 'bold', label: '<b>B</b>' },
-    { name: 'italic', label: '<i>I</i>' },
-    { name: 'underline', label: '<u>U</u>' },
-    { name: 'strikethrough', label: '<s>S</s>' },
-    { name: 'foreColor', type: 'color', title: 'Cor da Fonte' },
-    { name: 'backColor', type: 'color', title: 'Cor de Destaque' },
-    { name: 'ul', label: '• Lista' },
-    { name: 'ol', label: '1. Lista' },
-    { name: 'outdent', label: '⇤ Menos Margem' },
-    { name: 'indent', label: '⇥ Mais Margem' },
-    { name: 'alignLeft', label: '⇤' },
-    { name: 'alignCenter', label: '↔' },
-    { name: 'alignRight', label: '⇥' },
-    { name: 'justifyFull', label: '≡', title: 'Justificado' },
-    { name: 'link', label: '🔗' },
-    { name: 'table', label: '📊' },
-    { name: 'image', label: '🖼️' },
-    { name: 'video', label: '🎥', title: 'Inserir Vídeo' },
-    { name: 'preview', label: '👁️' },
-    { name: 'desktop', label: '🖥️' },
-    { name: 'tablet', label: '📱' },
-    { name: 'mobile', label: '📲' },
-    { name: 'fullscreen', label: '⛶', title: 'Tela Cheia' },
-    { name: 'showBlocks', label: '🔲', title: 'Mostrar Blocos' },
-    { name: 'codeview', label: '&lt;/&gt;' }
+    { name: 'bold', label: '<i data-lucide="bold"></i>', title: 'Negrito' },
+    { name: 'italic', label: '<i data-lucide="italic"></i>', title: 'Itálico' },
+    { name: 'underline', label: '<i data-lucide="underline"></i>', title: 'Sublinhado' },
+    { name: 'strikethrough', label: '<i data-lucide="strikethrough"></i>', title: 'Tachado' },
+    { name: 'foreColor', type: 'color', defaultColor: '#000000', label: '<i data-lucide="baseline"></i>', title: 'Cor da Fonte' },
+    { name: 'backColor', type: 'color', defaultColor: '#ffff00', label: '<i data-lucide="highlighter"></i>', title: 'Cor de Destaque' },
+    { name: 'ul', label: '<i data-lucide="list"></i>', title: 'Lista com Marcadores' },
+    { name: 'ol', label: '<i data-lucide="list-ordered"></i>', title: 'Lista Numerada' },
+    { name: 'outdent', label: '<i data-lucide="outdent"></i>', title: 'Diminuir Margem' },
+    { name: 'indent', label: '<i data-lucide="indent"></i>', title: 'Aumentar Margem' },
+    { name: 'alignLeft', label: '<i data-lucide="align-left"></i>', title: 'Alinhar à Esquerda' },
+    { name: 'alignCenter', label: '<i data-lucide="align-center"></i>', title: 'Centralizar' },
+    { name: 'alignRight', label: '<i data-lucide="align-right"></i>', title: 'Alinhar à Direita' },
+    { name: 'justifyFull', label: '<i data-lucide="align-justify"></i>', title: 'Justificado' },
+    { name: 'link', label: '<i data-lucide="link"></i>', title: 'Inserir Link' },
+    { name: 'table', label: '<i data-lucide="table"></i>', title: 'Inserir Tabela' },
+    { name: 'image', label: '<i data-lucide="image"></i>', title: 'Inserir Imagem' },
+    { name: 'video', label: '<i data-lucide="video"></i>', title: 'Inserir Vídeo' },
+    { name: 'preview', label: '<i data-lucide="eye"></i>', title: 'Visualizar' },
+    { name: 'desktop', label: '<i data-lucide="monitor"></i>', title: 'Modo Desktop' },
+    { name: 'tablet', label: '<i data-lucide="tablet"></i>', title: 'Modo Tablet' },
+    { name: 'mobile', label: '<i data-lucide="smartphone"></i>', title: 'Modo Mobile' },
+    { name: 'fullscreen', label: '<i data-lucide="maximize"></i>', title: 'Tela Cheia' },
+    { name: 'showBlocks', label: '<i data-lucide="layout-grid"></i>', title: 'Mostrar Blocos' },
+    { name: 'codeview', label: '<i data-lucide="code"></i>', title: 'Código Fonte' }
   ];
 
   var self = this;
@@ -86,29 +86,78 @@ ToolbarPlugin.prototype.render = function () {
       var $element;
       var type = btn.type || 'button';
 
-      if (type === 'select') {
-        $element = $('<select/>').attr('data-name', btn.name).attr('title', btn.title || '');
-        $element.append($('<option/>').val('').text(btn.title || 'Selecione...'));
-        
-        for(var j = 0; j < btn.options.length; j++) {
-          $element.append($('<option/>').val(btn.options[j].value).text(btn.options[j].label));
-        }
-        
-        $element.on('change', function () {
-          if ($(this).val()) {
-            editor.exec(btn.name, $(this).val());
-            $(this).prop('selectedIndex', 0); // Reseta para continuar escolhendo depois
-          }
-          self.updateState();
-        });
-      } else if (type === 'color') {
-        $element = $('<input type="color"/>')
+      if (type === 'dropdown') {
+        var $wrapper = $('<div class="editor-dropdown-wrapper" style="display:inline-block; position:relative; vertical-align:top; margin-right:4px; margin-bottom:4px;"/>');
+        var $btn = $('<button type="button" class="editor-dropdown-btn" style="height:32px; padding:0 8px; border:1px solid #dae0e5; background:#fff; border-radius:3px; cursor:pointer; font-size:14px; color:#333; display:inline-flex; align-items:center; gap:4px;"/>')
           .attr('data-name', btn.name)
           .attr('title', btn.title || '')
-          .on('change', function () {
-            editor.exec(btn.name, $(this).val());
+          .html('<span>' + (btn.text || btn.title) + '</span> <i data-lucide="chevron-down" style="width:14px; height:14px;"></i>');
+        
+        var $menu = $('<div class="editor-dropdown-menu" style="display:none; position:absolute; top:34px; left:0; background:#fff; border:1px solid #dae0e5; border-radius:3px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:100; min-width:180px; max-height:300px; overflow-y:auto; text-align:left;"/>');
+
+        for(var j = 0; j < btn.options.length; j++) {
+          var $item = $('<div class="editor-dropdown-item" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid #f8f9fa; line-height:1.2;"/>')
+            .html(btn.options[j].label)
+            .attr('data-value', btn.options[j].value);
+          
+          $item.on('mouseover', function() { $(this).css('background', '#f1f3f5'); });
+          $item.on('mouseout', function() { $(this).css('background', 'transparent'); });
+
+          $item.on('mousedown', function(e) { e.preventDefault(); }); // Evita perder o foco
+          $item.on('click', function(e) {
+            var val = $(this).attr('data-value');
+            if (val) {
+              editor.exec(btn.name, val);
+            }
+            $menu.hide();
             self.updateState();
           });
+          $menu.append($item);
+        }
+
+        $btn.on('mousedown', function(e) { e.preventDefault(); });
+        $btn.on('click', function(e) {
+          var isVisible = $menu.is(':visible');
+          $('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
+          if (!isVisible) $menu.show();
+        });
+
+        $(document).on('mousedown', function(e) {
+          if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
+            $menu.hide();
+          }
+        });
+
+        $wrapper.append($btn, $menu);
+        $element = $wrapper;
+      } else if (type === 'color') {
+        var defaultColor = btn.defaultColor || '#000000';
+        $element = $('<button type="button" style="position: relative; overflow: hidden;"/>')
+          .attr('data-name', btn.name)
+          .attr('title', btn.title || '')
+          .html(btn.label);
+
+        var $input = $('<input type="color"/>').val(defaultColor).css({
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: '100%',
+          height: '100%',
+          margin: 0,
+          padding: 0,
+          border: 'none',
+          opacity: 0,
+          cursor: 'pointer'
+        });
+
+        $input.on('input change', function () {
+          var val = $(this).val();
+          editor.exec(btn.name, val);
+          $element.find('.color-indicator').css('border-bottom-color', val);
+          self.updateState();
+        });
+
+        $element.append($input);
       } else {
         $element = $('<button type="button"/>')
           .attr('data-name', btn.name)
@@ -133,6 +182,11 @@ ToolbarPlugin.prototype.render = function () {
       editor.$toolbar.append($element);
 
     })(buttons[i], this);
+  }
+
+  // Caso o script do Lucide já tenha carregado
+  if (window.lucide) {
+    window.lucide.createIcons({ root: editor.$toolbar[0] });
   }
 };
 

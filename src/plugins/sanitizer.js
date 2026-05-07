@@ -111,8 +111,11 @@ SanitizerPlugin.prototype.cleanAttributes = function (el, tag) {
 
   // segurança adicional para links
   if (tag === 'a') {
-    el.setAttribute('rel', 'noopener noreferrer');
-    el.setAttribute('target', '_blank');
+    if (el.getAttribute('target') === '_blank') {
+      el.setAttribute('rel', 'noopener noreferrer');
+    } else {
+      el.removeAttribute('rel');
+    }
   }
 };
 

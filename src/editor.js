@@ -129,6 +129,17 @@
   Editor.prototype.injectStyles = function () {
     if (document.getElementById('wysiwyg-editor-styles')) return;
 
+    // Injeta a biblioteca do Lucide para os ícones da barra de ferramentas
+    if (!document.getElementById('lucide-script')) {
+      var lucideScript = document.createElement('script');
+      lucideScript.id = 'lucide-script';
+      lucideScript.src = 'https://unpkg.com/lucide@latest';
+      lucideScript.onload = function () {
+        if (window.lucide) window.lucide.createIcons();
+      };
+      document.head.appendChild(lucideScript);
+    }
+
     // Injeta a chamada do Google Fonts no cabeçalho da página
     var fontLink = document.createElement('link');
     fontLink.rel = 'stylesheet';
@@ -150,10 +161,19 @@
       '  background: #fff;\n' +
       '  border: 1px solid #dae0e5;\n' +
       '  border-radius: 3px;\n' +
-      '  padding: 5px 10px;\n' +
+      '  padding: 0 8px;\n' +
+      '  min-width: 32px;\n' +
+      '  height: 32px;\n' +
+      '  box-sizing: border-box;\n' +
+      '  vertical-align: top;\n' +
       '  font-size: 14px;\n' +
       '  color: #333;\n' +
       '  transition: all 0.2s;\n' +
+      '}\n' +
+      '.editor-toolbar svg {\n' +
+      '  width: 16px;\n' +
+      '  height: 16px;\n' +
+      '  vertical-align: middle;\n' +
       '}\n' +
       '.editor-toolbar button:hover:not(:disabled) {\n' +
       '  background: #e2e6ea;\n' +
@@ -182,7 +202,7 @@
       '  border: 1px dashed #adb5bd !important; padding: 2px;\n' +
       '}\n' +
       '.editor-content {\n' +
-      '  min-height: 200px;\n' +
+      '  min-height: 300px;\n' +
       '  padding: 15px;\n' +
       '  outline:none;\n' +
       '  background: #fff;\n' +
@@ -219,6 +239,32 @@
       '  right: -5px;\n' +
       '  bottom: -5px;\n' +
       '  cursor: se-resize;\n' +
+      '}\n' +
+      '.editor-content img.active {\n' +
+      '  outline: 2px solid #007bff;\n' +
+      '  outline-offset: 2px;\n' +
+      '}\n' +
+      '.editor-image-toolbar {\n' +
+      '  position: absolute;\n' +
+      '  display: none;\n' +
+      '  background: #333;\n' +
+      '  color: #fff;\n' +
+      '  padding: 5px;\n' +
+      '  border-radius: 4px;\n' +
+      '  z-index: 101;\n' +
+      '  box-shadow: 0 2px 8px rgba(0,0,0,0.3);\n' +
+      '}\n' +
+      '.editor-image-toolbar button {\n' +
+      '  background: transparent;\n' +
+      '  border: 1px solid #555;\n' +
+      '  color: #fff;\n' +
+      '  padding: 4px 8px;\n' +
+      '  margin: 2px;\n' +
+      '  height: auto;\n' +
+      '  min-width: auto;\n' +
+      '}\n' +
+      '.editor-image-toolbar button:hover {\n' +
+      '  background: #555;\n' +
       '}\n' +
       '.editor-codeview {\n' +
       '  width: 100%;\n' +

@@ -39,13 +39,14 @@ NormalizerPlugin.prototype.flatten = function (root, tag) {
 
 NormalizerPlugin.prototype.removeEmpty = function (root) {
   var nodes = root.querySelectorAll('*');
+  var keepTags = ['BR', 'IMG', 'IFRAME', 'HR', 'VIDEO', 'AUDIO', 'TD', 'TH'];
 
   for (var i = nodes.length - 1; i >= 0; i--) {
     var el = nodes[i];
 
     if (
       el.childNodes.length === 0 &&
-      el.tagName !== 'BR' &&
+      keepTags.indexOf(el.tagName) === -1 &&
       el.textContent.trim() === ''
     ) {
       el.parentNode.removeChild(el);
