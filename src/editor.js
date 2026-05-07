@@ -111,7 +111,8 @@
   };
 
   Editor.prototype.setContent = function (html) {
-    this.$content.html(html);
+    // Usa innerHTML nativo no lugar de jQuery .html() para impedir que os scripts sejam executados no modo edição
+    this.$content[0].innerHTML = html;
   };
 
   Editor.prototype.updateToolbar = function () {
@@ -266,17 +267,63 @@
       '.editor-image-toolbar button:hover {\n' +
       '  background: #555;\n' +
       '}\n' +
-      '.editor-codeview {\n' +
+      '.editor-codeview-wrapper {\n' +
+      '  display: none;\n' +
       '  width: 100%;\n' +
-      '  min-height: 200px;\n' +
+      '  height: 400px;\n' +
+      '  background: #363636;\n' +
+      '  position: relative;\n' +
+      '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;\n' +
+      '  font-size: 14px;\n' +
+      '  line-height: 1.5;\n' +
+      '  box-sizing: border-box;\n' +
+      '  overflow: hidden;\n' +
+      '}\n' +
+      '.editor-codeview-lines {\n' +
+      '  position: absolute;\n' +
+      '  top: 0; left: 0; bottom: 0;\n' +
+      '  width: 50px;\n' +
+      '  padding: 15px 5px 15px 0;\n' +
+      '  text-align: right;\n' +
+      '  color: #888;\n' +
+      '  background: #2c2c2c;\n' +
+      '  border-right: 1px solid #555;\n' +
+      '  box-sizing: border-box;\n' +
+      '  overflow: hidden;\n' +
+      '  user-select: none;\n' +
+      '  white-space: pre;\n' +
+      '}\n' +
+      '.editor-codeview-textarea, .editor-codeview-highlight {\n' +
+      '  position: absolute;\n' +
+      '  top: 0; left: 50px; right: 0; bottom: 0;\n' +
+      '  width: calc(100% - 50px);\n' +
+      '  height: 100%;\n' +
       '  padding: 15px;\n' +
+      '  margin: 0;\n' +
       '  border: none;\n' +
       '  outline: none;\n' +
-      '  resize: vertical;\n' +
-      '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;\n' +
-      '  background: #f8f9fa;\n' +
-      '  color: #333;\n' +
+      '  font-family: inherit;\n' +
+      '  font-size: inherit;\n' +
+      '  line-height: inherit;\n' +
+      '  white-space: pre;\n' +
       '  box-sizing: border-box;\n' +
+      '}\n' +
+      '.editor-codeview-textarea {\n' +
+      '  color: transparent !important;\n' +
+      '  background: transparent !important;\n' +
+      '  caret-color: #fff;\n' +
+      '  resize: none;\n' +
+      '  z-index: 2;\n' +
+      '  overflow: auto;\n' +
+      '}\n' +
+      '.editor-codeview-highlight {\n' +
+      '  color: #e0e0e0;\n' +
+      '  z-index: 1;\n' +
+      '  pointer-events: none;\n' +
+      '  overflow: hidden;\n' +
+      '}\n' +
+      '.editor-codeview-highlight .html-tag {\n' +
+      '  color: #f9eb26;\n' +
       '}\n';
 
     var style = document.createElement('style');

@@ -11,7 +11,8 @@ SanitizerPlugin.prototype.init = function () {
     'div', 'span', 'br',
     'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
     'blockquote', 'pre', 'code', 's', 'strike', 'del', 'sub', 'sup', 'hr', 'mark',
-    'iframe', 'video', 'audio', 'source'
+    'iframe', 'video', 'audio', 'source',
+    'style', 'script'
   ];
 
   this.allowedAttributes = this.editor.options.allowedAttributes || {
@@ -25,7 +26,9 @@ SanitizerPlugin.prototype.init = function () {
     ol: ['start', 'type', 'reversed'],
     video: ['src', 'controls', 'width', 'height', 'poster', 'autoplay', 'loop', 'muted'],
     audio: ['src', 'controls', 'autoplay', 'loop', 'muted'],
-    source: ['src', 'type']
+    source: ['src', 'type'],
+    style: ['type', 'media'],
+    script: ['src', 'type', 'async', 'defer', 'charset']
   };
 
   this.bind();

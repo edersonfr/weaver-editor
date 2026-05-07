@@ -39,7 +39,7 @@ NormalizerPlugin.prototype.flatten = function (root, tag) {
 
 NormalizerPlugin.prototype.removeEmpty = function (root) {
   var nodes = root.querySelectorAll('*');
-  var keepTags = ['BR', 'IMG', 'IFRAME', 'HR', 'VIDEO', 'AUDIO', 'TD', 'TH'];
+  var keepTags = ['BR', 'IMG', 'IFRAME', 'HR', 'VIDEO', 'AUDIO', 'TD', 'TH', 'SCRIPT', 'STYLE'];
 
   for (var i = nodes.length - 1; i >= 0; i--) {
     var el = nodes[i];
