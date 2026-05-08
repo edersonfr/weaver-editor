@@ -32,6 +32,21 @@ BasicCommandsPlugin.prototype.init = function () {
     document.execCommand('strikeThrough', false, null);
   });
 
+  editor.registerCommand('subscript', function (editor) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
+    document.execCommand('subscript', false, null);
+  });
+
+  editor.registerCommand('superscript', function (editor) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
+    document.execCommand('superscript', false, null);
+  });
+
+  editor.registerCommand('hr', function (editor) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
+    document.execCommand('insertHorizontalRule', false, null);
+  });
+
   editor.registerCommand('ul', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
     document.execCommand('insertUnorderedList', false, null);
