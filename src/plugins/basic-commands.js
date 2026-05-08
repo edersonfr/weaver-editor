@@ -133,4 +133,40 @@ BasicCommandsPlugin.prototype.init = function () {
   editor.registerCommand('showBlocks', function (editor) {
     editor.$content.toggleClass('editor-show-blocks');
   });
+
+  // Atalhos de teclado
+  editor.$content.on('keydown', function (e) {
+    // Atalhos que usam Ctrl (Windows/Linux) ou Cmd (Mac)
+    if (e.ctrlKey || e.metaKey) {
+      var key = e.key.toLowerCase();
+      var prevent = false;
+
+      switch (key) {
+        case 'b':
+          editor.exec('bold');
+          prevent = true;
+          break;
+        case 'i':
+          editor.exec('italic');
+          prevent = true;
+          break;
+        case 'u':
+          editor.exec('underline');
+          prevent = true;
+          break;
+        case 'z':
+          e.shiftKey ? editor.exec('redo') : editor.exec('undo');
+          prevent = true;
+          break;
+        case 'y':
+          editor.exec('redo');
+          prevent = true;
+          break;
+      }
+
+      if (prevent) {
+        e.preventDefault();
+      }
+    }
+  });
 };

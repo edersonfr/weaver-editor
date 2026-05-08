@@ -16,18 +16,18 @@ TablePlugin.prototype.init = function () {
 TablePlugin.prototype.buildGrid = function () {
   var self = this;
 
-  this.$grid = $('<div class="editor-table-grid" style="display: none; position: absolute; background: #fff; border: 1px solid #dae0e5; padding: 5px; border-radius: 3px; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"></div>');
-  var $gridInner = $('<div style="display: flex; flex-wrap: wrap; width: 150px;"></div>');
+  this.$grid = $('<div class="editor-table-grid hidden absolute bg-white border border-gray-200 p-2 rounded z-50 shadow-md"></div>');
+  var $gridInner = $('<div class="flex flex-wrap w-[150px]"></div>');
 
   // Gera uma grade 10x10
   for (var r = 1; r <= 10; r++) {
     for (var c = 1; c <= 10; c++) {
-      var $cell = $('<div class="grid-cell" data-row="' + r + '" data-col="' + c + '" style="width: 15px; height: 15px; border: 1px solid #e5e5e5; box-sizing: border-box; cursor: pointer;"></div>');
+      var $cell = $('<div class="grid-cell w-[15px] h-[15px] border border-gray-100 box-border cursor-pointer hover:border-blue-500" data-row="' + r + '" data-col="' + c + '"></div>');
       $gridInner.append($cell);
     }
   }
 
-  var $label = $('<div class="grid-label" style="text-align: center; font-size: 12px; margin-top: 5px; color: #666;">0 x 0</div>');
+  var $label = $('<div class="grid-label text-center text-xs mt-2 text-gray-500 font-sans">0 x 0</div>');
 
   this.$grid.append($gridInner).append($label);
   this.editor.$container.append(this.$grid);
@@ -45,7 +45,7 @@ TablePlugin.prototype.buildGrid = function () {
     self.$grid.find('.grid-cell').each(function () {
       var $this = $(this);
       if ($this.data('row') <= row && $this.data('col') <= col) {
-        $this.css('background', '#007bff');
+        $this.css('background', '#3b82f6'); // azul do tailwind
       } else {
         $this.css('background', 'transparent');
       }

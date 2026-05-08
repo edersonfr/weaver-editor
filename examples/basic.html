@@ -6,6 +6,9 @@
 
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
+  <!-- Tailwind CSS via CDN (apenas para testes) com plugin de tipografia -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
   <!-- CORE -->
   <script src="../src/core/commands.js"></script>  <!-- TEM QUE VIR PRIMEIRO -->
   <script src="../src/core/plugin.js"></script>
@@ -30,20 +33,38 @@
   <script src="../src/plugins/codeview.js"></script>
 
 </head>
-<body>
+<body class="bg-gray-50 p-8 text-gray-800 font-sans">
 
-  <h1>Editor Demo</h1>
+  <div class="max-w-5xl mx-auto bg-white p-8 shadow-sm border border-gray-200 rounded-lg">
+    <h1 class="text-3xl font-bold mb-6 text-gray-900">Editor Demo</h1>
 
-  <div id="editor"></div>
+    <div id="editor"></div>
+  </div>
 
   <script>
     $('#editor').wysiwygEditor({
       uploadImage: function (file, callback) {
-        // mock: simula upload async
-        setTimeout(function () {
-          var fakeUrl = URL.createObjectURL(file);
-          callback(fakeUrl);
-        }, 500);
+        var formData = new FormData();
+        formData.append('file', file);
+
+        // Substitua '/api/upload' pela URL real do seu backend
+        fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          // Ajuste "data.url" de acordo com a resposta do seu backend
+          if (data && data.url) {
+            callback(data.url);
+          } else {
+            alert('Erro: URL da imagem não retornada pelo servidor.');
+          }
+        })
+        .catch(function(err) {
+          console.error('Erro no upload da imagem:', err);
+          alert('Ocorreu um erro ao tentar enviar a imagem.');
+        });
       },
       plugins: [
         ToolbarPlugin,
@@ -60,19 +81,6 @@
         CodeViewPlugin 
       ]
     });
-
-    // exemplo de função de upload personalizada (substitua pela sua implementação real)
-    // uploadImage: function(file, callback) {
-    //   var formData = new FormData();
-    //   formData.append('file', file);
-
-    //   fetch('/upload', {
-    //     method: 'POST',
-    //     body: formData
-    //   })
-    //   .then(res => res.json())
-    //   .then(data => callback(data.url));
-    // }
   </script>
 
 </body>

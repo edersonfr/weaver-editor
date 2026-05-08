@@ -18,7 +18,7 @@ ImagePlugin.prototype.init = function () {
 
 ImagePlugin.prototype.buildToolbar = function () {
   var self = this;
-  this.$toolbar = $('<div class="editor-image-toolbar"></div>');
+  this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-gray-800 text-white p-1.5 rounded flex flex-wrap gap-1 z-50 shadow-lg"></div>');
 
   var buttons = [
     { label: '100%', title: 'Largura 100%', action: function() { self.resizeImage('100%'); } },
@@ -32,7 +32,7 @@ ImagePlugin.prototype.buildToolbar = function () {
   ];
 
   $.each(buttons, function(i, btnData) {
-    var $btn = $('<button type="button"></button>')
+    var $btn = $('<button type="button" class="bg-transparent border border-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-600 transition-colors [&>svg]:w-4 [&>svg]:h-4 flex items-center justify-center"></button>')
       .html(btnData.label)
       .attr('title', btnData.title)
       .on('mousedown', function(e) { e.preventDefault(); }) // Evita perder o foco

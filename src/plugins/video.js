@@ -17,19 +17,19 @@ VideoPlugin.prototype.init = function () {
 VideoPlugin.prototype.buildPopover = function () {
   var self = this;
 
-  this.$popover = $('<div class="editor-video-popover" style="display: none; position: absolute; background: #fff; border: 1px solid #dae0e5; padding: 12px; border-radius: 4px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); width: 280px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; font-size: 13px;"></div>');
+  this.$popover = $('<div class="editor-video-popover absolute bg-white border border-gray-200 p-3 rounded-md z-50 shadow-lg w-72 text-sm hidden font-sans"></div>');
   
-  var $form = $('<div style="display: flex; flex-direction: column; gap: 10px;"></div>');
+  var $form = $('<div class="flex flex-col gap-3"></div>');
   
-  var $urlGroup = $('<div style="display: flex; flex-direction: column; gap: 4px;"><label style="font-weight: 600; color: #333; margin: 0;">URL do Vídeo (YouTube/Vimeo)</label></div>');
-  this.$urlInput = $('<input type="text" placeholder="https://" style="padding: 6px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; outline: none; box-sizing: border-box; width: 100%;">');
+  var $urlGroup = $('<div class="flex flex-col gap-1"><label class="font-semibold text-gray-700 m-0">URL do Vídeo (YouTube/Vimeo)</label></div>');
+  this.$urlInput = $('<input type="text" placeholder="https://" class="px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full">');
   $urlGroup.append(this.$urlInput);
 
-  var $btnGroup = $('<div style="display: flex; margin-top: 4px;"></div>');
+  var $btnGroup = $('<div class="flex mt-1"></div>');
   
-  var $rightBtns = $('<div style="display: flex; gap: 6px; margin-left: auto;"></div>');
-  var $btnCancel = $('<button type="button" style="padding: 6px 10px; border: 1px solid #ccc; background: #fff; border-radius: 3px; cursor: pointer; font-size: 13px; color: #333;">Cancelar</button>');
-  var $btnSave = $('<button type="button" style="padding: 6px 12px; border: none; background: #007bff; color: #fff; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 600;">Inserir</button>');
+  var $rightBtns = $('<div class="flex gap-2 ml-auto"></div>');
+  var $btnCancel = $('<button type="button" class="px-3 py-1.5 border border-gray-300 bg-white rounded cursor-pointer text-sm text-gray-700 hover:bg-gray-50 transition-colors">Cancelar</button>');
+  var $btnSave = $('<button type="button" class="px-4 py-1.5 border-none bg-blue-600 text-white rounded cursor-pointer text-sm font-semibold hover:bg-blue-700 transition-colors">Inserir</button>');
   
   $rightBtns.append($btnCancel, $btnSave);
   $btnGroup.append($rightBtns);
