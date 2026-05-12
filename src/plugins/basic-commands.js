@@ -99,12 +99,43 @@ BasicCommandsPlugin.prototype.init = function () {
 
   editor.registerCommand('foreColor', function (editor, value) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
+    
+    // Desativa o CSS momentaneamente para forçar o navegador a criar a tag <font color="...">
+    document.execCommand('styleWithCSS', false, false);
     document.execCommand('foreColor', false, value);
+
+    // Converte a tag legada gerada pelo navegador em um <span style="color: ..."> (HTML5 puro)
+    var fonts = editor.$content[0].querySelectorAll('font[color]');
+    var lastSpan = null;
+    for (var i = 0; i < fonts.length; i++) {
+      var fontEl = fonts[i];
+      var span = document.createElement('span');
+      span.style.color = fontEl.getAttribute('color');
+      while (fontEl.firstChild) {
+        span.appendChild(fontEl.firstChild); // Move os nós silenciosamente sem quebrar a seleção do navegador
+      }
+      fontEl.parentNode.replaceChild(span, fontEl);
+      lastSpan = span;
+    }
+
+    // Re-seleciona o elemento para que o color-picker nativo continue atualizando a cor durante o "arrastar" do mouse
+    if (lastSpan) {
+      var sel = window.getSelection();
+      var range = document.createRange();
+      range.selectNodeContents(lastSpan);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
   });
 
   editor.registerCommand('backColor', function (editor, value) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('backColor', false, value); // backColor preenche o destaque/fundo
+    
+    // Força o navegador a utilizar <span> com background-color em vez de tags legadas
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('backColor', false, value);
+    document.execCommand('hiliteColor', false, value); // Fallback para garantir funcionamento no Firefox
+    document.execCommand('styleWithCSS', false, false); // Restaura o comportamento padrão
   });
 
   editor.registerCommand('fontName', function (editor, value) {
@@ -115,12 +146,24 @@ BasicCommandsPlugin.prototype.init = function () {
 
     // Converte a tag legada <font face="..."> gerada pelo navegador em um <span style="font-family: ..."> (HTML5)
     var fonts = editor.$content[0].querySelectorAll('font[face]');
+    var lastSpan = null;
     for (var i = 0; i < fonts.length; i++) {
       var fontEl = fonts[i];
       var span = document.createElement('span');
       span.style.fontFamily = fontEl.getAttribute('face');
-      span.innerHTML = fontEl.innerHTML; // Mantém o texto selecionado
+      while (fontEl.firstChild) {
+        span.appendChild(fontEl.firstChild);
+      }
       fontEl.parentNode.replaceChild(span, fontEl);
+      lastSpan = span;
+    }
+
+    if (lastSpan) {
+      var sel = window.getSelection();
+      var range = document.createRange();
+      range.selectNodeContents(lastSpan);
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
   });
 
@@ -135,13 +178,25 @@ BasicCommandsPlugin.prototype.init = function () {
 
     // Encontra a tag recém-criada pelo navegador e a converte para um SPAN válido (HTML5)
     var fonts = editor.$content[0].querySelectorAll('font[size="7"]');
+    var lastSpan = null;
     for (var i = 0; i < fonts.length; i++) {
       var fontEl = fonts[i];
       var span = document.createElement('span');
       var remValue = (parseInt(value, 10) / 16) + 'rem'; // Converte de px para rem (base 16px)
       span.style.fontSize = remValue;
-      span.innerHTML = fontEl.innerHTML; // Mantém textos e formatações internas
+      while (fontEl.firstChild) {
+        span.appendChild(fontEl.firstChild);
+      }
       fontEl.parentNode.replaceChild(span, fontEl);
+      lastSpan = span;
+    }
+
+    if (lastSpan) {
+      var sel = window.getSelection();
+      var range = document.createRange();
+      range.selectNodeContents(lastSpan);
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
   });
 

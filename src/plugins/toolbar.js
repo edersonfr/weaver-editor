@@ -63,20 +63,27 @@ ToolbarPlugin.prototype.render = function () {
     { name: 'hr', label: '<i data-lucide="minus"></i>', title: 'Linha Horizontal' },
     { name: 'ul', label: '<i data-lucide="list"></i>', title: 'Lista com Marcadores' },
     { name: 'ol', label: '<i data-lucide="list-ordered"></i>', title: 'Lista Numerada' },
-    { name: 'outdent', label: '<i data-lucide="outdent"></i>', title: 'Diminuir Margem' },
-    { name: 'indent', label: '<i data-lucide="indent"></i>', title: 'Aumentar Margem' },
-    { name: 'alignLeft', label: '<i data-lucide="align-left"></i>', title: 'Alinhar à Esquerda' },
-    { name: 'alignCenter', label: '<i data-lucide="align-center"></i>', title: 'Centralizar' },
-    { name: 'alignRight', label: '<i data-lucide="align-right"></i>', title: 'Alinhar à Direita' },
-    { name: 'justifyFull', label: '<i data-lucide="align-justify"></i>', title: 'Justificado' },
+    { name: 'paragraphGroup', type: 'group', label: '<i data-lucide="align-left"></i>', title: 'Parágrafo', buttons: [
+      [
+        { name: 'alignLeft', label: '<i data-lucide="align-left"></i>', title: 'Alinhar à Esquerda' },
+        { name: 'alignCenter', label: '<i data-lucide="align-center"></i>', title: 'Centralizar' },
+        { name: 'alignRight', label: '<i data-lucide="align-right"></i>', title: 'Alinhar à Direita' },
+        { name: 'justifyFull', label: '<i data-lucide="align-justify"></i>', title: 'Justificado' }
+      ],
+      [
+        { name: 'outdent', label: '<i data-lucide="outdent"></i>', title: 'Diminuir Margem' },
+        { name: 'indent', label: '<i data-lucide="indent"></i>', title: 'Aumentar Margem' }
+      ]
+    ]},
     { name: 'link', label: '<i data-lucide="link"></i>', title: 'Inserir Link' },
     { name: 'table', label: '<i data-lucide="table"></i>', title: 'Inserir Tabela' },
     { name: 'image', label: '<i data-lucide="image"></i>', title: 'Inserir Imagem' },
     { name: 'video', label: '<i data-lucide="video"></i>', title: 'Inserir Vídeo' },
     { name: 'preview', label: '<i data-lucide="eye"></i>', title: 'Visualizar' },
-    { name: 'desktop', label: '<i data-lucide="monitor"></i>', title: 'Modo Desktop' },
-    { name: 'tablet', label: '<i data-lucide="tablet"></i>', title: 'Modo Tablet' },
-    { name: 'mobile', label: '<i data-lucide="smartphone"></i>', title: 'Modo Mobile' },
+    { name: 'desktop', label: '<i data-lucide="monitor"></i>', title: 'Modo Desktop', previewOnly: true },
+    { name: 'tablet', label: '<i data-lucide="tablet"></i>', title: 'Modo Tablet', previewOnly: true },
+    { name: 'mobile', label: '<i data-lucide="smartphone"></i>', title: 'Modo Mobile', previewOnly: true },
+    { name: 'closePreview', label: '<i data-lucide="x"></i> <span class="ml-1 font-semibold text-xs">Sair</span>', title: 'Sair do Preview', previewOnly: true },
     { name: 'fullscreen', label: '<i data-lucide="maximize"></i>', title: 'Tela Cheia' },
     { name: 'showBlocks', label: '<i data-lucide="layout-grid"></i>', title: 'Mostrar Blocos' },
     { name: 'codeview', label: '<i data-lucide="code"></i>', title: 'Código Fonte' }
@@ -126,8 +133,86 @@ ToolbarPlugin.prototype.render = function () {
           $('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
           $('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
-            $menu.show();
+            $menu.removeClass('right-0').addClass('left-0').show();
             $btn.attr('aria-expanded', 'true');
+            
+            // Verifica se o menu vazou a tela pela direita
+            if ($menu[0].getBoundingClientRect().right > editor.$container[0].getBoundingClientRect().right) {
+              $menu.removeClass('left-0').addClass('right-0');
+            }
+          }
+        });
+
+        $(document).on('mousedown', function(e) {
+          if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
+            $menu.hide();
+            $btn.attr('aria-expanded', 'false');
+          }
+        });
+
+        $wrapper.append($btn, $menu);
+        $element = $wrapper;
+      } else if (type === 'group') {
+        var $wrapper = $('<div class="editor-dropdown-wrapper relative inline-block"/>');
+        var $btn = $('<button type="button" class="editor-dropdown-btn flex items-center justify-center min-w-[32px] h-8 px-1 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none [&>svg]:w-4 [&>svg]:h-4"/>')
+          .attr('data-name', btn.name)
+          .attr('title', btn.title || '')
+          .attr('aria-label', btn.title || '')
+          .attr('aria-haspopup', 'true')
+          .attr('aria-expanded', 'false')
+          .html(btn.label + '<i data-lucide="chevron-down" class="!w-3 !h-3 ml-0.5 opacity-60"></i>');
+        
+        var $menu = $('<div class="editor-dropdown-menu hidden absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 p-2 flex flex-row flex-nowrap w-max gap-2" role="menu"/>');
+
+        for(var g = 0; g < btn.buttons.length; g++) {
+          var groupItems = btn.buttons[g];
+          if (!Array.isArray(groupItems)) groupItems = [groupItems];
+
+          var $groupContainer = $('<div class="flex shadow-sm rounded"/>');
+
+          for(var j = 0; j < groupItems.length; j++) {
+            var subBtn = groupItems[j];
+            
+            var roundedClass = groupItems.length === 1 ? 'rounded' : 
+                               (j === 0 ? 'rounded-l' : 
+                               (j === groupItems.length - 1 ? 'rounded-r' : 'rounded-none'));
+            
+            var marginClass = j === 0 ? '' : '-ml-px';
+
+            var $subBtn = $('<button type="button" class="flex items-center justify-center w-8 h-8 border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:z-10 [&.active]:z-10 transition-colors focus:outline-none relative [&>svg]:w-4 [&>svg]:h-4 ' + marginClass + ' ' + roundedClass + '"/>')
+              .attr('data-name', subBtn.name)
+              .attr('title', subBtn.title || '')
+              .attr('aria-label', subBtn.title || '')
+              .attr('role', 'menuitem')
+              .html(subBtn.label)
+              .on('click', (function(cmdName) {
+                return function(e) {
+                  editor.exec(cmdName);
+                  $menu.hide();
+                  $btn.attr('aria-expanded', 'false');
+                  self.updateState();
+                };
+              })(subBtn.name));
+
+            self.buttons[subBtn.name] = $subBtn;
+            $groupContainer.append($subBtn);
+          }
+          $menu.append($groupContainer);
+        }
+
+        $btn.on('mousedown', function(e) { e.preventDefault(); });
+        $btn.on('click', function(e) {
+          var isVisible = $menu.is(':visible');
+          $('.editor-dropdown-menu').hide(); 
+          $('.editor-dropdown-btn').attr('aria-expanded', 'false');
+          if (!isVisible) {
+            $menu.removeClass('right-0').addClass('left-0').css('display', 'flex');
+            $btn.attr('aria-expanded', 'true');
+
+            // Verifica se o menu vazou a tela pela direita
+            if ($menu[0].getBoundingClientRect().right > editor.$container[0].getBoundingClientRect().right) {
+              $menu.removeClass('left-0').addClass('right-0');
+            }
           }
         });
 
@@ -162,10 +247,27 @@ ToolbarPlugin.prototype.render = function () {
         })
         .attr('aria-label', 'Escolher cor');
 
+        var savedRange = null;
+
+        $element.on('mousedown', function (e) {
+          if (editor.selection && editor.selection.isInsideEditor()) {
+            savedRange = editor.selection.getRange();
+          }
+        });
+
         $input.on('input change', function () {
+          if (savedRange) {
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(savedRange); 
+          }
+
           var val = $(this).val();
           editor.exec(btn.name, val);
-          $element.find('.color-indicator').css('border-bottom-color', val);
+
+          if (editor.selection && editor.selection.isInsideEditor()) {
+            savedRange = editor.selection.getRange();
+          }
           self.updateState();
         });
 
@@ -177,17 +279,21 @@ ToolbarPlugin.prototype.render = function () {
           .attr('aria-label', btn.title || '')
           .html(btn.label)
           .on('click', function () {
-          if (btn.name === 'desktop' || btn.name === 'tablet' || btn.name === 'mobile') {
-            var preview = editor.getPlugin('PreviewPlugin');
-            if (preview && preview.active) {
-              preview.setViewport(btn.name);
-            }
-          } else {
-            editor.exec(btn.name);
-          }
+          editor.exec(btn.name);
 
           self.updateState();
         });
+      }
+
+      // Define se o botão é padrão ou exclusivo do modo Preview
+      if (btn.previewOnly) {
+        $element.addClass('preview-only-btn hidden');
+        // Joga o botão de "Sair" lá para a ponta direita (ml-auto) e deixa ele com tom de alerta vermelho
+        if (btn.name === 'closePreview') {
+          $element.removeClass('text-gray-700 hover:bg-gray-50 px-1').addClass('ml-auto text-red-600 hover:bg-red-50 border-red-200 px-3');
+        }
+      } else {
+        $element.addClass('standard-btn');
       }
 
       self.buttons[btn.name] = $element;
