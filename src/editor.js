@@ -24,10 +24,32 @@
   Editor.prototype.buildLayout = function () {
     this.$container = $('<div class="wysiwyg-editor border border-gray-300 rounded-md shadow-sm flex flex-col bg-white font-sans text-gray-800 relative"/>');
     this.$toolbar = $('<div class="editor-toolbar flex flex-wrap gap-1 p-2 border-b border-gray-200 rounded-t-md bg-gray-50 items-center z-10" role="toolbar" aria-label="Ferramentas de formatação"/>');
-    this.$content = $('<div contenteditable="true" class="editor-content p-4 min-h-[300px] outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto prose max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>').attr('data-placeholder', 'Digite aqui...');
+    
+    // Configurações herdadas na inicialização do plugin
+    var minHeight = this.options.height ? this.options.height + 'px' : '300px';
+    var placeholder = this.options.placeholder || this.$el.attr('placeholder') || 'Digite aqui...';
+
+    this.$content = $('<div contenteditable="true" class="editor-content p-4 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto prose max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>')
+      .css('min-height', minHeight)
+      .attr('data-placeholder', placeholder);
 
     this.$container.append(this.$toolbar, this.$content);
-    this.$el.append(this.$container);
+    
+    this.isTextarea = this.$el.is('textarea');
+
+    if (this.isTextarea) {
+      // Oculta o textarea nativo e injeta a interface do editor na frente dele
+      this.$el.hide();
+      this.$container.insertAfter(this.$el);
+      
+      // Carrega o valor inicial que já estava no HTML do textarea
+      var initialContent = this.$el.val();
+      if (initialContent) {
+        this.$content.html(initialContent);
+      }
+    } else {
+      this.$el.append(this.$container);
+    }
   };
 
   // =========================
@@ -86,7 +108,14 @@
   };
 
   Editor.prototype.trigger = function (event) {
-    this.$el.trigger(event, [this.getContent()]);
+    var content = this.getContent();
+    
+    // Se estamos mascarando um textarea, sincronizamos os dados de volta para ele para permitir submissões de formulário perfeitas
+    if (this.isTextarea && event === 'change') {
+      this.$el.val(content); 
+    }
+    
+    this.$el.trigger(event, [content]);
   };
 
   Editor.prototype.getContent = function () {
@@ -261,7 +290,9 @@
   // DEFAULTS
   // =========================
   Editor.defaults = {
-    plugins: []
+    plugins: [],
+    placeholder: '',
+    height: null
   };
 
   // =========================

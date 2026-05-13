@@ -38,49 +38,22 @@
   <div class="max-w-5xl mx-auto bg-white p-8 shadow-sm border border-gray-200 rounded-lg">
     <h1 class="text-3xl font-bold mb-6 text-gray-900">Editor Demo</h1>
 
-    <div id="editor"></div>
+    <form action="/enviar" method="POST">
+      <textarea id="meu-editor" name="artigo_html" placeholder="Escreva seu artigo lindo aqui..."></textarea>
+      <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white mt-4 py-2 px-4 rounded">Salvar Artigo</button>
+    </form>
   </div>
 
   <script>
-    $('#editor').wysiwygEditor({
-      uploadImage: function (file, callback) {
-        var formData = new FormData();
-        formData.append('file', file);
-
-        // Substitua '/api/upload' pela URL real do seu backend
-        fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          // Ajuste "data.url" de acordo com a resposta do seu backend
-          if (data && data.url) {
-            callback(data.url);
-          } else {
-            alert('Erro: URL da imagem não retornada pelo servidor.');
-          }
-        })
-        .catch(function(err) {
-          console.error('Erro no upload da imagem:', err);
-          alert('Ocorreu um erro ao tentar enviar a imagem.');
-        });
-      },
-      plugins: [
-        ToolbarPlugin,
-        BasicCommandsPlugin,
-        SanitizerPlugin,
-        PreviewPlugin,
-        NormalizerPlugin,
-        LinkPlugin,
-        TablePlugin,
-        ImagePlugin,
-        VideoPlugin,
-        FullscreenPlugin,
-        HistoryPlugin,
-        CodeViewPlugin 
-      ]
-    });
+      $('#meu-editor').wysiwygEditor({
+    height: 500, // Define a altura customizada em pixels
+    placeholder: 'Digite seu conteúdo aqui...', // Sobrescreve o placeholder
+    plugins: [
+      ToolbarPlugin, BasicCommandsPlugin, LinkPlugin, TablePlugin, 
+      ImagePlugin, VideoPlugin, CodeViewPlugin, PreviewPlugin, 
+      FullscreenPlugin, SanitizerPlugin, NormalizerPlugin, HistoryPlugin
+    ]
+  });
   </script>
 
 </body>
