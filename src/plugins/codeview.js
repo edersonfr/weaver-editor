@@ -56,6 +56,76 @@ CodeViewPlugin.prototype.updateView = function () {
   this.$lines.text(linesText);
 };
 
+CodeViewPlugin.prototype.beautifyHtml = function (html) {
+  var tab = '  '; // 2 espaços para a indentação
+  var result = '';
+  var indent = '';
+
+  // Extrai os blocos <pre> para preservá-los intactos e substitui por um placeholder
+  var preBlocks = [];
+  html = html.replace(/(<pre[^>]*>[\s\S]*?<\/pre>)/gi, function(match) {
+    preBlocks.push(match);
+    return '<pre-placeholder id="' + (preBlocks.length - 1) + '"/>';
+  });
+
+  // Remove quebras de linha pré-existentes para padronizar do zero
+  html = html.replace(/[\r\n]/g, '');
+
+  var tags = html.split(/(<[^>]+>)/g);
+  var inlineTags = ['a', 'span', 'b', 'i', 'u', 'strong', 'em', 'strike', 's', 'sub', 'sup', 'code', 'font'];
+
+  for (var i = 0; i < tags.length; i++) {
+    var tag = tags[i];
+    if (!tag) continue;
+
+    // Se não for uma tag (for apenas um nó de texto solto)
+    if (tag.charAt(0) !== '<') {
+      result += tag;
+      continue;
+    }
+
+    var isClosingTag = tag.match(/^<\//);
+    var isSelfClosingTag = tag.match(/.*\/>$/) || tag.match(/^<(br|hr|img|input|meta|link|area|base|col|embed|param|source|track|wbr)[^>]*>$/i);
+    var isOpeningTag = tag.match(/^<\w/) && !isClosingTag && !isSelfClosingTag;
+    
+    // Descobre o nome da tag
+    var tagNameMatch = tag.match(/^<\/?([a-zA-Z0-9]+)/);
+    var tagName = tagNameMatch ? tagNameMatch[1].toLowerCase() : '';
+    
+    var isInline = inlineTags.indexOf(tagName) !== -1;
+
+    if (isClosingTag && !isInline) {
+      indent = indent.substring(tab.length);
+      result = result.replace(/[ \t]+$/, '');
+      if (result.length > 0 && result.charAt(result.length - 1) !== '\n') result += '\n';
+      result += indent + tag + '\n';
+    } else if (isOpeningTag && !isInline) {
+      result = result.replace(/[ \t]+$/, '');
+      if (result.length > 0 && result.charAt(result.length - 1) !== '\n') result += '\n';
+      result += indent + tag + '\n';
+      indent += tab;
+    } else if (isSelfClosingTag && !isInline) {
+      result = result.replace(/[ \t]+$/, '');
+      if (result.length > 0 && result.charAt(result.length - 1) !== '\n') result += '\n';
+      result += indent + tag + '\n';
+    } else {
+      // Tags inline e de formatação simples
+      result += tag;
+    }
+  }
+
+  result = result.trim();
+
+  // Devolve os blocos <pre> para seus lugares originais preservando toda formatação e espaços nativos
+  for (var j = 0; j < preBlocks.length; j++) {
+    result = result.replace('<pre-placeholder id="' + j + '"/>', function() { 
+      return preBlocks[j]; 
+    });
+  }
+
+  return result;
+};
+
 CodeViewPlugin.prototype.toggle = function () {
   this.active = !this.active;
   var $codeViewBtn = this.editor.$toolbar.find('[data-name="codeview"]');
@@ -63,9 +133,8 @@ CodeViewPlugin.prototype.toggle = function () {
   if (this.active) {
     var html = this.editor.getContent();
     
-    // Aplica uma formatação básica para evitar que tudo fique numa linha só
-    html = html.replace(/(<\/?(?:div|p|h[1-6]|ul|ol|li|blockquote|table|tr|td|th|tbody|thead|tfoot|style|script|iframe)[^>]*>)/gi, '\n$1\n');
-    html = html.replace(/\n+/g, '\n').replace(/^\n|\n$/g, '');
+    // Aplica a formatação em cascata inteligente no HTML
+    html = this.beautifyHtml(html);
 
     this.$textarea.val(html);
     this.updateView();

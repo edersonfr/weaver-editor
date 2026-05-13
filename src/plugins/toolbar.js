@@ -50,7 +50,8 @@ ToolbarPlugin.prototype.render = function () {
       { label: '<h4 style="margin:0; font-size:16px; font-weight:bold;">Título 4</h4>', value: 'H4' },
       { label: '<h5 style="margin:0; font-size:14px; font-weight:bold;">Título 5</h5>', value: 'H5' },
       { label: '<h6 style="margin:0; font-size:12px; font-weight:bold;">Título 6</h6>', value: 'H6' },
-      { label: '<blockquote style="margin:0; border-left:3px solid #ccc; padding-left:8px; font-style:italic; color:#666; font-size:14px;">Citação</blockquote>', value: 'BLOCKQUOTE' }
+      { label: '<blockquote style="margin:0; border-left:3px solid #ccc; padding-left:8px; font-style:italic; color:#666; font-size:14px;">Citação</blockquote>', value: 'BLOCKQUOTE' },
+      { label: '<pre style="margin:0; background:#1f2937; color:#f3f4f6; padding:2px 8px; border-radius:4px; font-size:12px; font-family:monospace; line-height:1.2;">Bloco de Código</pre>', value: 'PRE' }
     ]},
     { name: 'bold', label: '<i data-lucide="bold"></i>', title: 'Negrito' },
     { name: 'italic', label: '<i data-lucide="italic"></i>', title: 'Itálico' },
