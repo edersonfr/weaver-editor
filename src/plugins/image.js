@@ -18,7 +18,7 @@ ImagePlugin.prototype.init = function () {
 
 ImagePlugin.prototype.buildToolbar = function () {
   var self = this;
-  this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-gray-800 text-white p-1.5 rounded flex flex-wrap gap-1 z-50 shadow-lg"></div>');
+  this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-white border border-gray-200 p-1.5 rounded flex flex-row flex-nowrap w-max gap-1 z-50 shadow-lg"></div>');
 
   var buttons = [
     { label: '100%', title: 'Largura 100%', action: function() { self.resizeImage('100%'); } },
@@ -26,13 +26,14 @@ ImagePlugin.prototype.buildToolbar = function () {
     { label: '25%', title: 'Largura 25%', action: function() { self.resizeImage('25%'); } },
     { label: 'Original', title: 'Tamanho Original', action: function() { self.setOriginalSize(); } },
     { label: '<i data-lucide="align-left"></i>', title: 'Flutuar à Esquerda', action: function() { self.setFloat('left'); } },
+    { label: '<i data-lucide="align-center"></i>', title: 'Centralizar', action: function() { self.setFloat('center'); } },
     { label: '<i data-lucide="align-right"></i>', title: 'Flutuar à Direita', action: function() { self.setFloat('right'); } },
     { label: '<i data-lucide="align-justify"></i>', title: 'Remover Flutuação', action: function() { self.removeFloat(); } },
     { label: '<i data-lucide="trash-2"></i>', title: 'Remover Imagem', action: function() { self.removeImage(); } }
   ];
 
   $.each(buttons, function(i, btnData) {
-    var $btn = $('<button type="button" class="bg-transparent border border-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-600 transition-colors [&>svg]:w-4 [&>svg]:h-4 flex items-center justify-center"></button>')
+    var $btn = $('<button type="button" class="flex items-center justify-center min-w-[32px] h-8 px-2 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none [&>svg]:w-4 [&>svg]:h-4 text-xs font-medium"></button>')
       .html(btnData.label)
       .attr('title', btnData.title)
       .on('mousedown', function(e) { e.preventDefault(); }) // Evita perder o foco
@@ -71,10 +72,27 @@ ImagePlugin.prototype.showToolbar = function (img) {
   var $img = $(img);
   var imgPos = $img.position(); // Posição relativa ao editor
 
+  // Força o display flex (evita o display: block padrão do jQuery que quebra a linha)
+  this.$toolbar.css('display', 'flex'); 
+
+  var topPos = imgPos.top - this.$toolbar.outerHeight() - 5;
+  if (topPos < 0) {
+    topPos = imgPos.top + $img.outerHeight() + 5; // Joga pra baixo da imagem se vazar pelo topo da tela
+  }
+
+  var leftPos = imgPos.left + ($img.width() / 2) - (this.$toolbar.outerWidth() / 2);
+  if (leftPos < 0) leftPos = 5; // Impede vazar pela esquerda
+
   this.$toolbar.css({
-    top: imgPos.top - this.$toolbar.outerHeight() - 5,
-    left: imgPos.left + ($img.width() / 2) - (this.$toolbar.outerWidth() / 2)
-  }).show();
+    top: topPos,
+    left: leftPos
+  });
+
+  // Verifica se o painel vazou pela direita
+  if (this.$toolbar[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
+    var diff = this.$toolbar[0].getBoundingClientRect().right - this.editor.$container[0].getBoundingClientRect().right;
+    this.$toolbar.css('left', leftPos - diff - 5);
+  }
 
   // Garante que os ícones sejam renderizados
   if (window.lucide) {
@@ -112,8 +130,12 @@ ImagePlugin.prototype.setOriginalSize = function () {
 ImagePlugin.prototype.setFloat = function (direction) {
   if (!this.activeImage) return;
   this.editor.history.save();
-  var margin = direction === 'left' ? '0 15px 15px 0' : '15px 0 15px 15px';
-  $(this.activeImage).css({ 'float': direction, 'margin': margin });
+  if (direction === 'center') {
+    $(this.activeImage).css({ 'float': 'none', 'display': 'block', 'margin': '15px auto' });
+  } else {
+    var margin = direction === 'left' ? '0 15px 15px 0' : '15px 0 15px 15px';
+    $(this.activeImage).css({ 'float': direction, 'display': 'inline-block', 'margin': margin });
+  }
   this.editor.history.save();
   this.editor.trigger('change');
   this.showToolbar(this.activeImage);
@@ -122,7 +144,7 @@ ImagePlugin.prototype.setFloat = function (direction) {
 ImagePlugin.prototype.removeFloat = function () {
   if (!this.activeImage) return;
   this.editor.history.save();
-  $(this.activeImage).css({ 'float': '', 'margin': '' });
+  $(this.activeImage).css({ 'float': '', 'display': '', 'margin': '' });
   this.editor.history.save();
   this.editor.trigger('change');
   this.showToolbar(this.activeImage);
