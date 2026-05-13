@@ -72,6 +72,13 @@ PreviewPlugin.prototype.enable = function () {
   this.editor.$toolbar.find('.standard-btn').addClass('hidden');
   this.editor.$toolbar.find('.preview-only-btn').removeClass('hidden');
 
+  // Oculta inteligentemente os grupos que ficaram vazios (para esconder as bordas divisórias)
+  this.editor.$toolbar.find('.editor-toolbar-group').each(function() {
+    var hasVisible = $(this).children().not('.hidden').length > 0;
+    if (hasVisible) $(this).removeClass('hidden');
+    else $(this).addClass('hidden');
+  });
+
   this.setViewport('desktop');
 
   this.active = true;
@@ -84,6 +91,13 @@ PreviewPlugin.prototype.disable = function () {
   // Devolve a barra de ferramentas ao normal
   this.editor.$toolbar.find('.standard-btn').removeClass('hidden');
   this.editor.$toolbar.find('.preview-only-btn').addClass('hidden');
+
+  // Mostra novamente as bordas divisórias
+  this.editor.$toolbar.find('.editor-toolbar-group').each(function() {
+    var hasVisible = $(this).children().not('.hidden').length > 0;
+    if (hasVisible) $(this).removeClass('hidden');
+    else $(this).addClass('hidden');
+  });
 
   this.active = false;
 };

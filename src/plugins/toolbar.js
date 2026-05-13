@@ -12,11 +12,11 @@ ToolbarPlugin.prototype.init = function () {
 ToolbarPlugin.prototype.render = function () {
   var editor = this.editor;
 
-  var buttons = [
-    { name: 'undo', label: '<i data-lucide="undo"></i>', title: 'Desfazer' },
-    { name: 'redo', label: '<i data-lucide="redo"></i>', title: 'Refazer' },
-    { name: 'removeFormat', label: '<i data-lucide="eraser"></i>', title: 'Remover Formatação' },
-    { name: 'fontName', type: 'dropdown', title: 'Fonte', text: 'Fonte', options: [
+  var defaultButtonLibrary = {
+    undo: { name: 'undo', label: '<i data-lucide="undo"></i>', title: 'Desfazer' },
+    redo: { name: 'redo', label: '<i data-lucide="redo"></i>', title: 'Refazer' },
+    removeFormat: { name: 'removeFormat', label: '<i data-lucide="eraser"></i>', title: 'Remover Formatação' },
+    fontName: { name: 'fontName', type: 'dropdown', title: 'Fonte', text: 'Fonte', options: [
       { label: '<span style="font-family: Arial, sans-serif; font-size:14px;">Arial</span>', value: 'Arial' },
       { label: '<span style="font-family: \'Courier New\', Courier, monospace; font-size:14px;">Courier New</span>', value: 'Courier New' },
       { label: '<span style="font-family: Georgia, serif; font-size:14px;">Georgia</span>', value: 'Georgia' },
@@ -30,7 +30,7 @@ ToolbarPlugin.prototype.render = function () {
       { label: '<span style="font-family: Poppins, sans-serif; font-size:14px;">Poppins</span>', value: 'Poppins' },
       { label: '<span style="font-family: Oswald, sans-serif; font-size:14px;">Oswald</span>', value: 'Oswald' }
     ]},
-    { name: 'fontSize', type: 'dropdown', title: 'Tamanho', text: 'Tamanho', options: [
+    fontSize: { name: 'fontSize', type: 'dropdown', title: 'Tamanho', text: 'Tamanho', options: [
       { label: '8px', value: '8' },
       { label: '10px', value: '10' },
       { label: '12px', value: '12' },
@@ -42,7 +42,7 @@ ToolbarPlugin.prototype.render = function () {
       { label: '48px', value: '48' },
       { label: '72px', value: '72' }
     ]},
-    { name: 'formatBlock', type: 'dropdown', title: 'Formatos', text: 'Formatos', options: [
+    formatBlock: { name: 'formatBlock', type: 'dropdown', title: 'Formatos', text: 'Formatos', options: [
       { label: '<p style="margin:0; font-size:14px;">Parágrafo</p>', value: 'P' },
       { label: '<h1 style="margin:0; font-size:24px; font-weight:bold;">Título 1</h1>', value: 'H1' },
       { label: '<h2 style="margin:0; font-size:20px; font-weight:bold;">Título 2</h2>', value: 'H2' },
@@ -53,18 +53,18 @@ ToolbarPlugin.prototype.render = function () {
       { label: '<blockquote style="margin:0; border-left:3px solid #ccc; padding-left:8px; font-style:italic; color:#666; font-size:14px;">Citação</blockquote>', value: 'BLOCKQUOTE' },
       { label: '<pre style="margin:0; background:#1f2937; color:#f3f4f6; padding:2px 8px; border-radius:4px; font-size:12px; font-family:monospace; line-height:1.2;">Bloco de Código</pre>', value: 'PRE' }
     ]},
-    { name: 'bold', label: '<i data-lucide="bold"></i>', title: 'Negrito' },
-    { name: 'italic', label: '<i data-lucide="italic"></i>', title: 'Itálico' },
-    { name: 'underline', label: '<i data-lucide="underline"></i>', title: 'Sublinhado' },
-    { name: 'strikethrough', label: '<i data-lucide="strikethrough"></i>', title: 'Tachado' },
-    { name: 'subscript', label: '<i data-lucide="subscript"></i>', title: 'Subscrito' },
-    { name: 'superscript', label: '<i data-lucide="superscript"></i>', title: 'Sobrescrito' },
-    { name: 'foreColor', type: 'color', defaultColor: '#000000', label: '<i data-lucide="baseline"></i>', title: 'Cor da Fonte' },
-    { name: 'backColor', type: 'color', defaultColor: '#ffff00', label: '<i data-lucide="highlighter"></i>', title: 'Cor de Destaque' },
-    { name: 'hr', label: '<i data-lucide="minus"></i>', title: 'Linha Horizontal' },
-    { name: 'ul', label: '<i data-lucide="list"></i>', title: 'Lista com Marcadores' },
-    { name: 'ol', label: '<i data-lucide="list-ordered"></i>', title: 'Lista Numerada' },
-    { name: 'paragraphGroup', type: 'group', label: '<i data-lucide="align-left"></i>', title: 'Parágrafo', buttons: [
+    bold: { name: 'bold', label: '<i data-lucide="bold"></i>', title: 'Negrito' },
+    italic: { name: 'italic', label: '<i data-lucide="italic"></i>', title: 'Itálico' },
+    underline: { name: 'underline', label: '<i data-lucide="underline"></i>', title: 'Sublinhado' },
+    strikethrough: { name: 'strikethrough', label: '<i data-lucide="strikethrough"></i>', title: 'Tachado' },
+    subscript: { name: 'subscript', label: '<i data-lucide="subscript"></i>', title: 'Subscrito' },
+    superscript: { name: 'superscript', label: '<i data-lucide="superscript"></i>', title: 'Sobrescrito' },
+    foreColor: { name: 'foreColor', type: 'color', defaultColor: '#000000', label: '<i data-lucide="baseline"></i>', title: 'Cor da Fonte' },
+    backColor: { name: 'backColor', type: 'color', defaultColor: '#ffff00', label: '<i data-lucide="highlighter"></i>', title: 'Cor de Destaque' },
+    hr: { name: 'hr', label: '<i data-lucide="minus"></i>', title: 'Linha Horizontal' },
+    ul: { name: 'ul', label: '<i data-lucide="list"></i>', title: 'Lista com Marcadores' },
+    ol: { name: 'ol', label: '<i data-lucide="list-ordered"></i>', title: 'Lista Numerada' },
+    paragraphGroup: { name: 'paragraphGroup', type: 'group', label: '<i data-lucide="align-left"></i>', title: 'Parágrafo', buttons: [
       [
         { name: 'alignLeft', label: '<i data-lucide="align-left"></i>', title: 'Alinhar à Esquerda' },
         { name: 'alignCenter', label: '<i data-lucide="align-center"></i>', title: 'Centralizar' },
@@ -76,24 +76,23 @@ ToolbarPlugin.prototype.render = function () {
         { name: 'indent', label: '<i data-lucide="indent"></i>', title: 'Aumentar Margem' }
       ]
     ]},
-    { name: 'link', label: '<i data-lucide="link"></i>', title: 'Inserir Link' },
-    { name: 'table', label: '<i data-lucide="table"></i>', title: 'Inserir Tabela' },
-    { name: 'image', label: '<i data-lucide="image"></i>', title: 'Inserir Imagem' },
-    { name: 'video', label: '<i data-lucide="video"></i>', title: 'Inserir Vídeo' },
-    { name: 'preview', label: '<i data-lucide="eye"></i>', title: 'Visualizar' },
-    { name: 'desktop', label: '<i data-lucide="monitor"></i>', title: 'Modo Desktop', previewOnly: true },
-    { name: 'tablet', label: '<i data-lucide="tablet"></i>', title: 'Modo Tablet', previewOnly: true },
-    { name: 'mobile', label: '<i data-lucide="smartphone"></i>', title: 'Modo Mobile', previewOnly: true },
-    { name: 'closePreview', label: '<i data-lucide="x"></i> <span class="ml-1 font-semibold text-xs">Sair</span>', title: 'Sair do Preview', previewOnly: true },
-    { name: 'fullscreen', label: '<i data-lucide="maximize"></i>', title: 'Tela Cheia' },
-    { name: 'showBlocks', label: '<i data-lucide="layout-grid"></i>', title: 'Mostrar Blocos' },
-    { name: 'codeview', label: '<i data-lucide="code"></i>', title: 'Código Fonte' }
-  ];
+    link: { name: 'link', label: '<i data-lucide="link"></i>', title: 'Inserir Link' },
+    table: { name: 'table', label: '<i data-lucide="table"></i>', title: 'Inserir Tabela' },
+    image: { name: 'image', label: '<i data-lucide="image"></i>', title: 'Inserir Imagem' },
+    video: { name: 'video', label: '<i data-lucide="video"></i>', title: 'Inserir Vídeo' },
+    preview: { name: 'preview', label: '<i data-lucide="eye"></i>', title: 'Visualizar' },
+    desktop: { name: 'desktop', label: '<i data-lucide="monitor"></i>', title: 'Modo Desktop', previewOnly: true },
+    tablet: { name: 'tablet', label: '<i data-lucide="tablet"></i>', title: 'Modo Tablet', previewOnly: true },
+    mobile: { name: 'mobile', label: '<i data-lucide="smartphone"></i>', title: 'Modo Mobile', previewOnly: true },
+    closePreview: { name: 'closePreview', label: '<i data-lucide="x"></i> <span class="ml-1 font-semibold text-xs">Sair</span>', title: 'Sair do Preview', previewOnly: true },
+    fullscreen: { name: 'fullscreen', label: '<i data-lucide="maximize"></i>', title: 'Tela Cheia' },
+    showBlocks: { name: 'showBlocks', label: '<i data-lucide="layout-grid"></i>', title: 'Mostrar Blocos' },
+    codeview: { name: 'codeview', label: '<i data-lucide="code"></i>', title: 'Código Fonte' }
+  };
 
   var self = this;
 
-  for (var i = 0; i < buttons.length; i++) {
-    (function (btn, self) {
+  function createButtonElement(btn) {
       var $element;
       var type = btn.type || 'button';
 
@@ -301,10 +300,49 @@ ToolbarPlugin.prototype.render = function () {
 
       self.buttons[btn.name] = $element;
 
-      editor.$toolbar.append($element);
-
-    })(buttons[i], this);
+      return $element;
   }
+
+  // Mapeamento Inteligente: caso o usuário use a sintaxe nativa do Summernote, o plugin vai entendê-lo
+  var aliasMap = {
+    'style': ['formatBlock'],
+    'clear': ['removeFormat'],
+    'picture': ['image'],
+    'paragraph': ['paragraphGroup'],
+    'color': ['foreColor', 'backColor']
+  };
+
+  var toolbarConfig = editor.options.toolbar;
+
+  for (var i = 0; i < toolbarConfig.length; i++) {
+    var groupButtonsRaw = toolbarConfig[i][1];
+    var groupButtons = [];
+    
+    // Desenrola Aliases e Nomes
+    for (var b = 0; b < groupButtonsRaw.length; b++) {
+      var rawName = groupButtonsRaw[b];
+      if (aliasMap[rawName]) groupButtons = groupButtons.concat(aliasMap[rawName]);
+      else groupButtons.push(rawName);
+    }
+
+    // Cria a caixinha elegante que comportará o grupo e a margem divisória
+    var $groupWrapper = $('<div class="editor-toolbar-group flex gap-1 items-center mr-2 pr-2 border-r border-gray-300 last:border-r-0 last:mr-0 last:pr-0"/>');
+
+    for (var k = 0; k < groupButtons.length; k++) {
+      var btnData = defaultButtonLibrary[groupButtons[k]];
+      if (btnData) $groupWrapper.append(createButtonElement(btnData));
+    }
+
+    if (groupButtons.length > 0) editor.$toolbar.append($groupWrapper);
+  }
+
+  // Garante que os botões vitais de Preview sejam gerados silenciosamente no fundo para entrarem em ação
+  var previewBtns = ['desktop', 'tablet', 'mobile', 'closePreview'];
+  var $pGroup = $('<div class="editor-toolbar-group flex gap-1 items-center w-full"/>');
+  for (var p = 0; p < previewBtns.length; p++) {
+    if (!self.buttons[previewBtns[p]]) $pGroup.append(createButtonElement(defaultButtonLibrary[previewBtns[p]]));
+  }
+  if ($pGroup.children().length > 0) editor.$toolbar.append($pGroup);
 
   // Caso o script do Lucide já tenha carregado
   if (window.lucide) {

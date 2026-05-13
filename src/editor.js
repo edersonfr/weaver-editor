@@ -69,6 +69,48 @@
   Editor.prototype.initPlugins = function () {
     var plugins = this.options.plugins;
 
+    // Se nenhum plugin for passado na configuração, carrega os nativos dinamicamente
+    if (!plugins || plugins.length === 0) {
+      // Plugins essenciais que sempre devem rodar silenciosamente (núcleo do editor)
+      var corePlugins = [
+        window.ToolbarPlugin,
+        window.BasicCommandsPlugin,
+        window.SanitizerPlugin,
+        window.NormalizerPlugin,
+        window.HistoryPlugin
+      ];
+
+      // Mapeamento: "Se a toolbar tiver este botão, importe esta extensão"
+      var pluginMap = {
+        'link': window.LinkPlugin,
+        'table': window.TablePlugin,
+        'image': window.ImagePlugin,
+        'picture': window.ImagePlugin, // Suporte ao apelido do summernote
+        'video': window.VideoPlugin,
+        'codeview': window.CodeViewPlugin,
+        'preview': window.PreviewPlugin,
+        'fullscreen': window.FullscreenPlugin
+      };
+
+      var activeOptionalPlugins = [];
+      var toolbarConfig = this.options.toolbar || [];
+
+      // Verifica a configuração da Toolbar e "acorda" apenas os plugins necessários
+      for (var t = 0; t < toolbarConfig.length; t++) {
+        var groupButtons = toolbarConfig[t][1] || [];
+        for (var b = 0; b < groupButtons.length; b++) {
+          var btnName = groupButtons[b];
+          var PluginClass = pluginMap[btnName];
+          
+          if (PluginClass && activeOptionalPlugins.indexOf(PluginClass) === -1) {
+            activeOptionalPlugins.push(PluginClass);
+          }
+        }
+      }
+
+      plugins = corePlugins.concat(activeOptionalPlugins).filter(Boolean);
+    }
+
     for (var i = 0; i < plugins.length; i++) {
       var plugin = new plugins[i](this);
       this.plugins.push(plugin);
@@ -291,6 +333,15 @@
   // =========================
   Editor.defaults = {
     plugins: [],
+    toolbar: [
+      ['history', ['undo', 'redo']],
+      ['style', ['formatBlock', 'fontName', 'fontSize']],
+      ['font', ['bold', 'italic', 'underline', 'strikethrough', 'removeFormat']],
+      ['color', ['foreColor', 'backColor']],
+      ['para', ['ul', 'ol', 'paragraphGroup']],
+      ['insert', ['link', 'table', 'image', 'video', 'hr']],
+      ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
+    ],
     placeholder: '',
     height: null
   };

@@ -9,28 +9,8 @@
   <!-- Tailwind CSS via CDN (apenas para testes) com plugin de tipografia -->
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
 
-  <!-- CORE -->
-  <script src="../src/core/commands.js"></script>  <!-- TEM QUE VIR PRIMEIRO -->
-  <script src="../src/core/plugin.js"></script>
-  <script src="../src/core/selection.js"></script>
-  <script src="../src/core/history.js"></script>
-
-  <!-- EDITOR -->
-  <script src="../src/editor.js"></script>
-
-  <!-- PLUGINS -->
-  <script src="../src/plugins/toolbar.js"></script>
-  <script src="../src/plugins/basic-commands.js"></script>
-  <script src="../src/plugins/sanitizer.js"></script>
-  <script src="../src/plugins/preview.js"></script>
-  <script src="../src/plugins/normalizer.js"></script>
-  <script src="../src/plugins/link.js"></script>
-  <script src="../src/plugins/table.js"></script>
-  <script src="../src/plugins/image.js"></script>
-  <script src="../src/plugins/video.js"></script>
-  <script src="../src/plugins/fullscreen.js"></script>
-  <script src="../src/plugins/history.js"></script>
-  <script src="../src/plugins/codeview.js"></script>
+  <!-- ARQUIVO ÚNICO DO EDITOR (Gerado pelo Gulp) -->
+  <script src="../dist/wysiwyg-editor.min.js"></script>
 
 </head>
 <body class="bg-gray-50 p-8 text-gray-800 font-sans">
@@ -46,14 +26,18 @@
 
   <script>
       $('#meu-editor').wysiwygEditor({
-    height: 500, // Define a altura customizada em pixels
-    placeholder: 'Digite seu conteúdo aqui...', // Sobrescreve o placeholder
-    plugins: [
-      ToolbarPlugin, BasicCommandsPlugin, LinkPlugin, TablePlugin, 
-      ImagePlugin, VideoPlugin, CodeViewPlugin, PreviewPlugin, 
-      FullscreenPlugin, SanitizerPlugin, NormalizerPlugin, HistoryPlugin
-    ]
-  });
+        height: 500, // Define a altura customizada em pixels
+        placeholder: 'Digite seu conteúdo aqui...', // Sobrescreve o placeholder
+        toolbar: [
+          ['history', ['undo', 'redo']],
+          ['style', ['style', 'fontName', 'fontSize']],
+          ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']],
+          ['color', ['color']],
+          ['para', ['ul', 'ol', 'paragraph']],
+          ['insert', ['link', 'table', 'picture', 'video', 'hr']],
+          ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
+        ]
+      });
   </script>
 
 </body>
