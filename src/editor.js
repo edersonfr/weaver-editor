@@ -22,9 +22,9 @@
   };
 
   Editor.prototype.buildLayout = function () {
-    this.$container = $('<div class="wysiwyg-editor border border-gray-300 rounded-md shadow-sm overflow-hidden flex flex-col bg-white font-sans text-gray-800 relative"/>');
-    this.$toolbar = $('<div class="editor-toolbar flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50 items-center" role="toolbar" aria-label="Ferramentas de formatação"/>');
-    this.$content = $('<div contenteditable="true" class="editor-content p-4 min-h-[300px] outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto prose max-w-none w-full" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>').attr('data-placeholder', 'Digite aqui...');
+    this.$container = $('<div class="wysiwyg-editor border border-gray-300 rounded-md shadow-sm flex flex-col bg-white font-sans text-gray-800 relative"/>');
+    this.$toolbar = $('<div class="editor-toolbar flex flex-wrap gap-1 p-2 border-b border-gray-200 rounded-t-md bg-gray-50 items-center z-10" role="toolbar" aria-label="Ferramentas de formatação"/>');
+    this.$content = $('<div contenteditable="true" class="editor-content p-4 min-h-[300px] outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto prose max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>').attr('data-placeholder', 'Digite aqui...');
 
     this.$container.append(this.$toolbar, this.$content);
     this.$el.append(this.$container);

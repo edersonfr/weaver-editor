@@ -133,6 +133,11 @@ LinkPlugin.prototype.togglePopover = function (forceState) {
     });
     this.$popover.show();
     
+    // Verifica se o painel vazou pela direita
+    if (this.$popover[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
+      this.$popover.css('left', btnOffset.left - this.$popover.outerWidth() + $btn.outerWidth());
+    }
+
     // Foca no input correto automaticamente
     var self = this;
     setTimeout(function() {

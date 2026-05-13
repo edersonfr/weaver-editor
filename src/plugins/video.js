@@ -86,6 +86,11 @@ VideoPlugin.prototype.togglePopover = function (forceState) {
     });
     this.$popover.show();
     
+    // Verifica se o painel vazou pela direita
+    if (this.$popover[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
+      this.$popover.css('left', btnOffset.left - this.$popover.outerWidth() + $btn.outerWidth());
+    }
+
     var self = this;
     setTimeout(function() {
       self.$urlInput.focus();

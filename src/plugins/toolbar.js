@@ -185,6 +185,7 @@ ToolbarPlugin.prototype.render = function () {
               .attr('aria-label', subBtn.title || '')
               .attr('role', 'menuitem')
               .html(subBtn.label)
+              .on('mousedown', function(e) { e.preventDefault(); })
               .on('click', (function(cmdName) {
                 return function(e) {
                   editor.exec(cmdName);
@@ -278,6 +279,7 @@ ToolbarPlugin.prototype.render = function () {
           .attr('title', btn.title || '')
           .attr('aria-label', btn.title || '')
           .html(btn.label)
+          .on('mousedown', function(e) { e.preventDefault(); })
           .on('click', function () {
           editor.exec(btn.name);
 

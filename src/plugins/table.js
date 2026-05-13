@@ -90,6 +90,11 @@ TablePlugin.prototype.toggleGrid = function (forceState) {
     this.$grid.show();
     this.$grid.find('.grid-cell').css('background', 'transparent');
     this.$grid.find('.grid-label').text('0 x 0');
+
+    // Verifica se o painel vazou pela direita
+    if (this.$grid[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
+      this.$grid.css('left', btnOffset.left - this.$grid.outerWidth() + $btn.outerWidth());
+    }
   } else {
     this.$grid.hide();
   }
@@ -109,11 +114,11 @@ TablePlugin.prototype.insertTable = function (rows, cols) {
     return;
   }
 
-  var html = '<table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;" border="1"><tbody>';
+  var html = '<table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1px solid #ccc;"><tbody>';
   for (var r = 0; r < rows; r++) {
     html += '<tr>';
     for (var c = 0; c < cols; c++) {
-      html += '<td style="padding: 8px;">&nbsp;</td>';
+      html += '<td style="padding: 8px; border: 1px solid #ccc;">&nbsp;</td>';
     }
     html += '</tr>';
   }
