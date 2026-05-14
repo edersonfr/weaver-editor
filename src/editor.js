@@ -47,6 +47,12 @@
       if (initialContent) {
         this.$content.html(initialContent);
       }
+      
+      // Garante a sincronização absoluta no momento do envio do formulário
+      var self = this;
+      this.$el.closest('form').on('submit', function() {
+        self.$el.val(self.getContent());
+      });
     } else {
       this.$el.append(this.$container);
     }

@@ -91,24 +91,25 @@ SanitizerPlugin.prototype.cleanAttributes = function (el, tag) {
   var attrs = el.attributes;
 
   for (var i = attrs.length - 1; i >= 0; i--) {
-    var name = attrs[i].name;
+    var originalName = attrs[i].name;
+    var name = originalName.toLowerCase();
     var value = attrs[i].value;
 
     // remove eventos (proteção contra XSS)
     if (name.indexOf('on') === 0) {
-      el.removeAttribute(name);
+      el.removeAttribute(originalName);
       continue;
     }
 
     // remove atributos não permitidos
     if (allowedForTag.indexOf(name) === -1 && allowedGlobal.indexOf(name) === -1) {
-      el.removeAttribute(name);
+      el.removeAttribute(originalName);
       continue;
     }
 
     // proteção genérica contra XSS em URLs (links, imagens, iframes, videos)
     if ((name === 'href' || name === 'src') && !this.isSafeUrl(value)) {
-      el.removeAttribute(name);
+      el.removeAttribute(originalName);
     }
   }
 
@@ -123,8 +124,12 @@ SanitizerPlugin.prototype.cleanAttributes = function (el, tag) {
 };
 
 SanitizerPlugin.prototype.isSafeUrl = function (url) {
-  // Permite http/https, caminhos relativos/absolutos e imagens em base64 local
-  return /^(https?:|\/|data:image\/)/i.test(url);
+  // Se a URL possui um protocolo explícito (ex: http:, javascript:, mailto:), valida-o
+  if (/^([a-z0-9\+\-\.]+):/i.test(url)) {
+    return /^(https?|data:image\/)/i.test(url);
+  }
+  // Caminhos relativos puros (como "uploads/img_xxx.jpg" ou "../imagem.png") são sempre seguros
+  return true;
 };
 
 SanitizerPlugin.prototype.normalize = function (html) {

@@ -163,6 +163,14 @@ ImagePlugin.prototype.removeImage = function () {
 // Funções de inserção de imagem (arrastar e soltar / diálogo)
 ImagePlugin.prototype.openFileDialog = function () {
   var self = this;
+  
+  // Salva a seleção exata do cursor antes da janela de arquivos roubar o foco
+  if (this.editor.selection && this.editor.selection.isInsideEditor()) {
+    this.savedRange = this.editor.selection.getRange();
+  } else {
+    this.savedRange = null;
+  }
+
   var $input = $('<input type="file" accept="image/*" style="display:none">');
 
   $input.on('change', function () {
@@ -189,8 +197,33 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
     e.stopPropagation();
     $content.removeClass('drag-over');
 
-    var files = e.originalEvent.dataTransfer.files;
-    if (files.length > 0 && files[0].type.match('image.*')) {
+    var oe = e.originalEvent;
+    self.editor.$content.focus();
+
+    // Tenta posicionar o cursor no local exato onde a imagem foi solta
+    if (document.caretRangeFromPoint) {
+      var range = document.caretRangeFromPoint(oe.clientX, oe.clientY);
+      if (range) {
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } else if (oe.rangeParent) { // fallback Firefox
+      var range = document.createRange();
+      range.setStart(oe.rangeParent, oe.rangeOffset);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    if (self.editor.selection && self.editor.selection.isInsideEditor()) {
+      self.savedRange = self.editor.selection.getRange();
+    } else {
+      self.savedRange = null;
+    }
+
+    var files = oe.dataTransfer.files;
+    if (files && files.length > 0 && files[0].type.match(/^image\//)) {
       self.insertImage(files[0]);
     }
   });
@@ -200,16 +233,25 @@ ImagePlugin.prototype.insertImage = function (file) {
   var self = this;
   var uploadFn = this.editor.options.uploadImage;
 
+  var doInsert = function (url) {
+    self.editor.$content.focus();
+    if (self.savedRange) {
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(self.savedRange);
+    }
+    document.execCommand('insertImage', false, url);
+    self.editor.trigger('change');
+  };
+
   if (uploadFn && typeof uploadFn === 'function') {
     uploadFn(file, function (url) {
-      document.execCommand('insertImage', false, url);
-      self.editor.trigger('change');
+      doInsert(url);
     });
   } else {
     var reader = new FileReader();
     reader.onload = function (e) {
-      document.execCommand('insertImage', false, e.target.result);
-      self.editor.trigger('change');
+      doInsert(e.target.result);
     };
     reader.readAsDataURL(file);
   }
