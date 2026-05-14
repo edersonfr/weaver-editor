@@ -257,7 +257,7 @@ window.HistoryManager = HistoryManager;
       // Carrega o valor inicial que já estava no HTML do textarea
       var initialContent = this.$el.val();
       if (initialContent) {
-        this.$content.html(initialContent);
+        this.$content[0].innerHTML = initialContent;
       }
       
       // Garante a sincronização absoluta no momento do envio do formulário

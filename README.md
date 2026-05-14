@@ -1,6 +1,6 @@
-# WYSIWYG Editor
+# Weaver Editor
 
-Um editor HTML WYSIWYG leve, moderno e altamente customizável, desenvolvido com JavaScript (ES5) e jQuery. Inspirado nos maiores editores do mercado (como Summernote e TinyMCE), este projeto foi construído para ser fácil de integrar, leve no carregamento e extremamente poderoso.
+O **Weaver Editor** é um editor HTML WYSIWYG leve, moderno e altamente customizável, desenvolvido com JavaScript (ES5) e jQuery. Inspirado nos maiores editores do mercado, este projeto foi construído sob medida para ser fácil de integrar, leve no carregamento e extremamente poderoso.
 
 ## ✨ Funcionalidades
 
