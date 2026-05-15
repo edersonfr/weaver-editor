@@ -25,10 +25,10 @@ const jsFiles = [
 
 gulp.task('build', function() {
   return gulp.src(jsFiles)
-    .pipe(concat('wysiwyg-editor.js')) // Junta todos os arquivos em um só
+    .pipe(concat('weaver-editor.js')) // Junta todos os arquivos em um só
     .pipe(gulp.dest('dist')) // Salva a versão Legível na pasta /dist
     .pipe(uglify()) // Esmaga o código (remove espaços e encurta variáveis)
-    .pipe(rename('wysiwyg-editor.min.js')) // Renomeia o arquivo
+    .pipe(rename('weaver-editor.min.js')) // Renomeia o arquivo
     .pipe(gulp.dest('dist')); // Salva a versão Minificada na pasta /dist
 });
 

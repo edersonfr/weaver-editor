@@ -23,7 +23,7 @@ O editor foi empacotado para ser distribuído em um único arquivo minificado. B
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <!-- Editor WYSIWYG -->
-<script src="dist/wysiwyg-editor.min.js"></script>
+<script src="dist/weaver-editor.min.js"></script>
 ```
 
 *Nota:* A estilização do editor insere automaticamente as regras via JavaScript e os ícones via Lucide.
@@ -43,7 +43,7 @@ Inicialize o editor via jQuery:
 
 ```javascript
 $(document).ready(function() {
-  $('#meu-editor').wysiwygEditor({
+  $('#meu-editor').weaver({
     height: 500,
     placeholder: 'Comece a escrever sua história aqui...',
     toolbar: [

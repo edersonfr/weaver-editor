@@ -567,10 +567,10 @@ window.HistoryManager = HistoryManager;
   // =========================
   // JQUERY PLUGIN
   // =========================
-  $.fn.wysiwygEditor = function (options) {
+  $.fn.weaver = function (options) {
     return this.each(function () {
       var editor = new Editor(this, options);
-      $(this).data('wysiwygEditor', editor);
+      $(this).data('weaver', editor);
     });
   };
 

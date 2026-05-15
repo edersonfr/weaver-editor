@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weaver Editor - Super Simple WYSIWYG Editor</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  
+  <!-- Highlight.js (Para deixar os códigos de exemplo coloridos) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
+  <!-- Configuração de Cores da Marca no Tailwind -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              100: '#f0e5f5',
+              500: '#8640b0',
+              600: '#0165AD', /* A Cor Oficial do seu Logo */
+              700: '#213586',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  
+  <!-- O NOSSO EDITOR: WEAVER -->
+  <script src="../dist/weaver-editor.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+
+  <!-- Navbar -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <div class="flex items-center gap-2">
+          <svg width="24" height="15" viewBox="0 0 24 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g clip-path="url(#clip0_1_37)">
+            <path d="M8.57036 2.21429C8.85063 1.70247 9.24445 0.90691 9.65225 0.517145C10.214 -0.0197669 10.7706 0.0193504 11.4804 0.0356152L12.5705 0.0256449C13.925 0.0187625 14.2483 0.190409 14.9649 1.40088C15.635 2.53285 16.2631 3.69735 16.9452 4.82264C17.0215 4.94856 17.0941 5.08665 17.1772 5.20709C17.4098 5.60479 17.639 6.00447 17.8649 6.40606C18.1057 6.83529 18.3448 7.31147 18.6632 7.68176C19.2662 8.24676 20.0716 8.32029 20.7536 7.84559C20.897 7.74588 21.0204 7.63029 21.1576 7.52235C21.0375 7.87265 20.9303 8.19117 20.7847 8.53206C20.6113 9.07235 20.2476 9.99764 20.0202 10.5329C19.6985 11.4662 19.3339 12.4009 18.9842 13.3253C18.6199 14.2879 17.9545 14.5447 17.0081 14.5721C16.4507 14.5815 15.227 14.6394 14.7443 14.5159C13.9735 14.3188 13.498 13.4409 13.1654 12.805C12.9962 12.4818 12.7537 12.1209 12.5664 11.7679C12.3722 11.4476 12.1855 11.1047 11.9932 10.7791L11.977 10.8026C11.3034 11.7988 10.8398 12.9997 10.103 13.95C9.79516 14.3471 9.23863 14.5632 8.74772 14.5506C8.22542 14.5373 7.69169 14.5612 7.16989 14.5306C5.38489 14.7003 5.10919 13.6591 4.57845 12.2521L4.00572 10.7279C3.96522 10.5809 3.79322 10.1547 3.73345 9.99382L3.14195 8.40176C3.08292 8.28912 2.91383 7.77853 2.85419 7.61764C3.45401 7.96617 3.7978 8.28706 4.59598 8.09823C4.87983 8.03088 5.08889 7.88412 5.30286 7.695C5.7731 7.21323 6.36922 5.83153 6.8266 5.20906C7.00419 4.96482 7.23866 4.51647 7.40154 4.2407C7.79672 3.57167 8.17075 2.88085 8.57036 2.21429Z" fill="#0165AD"/>
+            <path d="M8.57034 2.21429C8.85061 1.70247 9.24443 0.90691 9.65223 0.517145C10.214 -0.0197669 10.7705 0.0193504 11.4803 0.0356152L12.5704 0.0256449C13.925 0.0187625 14.2483 0.190409 14.9649 1.40088C15.635 2.53285 16.2631 3.69735 16.9452 4.82264C17.0215 4.94856 17.0941 5.08665 17.1772 5.20709C17.4098 5.60479 17.639 6.00447 17.8648 6.40606C18.1056 6.83529 18.3448 7.31147 18.6631 7.68176C19.2662 8.24676 20.0716 8.32029 20.7535 7.84559C20.897 7.74588 21.0204 7.63029 21.1576 7.52235C21.0375 7.87265 20.9303 8.19117 20.7847 8.53206C20.6113 9.07235 20.2476 9.99764 20.0202 10.5329C19.6985 11.4662 19.3339 12.4009 18.9841 13.3253C18.6199 14.2879 17.9545 14.5447 17.0081 14.5721C16.4506 14.5815 15.227 14.6394 14.7443 14.5159C13.9735 14.3188 13.498 13.4409 13.1653 12.805C12.9961 12.4818 12.7536 12.1209 12.5664 11.7679C12.6678 11.635 12.8341 11.3218 12.9267 11.1624C13.1531 10.775 13.3774 10.3865 13.5995 9.99676L13.6119 9.995C13.8676 9.4747 14.361 8.67617 14.6622 8.15117C14.6212 8.01559 14.1945 7.34588 14.0962 7.19029C13.8221 6.655 13.3538 5.90953 13.0403 5.37635C13.006 5.23332 12.1153 3.74494 11.9903 3.55973C11.8245 3.84753 11.6171 4.22741 11.434 4.49856C11.1461 4.00438 10.594 3.12535 10.3731 2.63823L10.159 2.41659C9.54796 2.06356 9.28784 1.88162 8.57034 2.21429Z" fill="#6C318F"/>
+            <path d="M14.6622 8.15118C14.91 8.55736 15.1505 8.96765 15.3835 9.38207C15.7273 9.98442 15.9775 10.4812 16.484 10.9197C17.4338 11.7415 18.8481 11.7062 19.7169 10.7924C19.7773 10.7285 19.9494 10.5718 20.0202 10.5329C19.6985 11.4662 19.3339 12.4009 18.9841 13.3253C18.6199 14.288 17.9545 14.5447 17.0081 14.5721C16.4506 14.5815 15.227 14.6394 14.7443 14.5159C13.9735 14.3188 13.498 13.4409 13.1653 12.805C12.9961 12.4818 12.7536 12.1209 12.5664 11.7679C12.6678 11.635 12.8341 11.3218 12.9267 11.1624C13.1531 10.775 13.3774 10.3865 13.5995 9.99677L13.6119 9.99501C13.8676 9.47471 14.3611 8.67618 14.6622 8.15118Z" fill="#01ACDE"/>
+            <path d="M13.5995 9.99676L13.6119 9.995C14.1396 10.8271 14.6033 11.7229 15.1105 12.5694C15.5934 13.3753 16.0026 14.3168 17.0081 14.5721C16.4506 14.5815 15.227 14.6394 14.7443 14.5159C13.9735 14.3188 13.498 13.4409 13.1653 12.805C12.9961 12.4818 12.7536 12.1209 12.5664 11.7679C12.6678 11.635 12.8341 11.3218 12.9267 11.1624C13.1531 10.775 13.3774 10.3865 13.5995 9.99676Z" fill="#0165AD"/>
+            <path d="M11.4803 0.0356152L12.5704 0.0256449C13.925 0.0187625 14.2483 0.190409 14.9649 1.40088C15.635 2.53285 16.2631 3.69735 16.9452 4.82264C17.0215 4.94856 17.0941 5.08665 17.1772 5.20709C17.4098 5.60479 17.639 6.00447 17.8648 6.40606C18.1056 6.83529 18.3448 7.31147 18.6631 7.68176C19.2662 8.24676 20.0716 8.32029 20.7536 7.84559C20.897 7.74588 21.0204 7.63029 21.1576 7.52235C21.0375 7.87265 20.9303 8.19117 20.7847 8.53206C20.4485 8.89617 20.1638 9.2 19.7041 9.40647C19.2041 9.6347 18.6327 9.64941 18.1217 9.44705C17.574 9.22441 17.2133 8.83617 16.9118 8.34294C16.509 7.68412 16.1286 7.01706 15.7422 6.3487L13.2511 2.05235C12.7431 1.17259 12.4514 0.483908 11.4996 0.0832908C11.4932 0.0674084 11.4868 0.0515269 11.4803 0.0356152Z" fill="#A474C2"/>
+            <path d="M10.159 2.41659C10.2856 2.44339 10.2585 2.44833 10.371 2.54471C10.4394 2.48101 10.7617 1.90053 10.806 1.79286C10.7836 1.72803 10.7794 1.72315 10.7768 1.65439C10.9946 1.73404 11.3305 2.36027 11.4299 2.57474C11.5256 2.78145 11.9524 3.38248 11.9903 3.55974C11.8245 3.84753 11.6171 4.22742 11.4341 4.49856C11.1461 4.00439 10.594 3.12536 10.3731 2.63824L10.159 2.41659Z" fill="#491F61"/>
+            <path d="M8.57036 2.21429C9.28786 1.88162 9.54798 2.06356 10.159 2.41659L10.3732 2.63823C10.594 3.12535 11.1462 4.00438 11.4341 4.49856L9.23351 8.285C8.82707 8.9897 8.28951 10.0697 7.7751 10.6444C6.66675 11.8826 5.27436 11.6779 4.16101 10.6794C4.07348 10.6835 4.0791 10.6809 4.00572 10.7279C3.96522 10.5809 3.79322 10.1547 3.73345 9.99382L3.14195 8.40176C3.08292 8.28912 2.91383 7.77853 2.85419 7.61764C3.45401 7.96617 3.7978 8.28706 4.59598 8.09823C4.87983 8.03088 5.08889 7.88412 5.30286 7.695C5.7731 7.21323 6.36922 5.83153 6.8266 5.20906C7.00419 4.96482 7.23866 4.51647 7.40154 4.2407C7.79672 3.57167 8.17075 2.88085 8.57036 2.21429Z" fill="#6C318F"/>
+            <path d="M8.57036 2.21429C9.28786 1.88162 9.54798 2.06356 10.159 2.41659L10.3732 2.63823C10.2962 2.84414 10.0318 3.28773 9.91142 3.49411L9.05916 4.94547L7.75933 7.1747C7.29319 7.98559 6.82695 9.02206 5.95189 9.41147C5.00183 9.83411 4.00539 9.49676 3.39698 8.69088C3.34272 8.61911 3.20369 8.44853 3.14195 8.40176C3.08292 8.28912 2.91383 7.77853 2.85419 7.61764C3.45401 7.96617 3.7978 8.28706 4.59598 8.09823C4.87983 8.03088 5.08889 7.88412 5.30286 7.695C5.7731 7.21323 6.36922 5.83153 6.8266 5.20906C7.00419 4.96482 7.23866 4.51647 7.40154 4.2407C7.79672 3.57167 8.17075 2.88085 8.57036 2.21429Z" fill="#A474C2"/>
+            <path d="M7.16989 14.5306C8.03333 14.0415 8.15377 13.7768 8.64124 12.9456C8.94016 12.4418 9.2328 11.9344 9.51916 11.4235L11.762 7.55736C12.1568 6.87765 12.6179 6.02503 13.0403 5.37636C13.3539 5.90953 13.8221 6.655 14.0962 7.1903C14.1946 7.34589 14.6212 8.01559 14.6622 8.15118C14.3611 8.67618 13.8677 9.47471 13.612 9.995L13.5995 9.99677C13.3774 10.3865 13.1532 10.775 12.9267 11.1624C12.8341 11.3218 12.6678 11.635 12.5664 11.7679C12.3722 11.4477 12.1855 11.1047 11.9932 10.7791L11.977 10.8027C11.3034 11.7988 10.8398 12.9997 10.103 13.95C9.79516 14.3471 9.23863 14.5632 8.74771 14.5506C8.22542 14.5374 7.69169 14.5612 7.16989 14.5306Z" fill="#01ACDE"/>
+            <path d="M14.0962 7.19029C14.1946 7.34588 14.6212 8.01559 14.6622 8.15118C14.3611 8.67618 13.8677 9.4747 13.612 9.995L13.5995 9.99676C13.5442 9.81853 13.1608 9.2047 13.0361 8.99823C13.3601 8.41559 13.7424 7.75323 14.0962 7.19029Z" fill="#0165AD"/>
+            <path d="M13.0361 8.99823C13.1608 9.2047 13.5441 9.81853 13.5995 9.99676C13.3774 10.3865 13.1531 10.775 12.9267 11.1623C12.8341 11.3218 12.6678 11.635 12.5664 11.7679C12.3722 11.4476 12.1855 11.1047 11.9932 10.7791C12.2169 10.4888 12.8208 9.37176 13.0361 8.99823Z" fill="#213586"/>
+            <path d="M0.01651 0.0207977C0.331334 0.0321801 0.625422 0.0209759 0.943069 0.0504465C1.4278 0.0321229 1.91133 0.0368569 2.39575 0.0377099C3.30551 0.0393275 4.0803 -0.0584664 4.79957 0.60671C5.00925 0.802122 5.18616 1.02998 5.32354 1.28156C5.46589 1.54198 5.64289 2.05389 5.7561 2.35348C6.00145 3.00124 6.24233 3.65065 6.47875 4.30171C6.54304 4.47909 6.74672 5.07239 6.8266 5.20906C6.36922 5.83153 5.7731 7.21324 5.30286 7.69501C5.08889 7.88412 4.87983 8.03089 4.59598 8.09824C3.7978 8.28706 3.45401 7.96618 2.85419 7.61765C2.2846 6.24183 1.74883 4.678 1.22672 3.27727C0.831951 2.21821 0.374863 1.07727 0.01651 0.0207977Z" fill="#F57E21"/>
+            <path d="M0.943054 0.0504456C1.42779 0.0321221 1.91132 0.0368561 2.39573 0.037709C3.3055 0.0393267 4.08029 -0.0584672 4.79955 0.606709C5.00923 0.802121 5.18614 1.02997 5.32352 1.28156C5.46588 1.54197 5.64288 2.05389 5.75608 2.35347C6.00144 3.00124 6.24232 3.65065 6.47873 4.30171C6.54303 4.47909 6.7467 5.07238 6.82658 5.20906C6.3692 5.83153 5.77308 7.21324 5.30285 7.695C4.94176 6.586 4.48026 5.48165 4.08523 4.38139C3.76705 3.56241 3.50735 2.69247 3.14717 1.89341C2.82111 1.17006 2.20058 0.595915 1.47202 0.294532C1.30267 0.224503 1.0915 0.143004 0.943054 0.0504456Z" fill="#FBA06F"/>
+            <path d="M23.1351 0.00893716C23.4052 0.00926069 23.6752 0.0066422 23.9453 0.00108337L22.0585 5.09008L21.4419 6.78588C21.3882 6.92999 21.2221 7.39705 21.1576 7.52235C21.0204 7.63029 20.897 7.74588 20.7536 7.84558C20.0716 8.32029 19.2662 8.24676 18.6632 7.68176C18.3448 7.31147 18.1057 6.83529 17.8649 6.40606C17.639 6.00447 17.4098 5.60479 17.1772 5.20708C17.2132 5.06458 17.2737 4.90208 17.3264 4.76326C17.7765 3.57591 18.1718 2.35767 18.6747 1.19264C18.7474 1.02417 18.901 0.854877 19.0283 0.723054C19.7954 -0.0705638 20.5461 0.00367138 21.5486 0.00967138C22.0775 0.012642 22.6062 0.0123783 23.1351 0.00893716Z" fill="#FBA06F"/>
+            <path d="M17.1772 5.20709C17.2132 5.06459 17.2737 4.90209 17.3264 4.76327C17.7765 3.57591 18.1718 2.35768 18.6747 1.19265C18.7474 1.02418 18.901 0.854884 19.0283 0.72306C19.7954 -0.0705573 20.5461 0.00367789 21.5486 0.00967789C22.0775 0.0126485 22.6062 0.0123848 23.1351 0.00894367C22.6504 0.14762 22.0096 0.53509 21.6182 0.85259C20.8548 1.472 20.595 2.42724 20.2645 3.31903L19.1552 6.362C19.0086 6.76 18.8305 7.30912 18.6632 7.68177C18.3448 7.31147 18.1057 6.8353 17.8649 6.40606C17.639 6.00447 17.4098 5.6048 17.1772 5.20709Z" fill="#F57E21"/>
+            </g>
+            <defs>
+            <clipPath id="clip0_1_37">
+            <rect width="24" height="14.6471" fill="white"/>
+            </clipPath>
+            </defs>
+          </svg>
+          <span class="font-bold text-xl text-gray-900 tracking-tight">Weaver Editor</span>
+        </div>
+        <div class="flex gap-4">
+          <a href="#getting-started" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">Getting Started</a>
+          <a href="#" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+   <div class="bg-gradient-to-br from-[#0165AD] via-[#6C318F] to-[#F57E21] text-white pt-20 pb-32">
+    <div class="max-w-4xl mx-auto px-6 text-center">
+      <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight mb-6 text-white drop-shadow-md">
+        Super Simple WYSIWYG Editor
+      </h1>
+      <p class="text-xl md:text-2xl text-brand-100 mb-10 max-w-2xl mx-auto font-light">
+        O Weaver é um editor de texto rico para a web, criado para ser leve, incrivelmente rápido e fácil de integrar em qualquer projeto.
+      </p>
+      <div class="flex justify-center gap-4">
+        <a href="#getting-started" class="bg-white text-brand-700 hover:bg-gray-100 font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:-translate-y-0.5">Começar Agora</a>
+        <a href="../dist/weaver-editor.min.js" download class="bg-brand-600 border border-brand-500 hover:bg-brand-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:-translate-y-0.5">Download .min.js</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Demo Area (Flutuante sobre o hero) -->
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 -mt-20 relative z-10 mb-20">
+    <div class="bg-white rounded-xl shadow-2xl p-2 md:p-6 border border-gray-100">
+      <textarea id="weaver-demo">
+        <h1 style="text-align: center;">Olá, mundo! Este é o Weaver Editor. 🚀</h1>
+        <p style="text-align: center;">Um editor HTML criado do absoluto zero, pensando em <b>performance</b> e <b>usabilidade</b>.</p>
+        <hr>
+        <h3>Por que usar o Weaver?</h3>
+        <ul>
+          <li><b>Leveza absurda:</b> Sem dependências gigantes. Apenas jQuery e vontade de vencer.</li>
+          <li><b>Smart Toolbar:</b> Os módulos só rodam se você colocar o botão deles na barra.</li>
+          <li><b>Segurança:</b> Possui um <span style="background-color: rgb(255, 255, 0);">Sanitizador Nativo</span> integrado para blindar contra XSS.</li>
+        </ul>
+        <p><br></p>
+        <p><i>Sinta-se livre para apagar isso e começar a testar o editor...</i></p>
+      </textarea>
+    </div>
+  </div>
+
+  <!-- Getting Started Section -->
+  <div id="getting-started" class="max-w-4xl mx-auto px-6 py-12">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold text-gray-900">Como Instalar (Getting Started)</h2>
+      <p class="text-gray-600 mt-4">Apenas dois arquivos separam você de um editor poderoso.</p>
+    </div>
+
+    <div class="space-y-8">
+      <!-- Passo 1 -->
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span class="bg-brand-100 text-brand-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span>
+          Inclua o jQuery e o Weaver
+        </h3>
+        <p class="text-gray-600 mb-4">Adicione as tags <code>&lt;script&gt;</code> no <code>&lt;head&gt;</code> ou antes do fechamento do seu <code>&lt;/body&gt;</code>.</p>
+        <pre><code class="language-html rounded-md">
+&lt;!-- jQuery (Requisito) --&gt;
+&lt;script src="https://code.jquery.com/jquery-3.6.0.min.js"&gt;&lt;/script&gt;
+
+&lt;!-- Weaver Editor --&gt;
+&lt;script src="dist/weaver-editor.min.js"&gt;&lt;/script&gt;
+        </code></pre>
+      </div>
+
+      <!-- Passo 2 -->
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span class="bg-brand-100 text-brand-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span>
+          Adicione um Textarea
+        </h3>
+        <p class="text-gray-600 mb-4">Crie um campo de texto em sua página com um <b>ID</b> que você usará para inicializar.</p>
+        <pre><code class="language-html rounded-md">
+&lt;form method="post"&gt;
+  &lt;textarea id="meu-editor" name="conteudo"&gt;&lt;/textarea&gt;
+&lt;/form&gt;
+        </code></pre>
+      </div>
+
+      <!-- Passo 3 -->
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span class="bg-brand-100 text-brand-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
+          Inicialize o Editor
+        </h3>
+        <p class="text-gray-600 mb-4">Chame a função <code>weaver()</code> passando as configurações desejadas (ou deixe vazio para o padrão).</p>
+        <pre><code class="language-javascript rounded-md">
+$(document).ready(function() {
+  $('#meu-editor').weaver({
+    placeholder: 'Digite sua mágica aqui...',
+    height: 400
+  });
+});
+        </code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-400 py-8 text-center mt-12">
+    <div class="max-w-4xl mx-auto px-6">
+      <p>© 2026 Weaver Editor. Criado sob medida para plataformas de e-commerce e criadores de conteúdo.</p>
+      <p class="mt-2 text-sm">Licença MIT.</p>
+    </div>
+  </footer>
+
+  <!-- Script de Inicialização da Demo e Syntax Highlight -->
+  <script>
+    // Pinta os blocos de código
+    hljs.highlightAll();
+
+    // Inicia o nosso editor lindão na vitrine
+    $(document).ready(function() {
+      $('#weaver-demo').weaver({
+        height: 450,
+        placeholder: 'Comece a editar...'
+      });
+    });
+  </script>
+</body>
+</html>

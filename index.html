@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weaver Editor - Super Simple WYSIWYG Editor</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  
+  <!-- Highlight.js (Para deixar os códigos de exemplo coloridos) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
+  <!-- Configuração de Cores da Marca no Tailwind -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              100: '#f0e5f5',
+              500: '#8640b0',
+              600: '#6C318F', /* A Cor Oficial do seu Logo */
+              700: '#51256b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  
+  <!-- O NOSSO EDITOR: WEAVER -->
+  <script src="dist/weaver-editor.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+
+  <!-- Navbar -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <div class="flex items-center gap-2">
+          <!-- Um ícone de folha simbolizando leveza e escrita -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+          <span class="font-bold text-xl text-gray-900 tracking-tight">Weaver Editor</span>
+        </div>
+        <div class="flex gap-4">
+          <a href="#getting-started" class="text-gray-600 hover:text-blue-600 font-medium transition-colors">Getting Started</a>
+          <a href="#" class="text-gray-600 hover:text-blue-600 font-medium transition-colors">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <div class="bg-gradient-to-br from-blue-700 to-indigo-900 text-white pt-20 pb-32">
+    <div class="max-w-4xl mx-auto px-6 text-center">
+      <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight mb-6 text-white drop-shadow-md">
+        Super Simple WYSIWYG Editor
+      </h1>
+      <p class="text-xl md:text-2xl text-blue-100 mb-10 max-w-2xl mx-auto font-light">
+        O Weaver é um editor de texto rico para a web, criado para ser leve, incrivelmente rápido e fácil de integrar em qualquer projeto.
+      </p>
+      <div class="flex justify-center gap-4">
+        <a href="#getting-started" class="bg-white text-blue-700 hover:bg-gray-100 font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:-translate-y-0.5">Começar Agora</a>
+        <a href="dist/weaver-editor.min.js" download class="bg-blue-600 border border-blue-500 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:-translate-y-0.5">Download .min.js</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Demo Area (Flutuante sobre o hero) -->
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 -mt-20 relative z-10 mb-20">
+    <div class="bg-white rounded-xl shadow-2xl p-2 md:p-6 border border-gray-100">
+      <textarea id="weaver-demo">
+        <h1 style="text-align: center;">Olá, mundo! Este é o Weaver Editor. 🚀</h1>
+        <p style="text-align: center;">Um editor HTML criado do absoluto zero, pensando em <b>performance</b> e <b>usabilidade</b>.</p>
+        <hr>
+        <h3>Por que usar o Weaver?</h3>
+        <ul>
+          <li><b>Leveza absurda:</b> Sem dependências gigantes. Apenas jQuery e vontade de vencer.</li>
+          <li><b>Smart Toolbar:</b> Os módulos só rodam se você colocar o botão deles na barra.</li>
+          <li><b>Segurança:</b> Possui um <span style="background-color: rgb(255, 255, 0);">Sanitizador Nativo</span> integrado para blindar contra XSS.</li>
+        </ul>
+        <p><br></p>
+        <p><i>Sinta-se livre para apagar isso e começar a testar o editor...</i></p>
+      </textarea>
+    </div>
+  </div>
+
+  <!-- Getting Started Section -->
+  <div id="getting-started" class="max-w-4xl mx-auto px-6 py-12">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold text-gray-900">Como Instalar (Getting Started)</h2>
+      <p class="text-gray-600 mt-4">Apenas dois arquivos separam você de um editor poderoso.</p>
+    </div>
+
+    <div class="space-y-8">
+      <!-- Passo 1 -->
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span>
+          Inclua o jQuery e o Weaver
+        </h3>
+        <p class="text-gray-600 mb-4">Adicione as tags <code>&lt;script&gt;</code> no <code>&lt;head&gt;</code> ou antes do fechamento do seu <code>&lt;/body&gt;</code>.</p>
+        <pre><code class="language-html rounded-md">
+&lt;!-- jQuery (Requisito) --&gt;
+&lt;script src="https://code.jquery.com/jquery-3.6.0.min.js"&gt;&lt;/script&gt;
+
+&lt;!-- Weaver Editor --&gt;
+&lt;script src="dist/weaver-editor.min.js"&gt;&lt;/script&gt;
+        </code></pre>
+      </div>
+
+      <!-- Passo 2 -->
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span>
+          Adicione um Textarea
+        </h3>
+        <p class="text-gray-600 mb-4">Crie um campo de texto em sua página com um <b>ID</b> que você usará para inicializar.</p>
+        <pre><code class="language-html rounded-md">
+&lt;form method="post"&gt;
+  &lt;textarea id="meu-editor" name="conteudo"&gt;&lt;/textarea&gt;
+&lt;/form&gt;
+        </code></pre>
+      </div>
+
+      <!-- Passo 3 -->
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span class="bg-blue-100 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
+          Inicialize o Editor
+        </h3>
+        <p class="text-gray-600 mb-4">Chame a função <code>wysiwygEditor()</code> passando as configurações desejadas (ou deixe vazio para o padrão).</p>
+        <pre><code class="language-javascript rounded-md">
+$(document).ready(function() {
+  $('#meu-editor').wysiwygEditor({
+    placeholder: 'Digite sua mágica aqui...',
+    height: 400
+  });
+});
+        </code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-400 py-8 text-center mt-12">
+    <div class="max-w-4xl mx-auto px-6">
+      <p>© 2026 Weaver Editor. Criado sob medida para plataformas de e-commerce e criadores de conteúdo.</p>
+      <p class="mt-2 text-sm">Licença MIT.</p>
+    </div>
+  </footer>
+
+  <!-- Script de Inicialização da Demo e Syntax Highlight -->
+  <script>
+    // Pinta os blocos de código
+    hljs.highlightAll();
+
+    // Inicia o nosso editor lindão na vitrine
+    $(document).ready(function() {
+      $('#weaver-demo').wysiwygEditor({
+        height: 450,
+        placeholder: 'Comece a editar...'
+      });
+    });
+  </script>
+</body>
+</html>
