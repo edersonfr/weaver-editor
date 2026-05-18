@@ -1,5 +1,5 @@
 {
-  "name": "wysiwyg-editor",
+  "name": "weaver-editor",
   "version": "1.0.0",
   "description": "Weaver Editor - Um editor HTML WYSIWYG leve, moderno e altamente customizável.",
   "main": "gulpfile.js",
@@ -11,16 +11,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/edersonfr/wysiwyg-editor.git"
+    "url": "git+https://github.com/edersonfr/weaver-editor.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/edersonfr/wysiwyg-editor/issues"
+    "url": "https://github.com/edersonfr/weaver-editor/issues"
   },
-  "homepage": "https://github.com/edersonfr/wysiwyg-editor#readme",
+  "homepage": "https://github.com/edersonfr/weaver-editor#readme",
   "devDependencies": {
     "gulp": "^5.0.1",
     "gulp-concat": "^2.6.1",
