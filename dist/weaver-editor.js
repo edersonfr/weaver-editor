@@ -983,197 +983,298 @@ function BasicCommandsPlugin(editor) {
 BasicCommandsPlugin.prototype.init = function () {
   var editor = this.editor;
 
-  editor.registerCommand('bold', function (editor) {
-    if (!editor.selection) return;
-    if (!editor.selection.isInsideEditor()) return;
+  // --- Funções Auxiliares baseadas em Selection e Range ---
 
+  function applySpanStyle(styleProp, value) {
+    // Força o foco no editor para recuperar corretamente a seleção após usar o color picker
+    editor.$content.focus();
+    
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return;
+
+    var range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+
+    var fragment = range.extractContents();
+
+    // Caminha inteligentemente pelos nós para não quebrar blocos HTML com Spans
+    function styleNodes(node) {
+      if (node.nodeType === 3) {
+        if (node.nodeValue.length > 0) {
+          var span = document.createElement('span');
+          span.style[styleProp] = value;
+          node.parentNode.insertBefore(span, node);
+          span.appendChild(node);
+        }
+      } else if (node.nodeType === 1) {
+        var blockTags = ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'LI', 'UL', 'OL', 'TD', 'TH', 'TR', 'TBODY', 'THEAD', 'TABLE'];
+        if (blockTags.indexOf(node.tagName.toUpperCase()) !== -1) {
+          var children = Array.prototype.slice.call(node.childNodes);
+          for (var i = 0; i < children.length; i++) {
+            styleNodes(children[i]);
+          }
+        } else {
+          node.style[styleProp] = value;
+          var childrenElements = node.querySelectorAll('*');
+          for (var j = 0; j < childrenElements.length; j++) {
+            childrenElements[j].style[styleProp] = '';
+          }
+        }
+      }
+    }
+
+    var tempDiv = document.createElement('div');
+    tempDiv.appendChild(fragment);
+
+    var children = Array.prototype.slice.call(tempDiv.childNodes);
+    for (var i = 0; i < children.length; i++) {
+      styleNodes(children[i]);
+    }
+
+    range.insertNode(tempDiv);
+
+    var lastNode = null;
+    var firstNode = tempDiv.firstChild;
+
+    while (tempDiv.firstChild) {
+      lastNode = tempDiv.firstChild;
+      tempDiv.parentNode.insertBefore(lastNode, tempDiv);
+    }
+    tempDiv.parentNode.removeChild(tempDiv);
+
+    if (firstNode && lastNode) {
+      var newRange = document.createRange();
+      newRange.setStartBefore(firstNode);
+      newRange.setEndAfter(lastNode);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+
+    editor.trigger('change');
+    editor.updateToolbar();
+  }
+
+  function applyAlignment(align) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
+    var range = editor.selection.getRange();
+    if (!range) return;
+    
+    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, li, td');
+    if (block.length) {
+        block.css('text-align', align);
+    } else {
+        var wrapper = $('<p>').css('text-align', align);
+        if (!range.collapsed) {
+            wrapper.append(range.extractContents());
+            range.insertNode(wrapper[0]);
+        } else {
+            wrapper.html('<br>');
+            range.insertNode(wrapper[0]);
+        }
+    }
+
+    editor.trigger('change');
+    editor.updateToolbar();
+  }
+
+  function toggleList(listTag) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
+    var range = editor.selection.getRange();
+    if (!range) return;
+
+    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6');
+    var currentList = $(range.commonAncestorContainer).closest('ul, ol');
+
+    if (currentList.length) {
+        if (currentList[0].tagName.toLowerCase() !== listTag) {
+            var newList = $('<' + listTag + '>').html(currentList.html());
+            currentList.replaceWith(newList);
+        } else {
+            // Remove a lista (unwrap)
+            var items = currentList.find('li');
+            var fragment = document.createDocumentFragment();
+            items.each(function() {
+                var p = $('<p>').html($(this).html() || '<br>');
+                fragment.appendChild(p[0]);
+            });
+            currentList.replaceWith(fragment);
+        }
+    } else if (block.length) {
+        var list = $('<' + listTag + '>');
+        var li = $('<li>').html(block.html());
+        list.append(li);
+        block.replaceWith(list);
+    } else if (!range.collapsed) {
+        var list = $('<' + listTag + '>');
+        var li = $('<li>').append(range.extractContents());
+        list.append(li);
+        range.insertNode(list[0]);
+    }
+
+    editor.trigger('change');
+    editor.updateToolbar();
+  }
+
+  // --- Registro de Comandos Nativos Customizados ---
+
+  editor.registerCommand('bold', function (editor) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
     editor.selection.toggle('b');
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
   editor.registerCommand('italic', function (editor) {
-    if (!editor.selection) return;
-    if (!editor.selection.isInsideEditor()) return;
-
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
     editor.selection.toggle('i');
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
-  // Novos comandos de formatação básica usando a API nativa
   editor.registerCommand('underline', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('underline', false, null);
+    editor.selection.toggle('u');
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
   editor.registerCommand('strikethrough', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('strikeThrough', false, null);
+    editor.selection.toggle('s');
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
   editor.registerCommand('subscript', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('subscript', false, null);
+    editor.selection.toggle('sub');
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
   editor.registerCommand('superscript', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('superscript', false, null);
+    editor.selection.toggle('sup');
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
   editor.registerCommand('hr', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('insertHorizontalRule', false, null);
+    var range = editor.selection.getRange();
+    if (!range) return;
+    
+    var hr = document.createElement('hr');
+    range.deleteContents();
+    range.insertNode(hr);
+    
+    var p = document.createElement('p');
+    p.innerHTML = '<br>';
+    $(hr).after(p);
+    
+    editor.selection.restoreSelection(p);
+
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
-  editor.registerCommand('ul', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('insertUnorderedList', false, null);
-  });
+  editor.registerCommand('ul', function (editor) { toggleList('ul'); });
+  editor.registerCommand('ol', function (editor) { toggleList('ol'); });
 
-  editor.registerCommand('ol', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('insertOrderedList', false, null);
-  });
-
-  editor.registerCommand('alignLeft', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('justifyLeft', false, null);
-  });
-
-  editor.registerCommand('alignCenter', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('justifyCenter', false, null);
-  });
-
-  editor.registerCommand('alignRight', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('justifyRight', false, null);
-  });
-
-  editor.registerCommand('justifyFull', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('justifyFull', false, null);
-  });
+  editor.registerCommand('alignLeft', function (editor) { applyAlignment('left'); });
+  editor.registerCommand('alignCenter', function (editor) { applyAlignment('center'); });
+  editor.registerCommand('alignRight', function (editor) { applyAlignment('right'); });
+  editor.registerCommand('justifyFull', function (editor) { applyAlignment('justify'); });
 
   editor.registerCommand('indent', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('indent', false, null);
+    var range = editor.selection.getRange();
+    if (!range) return;
+    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, li');
+    if (block.length) {
+        var currentMargin = parseInt(block.css('margin-left')) || 0;
+        block.css('margin-left', (currentMargin + 20) + 'px');
+        
+        editor.trigger('change');
+    }
   });
 
   editor.registerCommand('outdent', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('outdent', false, null);
+    var range = editor.selection.getRange();
+    if (!range) return;
+    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, li');
+    if (block.length) {
+        var currentMargin = parseInt(block.css('margin-left')) || 0;
+        if (currentMargin > 0) {
+            block.css('margin-left', Math.max(0, currentMargin - 20) + 'px');
+            
+            editor.trigger('change');
+        }
+    }
   });
 
   editor.registerCommand('removeFormat', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('removeFormat', false, null);
+    var range = editor.selection.getRange();
+    if (!range || range.collapsed) return;
+
+    var fragment = range.extractContents();
+    var tempDiv = document.createElement('div');
+    tempDiv.appendChild(fragment);
+
+    var inlineTags = ['b', 'i', 'u', 's', 'strike', 'em', 'strong', 'span', 'font', 'sub', 'sup', 'a'];
+    $(tempDiv).find(inlineTags.join(',')).each(function() {
+        $(this).contents().unwrap();
+    });
+
+    $(tempDiv).find('*').removeAttr('style').removeAttr('class').removeAttr('color').removeAttr('face').removeAttr('size');
+
+    range.insertNode(tempDiv);
+    $(tempDiv).contents().unwrap();
+
+    editor.trigger('change');
+    editor.updateToolbar();
   });
 
   editor.registerCommand('formatBlock', function (editor, value) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    document.execCommand('formatBlock', false, value);
+    var range = editor.selection.getRange();
+    if (!range) return;
+    
+    var tagName = value.toLowerCase();
+    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, pre');
+    
+    if (block.length) {
+        var newBlock = $('<' + tagName + '>').html(block.html());
+        block.replaceWith(newBlock);
+        
+        editor.trigger('change');
+        editor.updateToolbar();
+    } else if (!range.collapsed) {
+        var newBlock = $('<' + tagName + '>').append(range.extractContents());
+        range.insertNode(newBlock[0]);
+        
+        editor.trigger('change');
+        editor.updateToolbar();
+    }
   });
 
   editor.registerCommand('foreColor', function (editor, value) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    
-    // Desativa o CSS momentaneamente para forçar o navegador a criar a tag <font color="...">
-    document.execCommand('styleWithCSS', false, false);
-    document.execCommand('foreColor', false, value);
-
-    // Converte a tag legada gerada pelo navegador em um <span style="color: ..."> (HTML5 puro)
-    var fonts = editor.$content[0].querySelectorAll('font[color]');
-    var lastSpan = null;
-    for (var i = 0; i < fonts.length; i++) {
-      var fontEl = fonts[i];
-      var span = document.createElement('span');
-      span.style.color = fontEl.getAttribute('color');
-      while (fontEl.firstChild) {
-        span.appendChild(fontEl.firstChild); // Move os nós silenciosamente sem quebrar a seleção do navegador
-      }
-      fontEl.parentNode.replaceChild(span, fontEl);
-      lastSpan = span;
-    }
-
-    // Re-seleciona o elemento para que o color-picker nativo continue atualizando a cor durante o "arrastar" do mouse
-    if (lastSpan) {
-      var sel = window.getSelection();
-      var range = document.createRange();
-      range.selectNodeContents(lastSpan);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
+    applySpanStyle('color', value);
   });
 
   editor.registerCommand('backColor', function (editor, value) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    
-    // Força o navegador a utilizar <span> com background-color em vez de tags legadas
-    document.execCommand('styleWithCSS', false, true);
-    document.execCommand('backColor', false, value);
-    document.execCommand('hiliteColor', false, value); // Fallback para garantir funcionamento no Firefox
-    document.execCommand('styleWithCSS', false, false); // Restaura o comportamento padrão
+    applySpanStyle('backgroundColor', value);
   });
 
   editor.registerCommand('fontName', function (editor, value) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    
-    document.execCommand('styleWithCSS', false, false);
-    document.execCommand('fontName', false, value);
-
-    // Converte a tag legada <font face="..."> gerada pelo navegador em um <span style="font-family: ..."> (HTML5)
-    var fonts = editor.$content[0].querySelectorAll('font[face]');
-    var lastSpan = null;
-    for (var i = 0; i < fonts.length; i++) {
-      var fontEl = fonts[i];
-      var span = document.createElement('span');
-      span.style.fontFamily = fontEl.getAttribute('face');
-      while (fontEl.firstChild) {
-        span.appendChild(fontEl.firstChild);
-      }
-      fontEl.parentNode.replaceChild(span, fontEl);
-      lastSpan = span;
-    }
-
-    if (lastSpan) {
-      var sel = window.getSelection();
-      var range = document.createRange();
-      range.selectNodeContents(lastSpan);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
+    applySpanStyle('fontFamily', value);
   });
 
   editor.registerCommand('fontSize', function (editor, value) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-
-    // Desativa o styleWithCSS para forçar o navegador a gerar a tag genérica <font size="7">
-    document.execCommand('styleWithCSS', false, false);
-    
-    // Aplica o tamanho 7 como um "marcador" temporário
-    document.execCommand('fontSize', false, '7');
-
-    // Encontra a tag recém-criada pelo navegador e a converte para um SPAN válido (HTML5)
-    var fonts = editor.$content[0].querySelectorAll('font[size="7"]');
-    var lastSpan = null;
-    for (var i = 0; i < fonts.length; i++) {
-      var fontEl = fonts[i];
-      var span = document.createElement('span');
-      var remValue = (parseInt(value, 10) / 16) + 'rem'; // Converte de px para rem (base 16px)
-      span.style.fontSize = remValue;
-      while (fontEl.firstChild) {
-        span.appendChild(fontEl.firstChild);
-      }
-      fontEl.parentNode.replaceChild(span, fontEl);
-      lastSpan = span;
-    }
-
-    if (lastSpan) {
-      var sel = window.getSelection();
-      var range = document.createRange();
-      range.selectNodeContents(lastSpan);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
+    var remValue = (parseInt(value, 10) / 16) + 'rem';
+    applySpanStyle('fontSize', remValue);
   });
 
   editor.registerCommand('showBlocks', function (editor) {
