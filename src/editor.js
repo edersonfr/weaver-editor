@@ -167,14 +167,10 @@
   };
 
   Editor.prototype.getContent = function () {
-    var html = this.$content.html();
-
-    var sanitizer = this.getPlugin('SanitizerPlugin');
-    if (sanitizer) {
-      return sanitizer.clean(html);
-    }
-
-    return html;
+    // Retorna o HTML já sanitizado que está no content
+    // Não re-sanitiza porque degradaria o HTML (especialmente <style> e <script>)
+    // A sanitização acontece uma única vez quando o conteúdo entra (paste ou setContent)
+    return this.$content.html();
   };
 
   Editor.prototype.getPlugin = function (name) {

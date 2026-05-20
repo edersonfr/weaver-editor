@@ -52,12 +52,30 @@ SanitizerPlugin.prototype.bind = function () {
 };
 
 SanitizerPlugin.prototype.clean = function (html) {
+  // Extrai e preserva os blocos <style> e <script> antes de processar
+  var styleScriptBlocks = [];
+  var preservedHtml = html.replace(/(<(style|script)[^>]*>[\s\S]*?<\/\2>)/gi, function(match) {
+    styleScriptBlocks.push(match);
+    // Usa uma div com id como placeholder (div é tag permitida, id é atributo permitido)
+    return '<div id="weaver-temp-preserve-' + (styleScriptBlocks.length - 1) + '"></div>';
+  });
+
   var div = document.createElement('div');
-  div.innerHTML = html;
+  div.innerHTML = preservedHtml;
 
   this.walk(div);
 
-  return this.normalize(div.innerHTML);
+  var cleanedHtml = div.innerHTML;
+
+  // Restaura os blocos <style> e <script> de forma exata
+  for (var i = 0; i < styleScriptBlocks.length; i++) {
+    cleanedHtml = cleanedHtml.replace(
+      '<div id="weaver-temp-preserve-' + i + '"></div>',
+      styleScriptBlocks[i]
+    );
+  }
+
+  return this.normalize(cleanedHtml);
 };
 
 SanitizerPlugin.prototype.walk = function (node) {

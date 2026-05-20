@@ -61,9 +61,9 @@ CodeViewPlugin.prototype.beautifyHtml = function (html) {
   var result = '';
   var indent = '';
 
-  // Extrai os blocos <pre> para preservá-los intactos e substitui por um placeholder
+  // Extrai os blocos <pre>, <style> e <script> para preservá-los intactos e substitui por um placeholder
   var preBlocks = [];
-  html = html.replace(/(<pre[^>]*>[\s\S]*?<\/pre>)/gi, function(match) {
+  html = html.replace(/(<(pre|style|script)[^>]*>[\s\S]*?<\/\2>)/gi, function(match) {
     preBlocks.push(match);
     return '<pre-placeholder id="' + (preBlocks.length - 1) + '"/>';
   });

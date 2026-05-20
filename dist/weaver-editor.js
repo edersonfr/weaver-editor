@@ -379,14 +379,10 @@ window.HistoryManager = HistoryManager;
   };
 
   Editor.prototype.getContent = function () {
-    var html = this.$content.html();
-
-    var sanitizer = this.getPlugin('SanitizerPlugin');
-    if (sanitizer) {
-      return sanitizer.clean(html);
-    }
-
-    return html;
+    // Retorna o HTML já sanitizado que está no content
+    // Não re-sanitiza porque degradaria o HTML (especialmente <style> e <script>)
+    // A sanitização acontece uma única vez quando o conteúdo entra (paste ou setContent)
+    return this.$content.html();
   };
 
   Editor.prototype.getPlugin = function (name) {
@@ -1371,12 +1367,30 @@ SanitizerPlugin.prototype.bind = function () {
 };
 
 SanitizerPlugin.prototype.clean = function (html) {
+  // Extrai e preserva os blocos <style> e <script> antes de processar
+  var styleScriptBlocks = [];
+  var preservedHtml = html.replace(/(<(style|script)[^>]*>[\s\S]*?<\/\2>)/gi, function(match) {
+    styleScriptBlocks.push(match);
+    // Usa uma div com id como placeholder (div é tag permitida, id é atributo permitido)
+    return '<div id="weaver-temp-preserve-' + (styleScriptBlocks.length - 1) + '"></div>';
+  });
+
   var div = document.createElement('div');
-  div.innerHTML = html;
+  div.innerHTML = preservedHtml;
 
   this.walk(div);
 
-  return this.normalize(div.innerHTML);
+  var cleanedHtml = div.innerHTML;
+
+  // Restaura os blocos <style> e <script> de forma exata
+  for (var i = 0; i < styleScriptBlocks.length; i++) {
+    cleanedHtml = cleanedHtml.replace(
+      '<div id="weaver-temp-preserve-' + i + '"></div>',
+      styleScriptBlocks[i]
+    );
+  }
+
+  return this.normalize(cleanedHtml);
 };
 
 SanitizerPlugin.prototype.walk = function (node) {
@@ -2488,9 +2502,9 @@ CodeViewPlugin.prototype.beautifyHtml = function (html) {
   var result = '';
   var indent = '';
 
-  // Extrai os blocos <pre> para preservá-los intactos e substitui por um placeholder
+  // Extrai os blocos <pre>, <style> e <script> para preservá-los intactos e substitui por um placeholder
   var preBlocks = [];
-  html = html.replace(/(<pre[^>]*>[\s\S]*?<\/pre>)/gi, function(match) {
+  html = html.replace(/(<(pre|style|script)[^>]*>[\s\S]*?<\/\2>)/gi, function(match) {
     preBlocks.push(match);
     return '<pre-placeholder id="' + (preBlocks.length - 1) + '"/>';
   });
