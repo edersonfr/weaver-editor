@@ -95,7 +95,8 @@
         'video': window.VideoPlugin,
         'codeview': window.CodeViewPlugin,
         'preview': window.PreviewPlugin,
-        'fullscreen': window.FullscreenPlugin
+        'fullscreen': window.FullscreenPlugin,
+        'ai': window.AiPlugin
       };
 
       var activeOptionalPlugins = [];
@@ -289,6 +290,9 @@
       '  overflow: hidden;\n' +
       '  user-select: none;\n' +
       '  white-space: pre;\n' +
+      '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace !important;\n' +
+      '  font-size: 14px !important;\n' +
+      '  line-height: 1.5 !important;\n' +
       '}\n' +
       '.editor-codeview-textarea, .editor-codeview-highlight {\n' +
       '  position: absolute;\n' +
@@ -299,9 +303,10 @@
       '  margin: 0;\n' +
       '  border: none;\n' +
       '  outline: none;\n' +
-      '  font-family: inherit;\n' +
-      '  font-size: inherit;\n' +
-      '  line-height: inherit;\n' +
+      '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace !important;\n' +
+      '  font-size: 14px !important;\n' +
+      '  line-height: 1.5 !important;\n' +
+      '  tab-size: 4 !important;\n' +
       '  white-space: pre;\n' +
       '  box-sizing: border-box;\n' +
       '}\n' +
@@ -313,11 +318,19 @@
       '  z-index: 2;\n' +
       '  overflow: auto;\n' +
       '}\n' +
+      '.editor-codeview-textarea::selection {\n' +
+      '  color: transparent !important;\n' +
+      '  background: rgba(100, 150, 255, 0.3) !important;\n' +
+      '}\n' +
+      '.editor-codeview-textarea::-moz-selection {\n' +
+      '  color: transparent !important;\n' +
+      '  background: rgba(100, 150, 255, 0.3) !important;\n' +
+      '}\n' +
       '.editor-codeview-highlight {\n' +
       '  color: #e0e0e0;\n' +
       '  z-index: 1;\n' +
       '  pointer-events: none;\n' +
-      '  overflow: hidden;\n' +
+      '  overflow: auto;\n' +
       '}\n' +
       '.editor-codeview-highlight .html-tag {\n' +
       '  color: #f9eb26;\n' +
@@ -341,7 +354,7 @@
       ['font', ['bold', 'italic', 'underline', 'strikethrough', 'removeFormat']],
       ['color', ['foreColor', 'backColor']],
       ['para', ['ul', 'ol', 'paragraphGroup']],
-      ['insert', ['link', 'table', 'image', 'video', 'hr']],
+      ['insert', ['link', 'table', 'image', 'video', 'hr', 'ai']],
       ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
     ],
     fontNames: null,

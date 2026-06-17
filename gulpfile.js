@@ -21,7 +21,8 @@ const jsFiles = [
   'src/plugins/video.js',
   'src/plugins/fullscreen.js',
   'src/plugins/history.js',
-  'src/plugins/codeview.js'
+  'src/plugins/codeview.js',
+  'src/plugins/ai.js'
 ];
 
 gulp.task('build', function() {

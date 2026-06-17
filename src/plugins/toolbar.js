@@ -85,7 +85,8 @@ ToolbarPlugin.prototype.render = function () {
     fullscreen: { name: 'fullscreen', label: '<i data-lucide="maximize"></i>', title: 'Tela Cheia' },
     closeFullscreen: { name: 'closeFullscreen', label: '<i data-lucide="x"></i> <span class="ml-1 font-semibold text-xs">Sair</span>', title: 'Sair da Tela Cheia', fullscreenOnly: true },
     showBlocks: { name: 'showBlocks', label: '<i data-lucide="layout-grid"></i>', title: 'Mostrar Blocos' },
-    codeview: { name: 'codeview', label: '<i data-lucide="code"></i>', title: 'Código Fonte' }
+    codeview: { name: 'codeview', label: '<i data-lucide="code"></i>', title: 'Código Fonte' },
+    ai: { name: 'ai', label: '<i data-lucide="sparkles"></i>', title: 'Assistente IA' }
   };
 
   var self = this;

@@ -34,6 +34,16 @@
     }
   </script>
 
+  <style>
+    /* Estilos ativos do menu lateral Deep Dive */
+    .nav-link.active {
+      color: #0165AD !important; /* text-brand-600 */
+      font-weight: 600;
+      border-left-width: 2px;
+      border-color: #0165AD;
+      background-color: #f0e5f5; /* bg-brand-100 */
+    }
+  </style>
 
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="weaver-editor.min.js"></script>
@@ -74,6 +84,7 @@
         <!-- Desktop Menu -->
         <div class="hidden md:flex gap-4">
           <a href="#getting-started" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">Getting Started</a>
+          <a href="#deep-dive" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">Deep Dive (API)</a>
           <a href="https://github.com/edersonfr/weaver-editor" target="_blank" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">GitHub</a>
           <a href="#donate" class="text-gray-600 hover:text-brand-600 font-medium transition-colors">Apoiar</a>
         </div>
@@ -92,6 +103,7 @@
     <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-gray-100 shadow-lg absolute w-full left-0">
       <div class="px-4 py-3 space-y-2 flex flex-col">
         <a href="#getting-started" class="text-gray-600 hover:text-brand-600 font-medium transition-colors block py-2 border-b border-gray-50">Getting Started</a>
+        <a href="#deep-dive" class="text-gray-600 hover:text-brand-600 font-medium transition-colors block py-2 border-b border-gray-50">Deep Dive (API)</a>
         <a href="https://github.com/edersonfr/weaver-editor" target="_blank" class="text-gray-600 hover:text-brand-600 font-medium transition-colors block py-2 border-b border-gray-50">GitHub</a>
         <a href="#donate" class="text-gray-600 hover:text-brand-600 font-medium transition-colors block py-2">Apoiar</a>
       </div>
@@ -190,6 +202,113 @@ $(document).ready(function() {
     </div>
   </div>
 
+  <!-- Deep Dive Section -->
+  <div id="deep-dive" class="max-w-6xl mx-auto px-6 py-16 scroll-mt-16 border-t border-gray-200 mt-12">
+    <div class="text-center mb-16">
+      <h2 class="text-3xl font-bold text-gray-900 tracking-tight">Deep Dive (API)</h2>
+      <p class="text-gray-600 mt-4 max-w-2xl mx-auto">Um mergulho profundo na arquitetura, inicialização e API do editor HTML WYSIWYG mais leve e customizável do mercado.</p>
+    </div>
+
+    <div class="flex flex-col md:flex-row gap-12 items-start">
+      <!-- Navegação Lateral (Sidebar) -->
+      <aside class="md:w-64 flex-shrink-0 hidden md:block sticky top-24">
+        <nav class="space-y-1 border-l border-gray-200" id="toc">
+          <a href="#initialization" class="nav-link block pl-4 pr-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 active">Inicialização</a>
+          <a href="#options" class="nav-link block pl-4 pr-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50">Configurações (Options)</a>
+          <a href="#api" class="nav-link block pl-4 pr-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50">API & Métodos</a>
+          <a href="#events" class="nav-link block pl-4 pr-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50">Eventos</a>
+        </nav>
+      </aside>
+
+      <!-- Conteúdo Principal -->
+      <main class="flex-1 prose prose-brand prose-lg max-w-none text-gray-700">
+        <!-- Seção Inicialização -->
+        <section id="initialization" class="mb-16 scroll-mt-24">
+          <h3 class="text-2xl font-bold border-b pb-2 mt-0 text-gray-900">Inicialização</h3>
+          <p>O Weaver Editor é construído como um plugin jQuery altamente otimizado. Ele oculta graciosamente o elemento <code>&lt;textarea&gt;</code> padrão e anexa sua interface de edição rica no lugar. Quando submetido dentro de um formulário, a sincronização do HTML ocorre de maneira totalmente invisível e automática.</p>
+          
+          <h4>Exemplo de Uso Básico</h4>
+          <pre><code class="language-html">&lt;!-- No seu formulário HTML --&gt;
+&lt;textarea id="meu-editor" name="conteudo_html"&gt;&lt;/textarea&gt;
+
+&lt;!-- Instanciando o editor --&gt;
+&lt;script&gt;
+  $(document).ready(function() {
+    $('#meu-editor').weaver();
+  });
+&lt;/script&gt;</code></pre>
+        </section>
+
+        <!-- Seção Opções -->
+        <section id="options" class="mb-16 scroll-mt-24">
+          <h3 class="text-2xl font-bold border-b pb-2 text-gray-900">Configurações (Options)</h3>
+          <p>Você pode customizar o editor fornecendo um objeto de configurações na inicialização. Devido a sua arquitetura modular, botões omitidos na barra de ferramentas não carregam lógicas desnecessárias na memória.</p>
+
+          <h4>Altura e Textos</h4>
+          <pre><code class="language-javascript">$('#meu-editor').weaver({
+  height: 400, // Força a altura mínima da área de texto
+  placeholder: 'Comece a digitar sua história incrível aqui...'
+});</code></pre>
+
+          <h4>Configurando a Barra de Ferramentas (Toolbar)</h4>
+          <p>A barra de ferramentas é agrupada em arranjos para proporcionar uma separação visual atraente.</p>
+          <pre><code class="language-javascript">$('#meu-editor').weaver({
+  toolbar: [
+    ['history', ['undo', 'redo']],
+    ['style', ['style', 'fontName', 'fontSize']], // Formatos de bloco
+    ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']], // Formatação de texto
+    ['color', ['color']], // Controle de cor
+    ['para', ['ul', 'ol', 'paragraph']], // Listas e alinhamentos
+    ['insert', ['link', 'table', 'picture', 'video', 'hr', 'ai']], // Inserções ricas
+    ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']] // Modos de visualização
+  ]
+});</code></pre>
+          <div class="bg-brand-100 border-l-4 border-brand-500 p-4 my-6 text-brand-700 rounded-r">
+            <p class="m-0 text-sm"><strong>Dica: Aliases (Apelidos)</strong> - Se você estiver vindo de outros editores como o Summernote, saiba que o Weaver Editor suporta a leitura da mesma sintaxe: <code>style</code> será lido como `formatBlock`, <code>picture</code> como `image`, e <code>clear</code> como `removeFormat`.</p>
+          </div>
+        </section>
+
+        <!-- Seção API -->
+        <section id="api" class="mb-16 scroll-mt-24">
+          <h3 class="text-2xl font-bold border-b pb-2 text-gray-900">API & Métodos</h3>
+          <p>Ocasionalmente, você precisará modificar conteúdos via JavaScript diretamente no editor.</p>
+
+          <h4>Obtendo a Instância</h4>
+          <pre><code class="language-javascript">// Recupere a instância armazenada na propriedade 'data'
+var editor = $('#meu-editor').data('weaver');</code></pre>
+
+          <h4>Manipulando HTML</h4>
+          <pre><code class="language-javascript">// Obter HTML atualmente visível (já sanitizado pelo core)
+var conteudo = editor.getContent();
+
+// Substituir programaticamente todo o conteúdo
+editor.setContent('&lt;h1&gt;Olá, Mundo!&lt;/h1&gt;&lt;p&gt;Inserido via código.&lt;/p&gt;');</code></pre>
+
+          <h4>Sistema de Comandos (Exec)</h4>
+          <p>O método interno <code>exec(commandName, value)</code> não é apenas um atalho seguro para aplicar formatações. Ele também <strong>garante</strong> que o histórico do editor capture o estado de Desfazer e Refazer.</p>
+          <pre><code class="language-javascript">// Aplicar negrito na seleção atual
+editor.exec('bold');
+
+// Definir uma cor específica para a fonte selecionada
+editor.exec('foreColor', '#3b82f6');</code></pre>
+        </section>
+
+        <!-- Seção Eventos -->
+        <section id="events" class="mb-16 scroll-mt-24">
+          <h3 class="text-2xl font-bold border-b pb-2 text-gray-900">Eventos</h3>
+          <p>Sempre que o usuário digitar, soltar um arquivo ou aplicar uma formatação, o editor vai disparar um evento <code>change</code> do jQuery diretamente na tag <code>&lt;textarea&gt;</code> base. Isso facilita a utilização em frameworks reativos como Vue.js, React, entre outros.</p>
+
+          <pre><code class="language-javascript">$('#meu-editor').on('change', function(event, conteudoRenderizado) {
+  console.log('Alerta! Usuário modificou o documento.', conteudoRenderizado);
+  
+  // Ideal para salvamentos dinâmicos via AJAX
+});</code></pre>
+        </section>
+        
+      </main>
+    </div>
+  </div>
+
   <!-- Donate Section -->
   <div id="donate" class="bg-white border-t border-gray-200 py-16 mt-12">
     <div class="max-w-4xl mx-auto px-6 text-center">
@@ -235,6 +354,24 @@ $(document).ready(function() {
       $('#mobile-menu a').on('click', function() {
         $('#mobile-menu').addClass('hidden');
       });
+
+      // Toc Scroll Spy (Deep Dive)
+      const sections = document.querySelectorAll('#deep-dive section');
+      const navLinks = document.querySelectorAll('#toc .nav-link');
+      
+      if (sections.length > 0) {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              navLinks.forEach(link => link.classList.remove('active'));
+              const activeId = entry.target.getAttribute('id');
+              const activeLink = document.querySelector(`#toc a[href="#${activeId}"]`);
+              if (activeLink) activeLink.classList.add('active');
+            }
+          });
+        }, { rootMargin: '-100px 0px -60% 0px' });
+        sections.forEach(section => observer.observe(section));
+      }
     });
   </script>
 </body>
