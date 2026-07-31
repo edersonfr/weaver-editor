@@ -359,7 +359,9 @@
     ],
     fontNames: null,
     placeholder: '',
-    height: null
+    height: null,
+    aiEndpoint: 'ai-api.php',
+    onAiGenerate: null
   };
 
   // =========================
@@ -371,6 +373,8 @@
       $(this).data('weaver', editor);
     });
   };
+
+  $.fn.wysiwygEditor = $.fn.weaver;
 
   window.WysiwygEditor = Editor;
 

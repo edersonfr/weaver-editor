@@ -846,7 +846,9 @@ window.RangeFormatter = RangeFormatter;
     ],
     fontNames: null,
     placeholder: '',
-    height: null
+    height: null,
+    aiEndpoint: 'ai-api.php',
+    onAiGenerate: null
   };
 
   // =========================
@@ -858,6 +860,8 @@ window.RangeFormatter = RangeFormatter;
       $(this).data('weaver', editor);
     });
   };
+
+  $.fn.wysiwygEditor = $.fn.weaver;
 
   window.WysiwygEditor = Editor;
 
@@ -3276,22 +3280,49 @@ AiPlugin.prototype.generateDescription = function () {
     window.lucide.createIcons({ root: this.$btnGenerate[0] });
   }
 
-  // Substitua este bloco pela sua integração de IA (OpenAI / Gemini / Anthropic)
-  var mockApiCall = new Promise(function(resolve) {
-    setTimeout(function() {
-      var dummyResponse = '<p>Descubra a combinação perfeita de estilo, qualidade e inovação. Desenvolvido com materiais de alta durabilidade, este produto garante performance e conforto excepcionais para o seu dia a dia.</p>' +
-        '<ul>' +
-        '<li><b>Alta Durabilidade:</b> Vida útil prolongada.</li>' +
-        '<li><b>Design Moderno:</b> Feito para se destacar.</li>' +
-        '</ul>' +
-        '<p><br></p>';
-      resolve(dummyResponse);
-    }, 1500);
-  });
-
-  mockApiCall.then(function(html) {
+  function handleSuccess(html) {
     self.insertHtml(html);
     self.togglePopover(false);
+  }
+
+  function handleError(errorMsg) {
+    alert('Erro ao gerar conteúdo com IA: ' + (errorMsg || 'Falha na comunicação com a API.'));
+    self.$btnGenerate.html('Gerar').prop('disabled', false);
+  }
+
+  // 1. Caso o desenvolvedor tenha informado um callback customizado (ex: onAiGenerate)
+  if (typeof this.editor.options.onAiGenerate === 'function') {
+    this.editor.options.onAiGenerate(prompt, function(html, error) {
+      if (error) {
+        handleError(error);
+      } else {
+        handleSuccess(html);
+      }
+    }, this.editor);
+    return;
+  }
+
+  // 2. Chamada AJAX padrão para o endpoint da API de IA (ex: ai-api.php)
+  var endpoint = this.editor.options.aiEndpoint || 'ai-api.php';
+
+  $.ajax({
+    url: endpoint,
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ prompt: prompt }),
+    dataType: 'json',
+    success: function(response) {
+      if (response && response.success && response.html) {
+        handleSuccess(response.html);
+      } else if (response && response.error) {
+        handleError(response.error);
+      } else {
+        handleError('Resposta inválida do servidor.');
+      }
+    },
+    error: function(xhr, status, error) {
+      handleError(error || 'Erro na requisição AJAX para ' + endpoint);
+    }
   });
 };
 
