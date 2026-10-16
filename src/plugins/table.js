@@ -69,7 +69,7 @@ TablePlugin.prototype.buildGrid = function () {
   });
 
   // Esconde o menu de grade se clicar em outro lugar da tela
-  $(document).on('click', function (e) {
+  $(document).on('click' + this.editor.ns, function (e) {
     var $btn = self.editor.$toolbar.find('[data-name="table"]');
     if (!self.$grid.is(e.target) && self.$grid.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
       self.toggleGrid(false);
@@ -131,13 +131,11 @@ TablePlugin.prototype.insertTable = function (rows, cols) {
   }
   html += '</tbody></table><p><br></p>'; // Adiciona um parágrafo no final para poder continuar digitando
 
-  // Usa RangeFormatter para inserir HTML de forma robusta
-  if (this.rangeFormatter) {
-    this.rangeFormatter.insertHTML(html);
-  } else {
-    // Fallback para execCommand se RangeFormatter não estiver disponível
-    document.execCommand('insertHTML', false, html);
-  }
+  // A grade insere fora do editor.exec(): grava histórico e sincroniza aqui
+  this.editor.history.save();
+  this.rangeFormatter.insertHTML(html);
+  this.editor.history.save();
+  this.editor.trigger('change');
 };
 
 TablePlugin.prototype.buildContextMenu = function () {
@@ -177,14 +175,14 @@ TablePlugin.prototype.buildContextMenu = function () {
   this.editor.$container.append(this.$contextMenu);
 
   // Fecha o menu ao clicar fora
-  $(document).on('mousedown', function (e) {
+  $(document).on('mousedown' + this.editor.ns, function (e) {
     if (!self.$contextMenu.is(e.target) && self.$contextMenu.has(e.target).length === 0) {
       self.hideContextMenu();
     }
   });
 
   // Esconde ao fazer scroll no editor
-  this.editor.$content.on('scroll', function () {
+  this.editor.$content.on('scroll' + this.editor.ns, function () {
     self.hideContextMenu();
   });
 };
@@ -192,7 +190,9 @@ TablePlugin.prototype.buildContextMenu = function () {
 TablePlugin.prototype.bindEvents = function () {
   var self = this;
 
-  this.editor.$content.on('contextmenu', 'td, th', function (e) {
+  this.editor.$content.on('contextmenu' + this.editor.ns, 'td, th', function (e) {
+    // Shift + clique direito abre o menu do navegador (correção ortográfica, colar...)
+    if (e.shiftKey) return;
     e.preventDefault();
     self.activeCell = this;
     self.showContextMenu(e);

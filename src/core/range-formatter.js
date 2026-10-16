@@ -18,19 +18,31 @@ RangeFormatter.prototype.insertHTML = function (htmlString, preserveCaret) {
   
   if (!sel.rangeCount) return false;
   
-  var range = sel.getRangeAt(0);
+  var range = sel.getRangeAt(0).cloneRange();
 
   // Nunca usar range.createContextualFragment: ele EXECUTA <script>.
   // O fragmento vem sanitizado de um documento inerte.
   var fragment = this._sanitizer().toFragment(htmlString);
+  if (!fragment.firstChild) return false;
+
   var lastNode = fragment.lastChild;
 
   // Remove a seleção atual
   range.deleteContents();
 
+  // Conteúdo de bloco (tabela, vídeo, listas) no meio de um parágrafo:
+  // divide o parágrafo no cursor em vez de gerar <p><table>, que o
+  // navegador quebraria ao recarregar o HTML.
+  var host = this._hasBlock(fragment) ? this._textBlockAt(range.startContainer) : null;
+
+  if (host) {
+    this._insertSplittingBlock(range, host, fragment, preserveCaret);
+    return true;
+  }
+  
   // Insere o novo conteúdo
   range.insertNode(fragment);
-
+  
   if (preserveCaret) {
     // Move o cursor para após o conteúdo inserido
     if (lastNode && lastNode.parentNode) {
@@ -45,6 +57,87 @@ RangeFormatter.prototype.insertHTML = function (htmlString, preserveCaret) {
   sel.addRange(range);
   
   return true;
+};
+
+RangeFormatter.TEXT_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, pre';
+
+/** @private */
+RangeFormatter.prototype._hasBlock = function (fragment) {
+  for (var node = fragment.firstChild; node; node = node.nextSibling) {
+    if (SelectionManager.isBlock(node)) return true;
+  }
+  return false;
+};
+
+/**
+ * Parágrafo/título (dentro do editor) que contém o nó.
+ * @private
+ */
+RangeFormatter.prototype._textBlockAt = function (node) {
+  var root = this.editor && this.editor.$content ? this.editor.$content[0] : null;
+  var el = node && node.nodeType !== 1 ? node.parentNode : node;
+
+  while (el && el !== root && el.nodeType === 1) {
+    if (SelectionManager.matches(el, RangeFormatter.TEXT_BLOCK_SELECTOR)) return el;
+    if (SelectionManager.isBlock(el)) return null; // li, td, blockquote aceitam blocos
+    el = el.parentNode;
+  }
+  return null;
+};
+
+RangeFormatter.isEmptyBlock = function (el) {
+  return !/\S/.test(el.textContent) && !el.querySelector('img, iframe, video, audio, table, hr');
+};
+
+/** @private */
+RangeFormatter.prototype._insertSplittingBlock = function (range, host, fragment, preserveCaret) {
+  // Tudo do cursor até o fim do bloco vai para um novo bloco igual
+  var tailRange = document.createRange();
+  tailRange.setStart(range.startContainer, range.startOffset);
+  tailRange.setEnd(host, host.childNodes.length);
+
+  var tail = host.cloneNode(false);
+  tail.appendChild(tailRange.extractContents());
+
+  var parent = host.parentNode;
+  var lastInserted = fragment.lastChild;
+
+  parent.insertBefore(tail, host.nextSibling);
+  parent.insertBefore(fragment, tail);
+
+  if (RangeFormatter.isEmptyBlock(host)) parent.removeChild(host);
+
+  // O conteúdo inserido já traz um <p> no fim (tabela, vídeo)? Então o
+  // pedaço final vazio é descartado para não sobrar linha em branco.
+  var tailIsEmpty = RangeFormatter.isEmptyBlock(tail);
+  var insertedEndsWithParagraph = lastInserted && lastInserted.nodeType === 1 && lastInserted.tagName === 'P';
+  if (tailIsEmpty && insertedEndsWithParagraph) {
+    parent.removeChild(tail);
+  } else if (!tailIsEmpty && insertedEndsWithParagraph && RangeFormatter.isEmptyBlock(lastInserted) && lastInserted.parentNode) {
+    // Já existe texto depois: o <p> vazio que acompanha a tabela/vídeo sobra
+    parent.removeChild(lastInserted);
+    lastInserted = null;
+  } else if (tailIsEmpty) {
+    while (tail.firstChild) tail.removeChild(tail.firstChild);
+    tail.appendChild(document.createElement('br'));
+  }
+
+  if (!preserveCaret) return;
+
+  var caretHost = tail.parentNode ? tail : lastInserted;
+  if (!caretHost) return;
+  var caret = document.createRange();
+  if (caretHost && caretHost.nodeType === 1) {
+    caret.selectNodeContents(caretHost);
+    caret.collapse(caretHost === tail);
+  } else {
+    caret.setStartAfter(lastInserted);
+    caret.collapse(true);
+  }
+
+  var sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(caret);
 };
 
 /**
@@ -230,7 +323,8 @@ RangeFormatter.prototype.saveSelection = function () {
   var sel = window.getSelection();
   if (sel.rangeCount === 0) return null;
   
-  return sel.getRangeAt(0);
+  // Cópia: o range vivo muda junto com o DOM
+  return sel.getRangeAt(0).cloneRange();
 };
 
 /**
