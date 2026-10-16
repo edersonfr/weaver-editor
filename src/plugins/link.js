@@ -83,7 +83,7 @@ LinkPlugin.prototype.buildPopover = function () {
   });
 
   // Esconde o popover se clicar fora
-  $(document).on('mousedown', function (e) {
+  $(document).on('mousedown' + this.editor.ns, function (e) {
     var $btn = self.editor.$toolbar.find('[data-name="link"]');
     if (!self.$popover.is(e.target) && self.$popover.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
       self.togglePopover(false);

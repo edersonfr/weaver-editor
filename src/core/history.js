@@ -1,10 +1,12 @@
 function HistoryManager(editor) {
   this.editor = editor;
 
+  // Cada entrada guarda o HTML e a posição do cursor: { html, caret }
   this.undoStack = [];
   this.redoStack = [];
 
   this.maxStack = 50;
+  this.timeout = null;
 }
 
 HistoryManager.prototype.init = function () {
@@ -14,25 +16,35 @@ HistoryManager.prototype.init = function () {
 
 HistoryManager.prototype.bind = function () {
   var self = this;
-  var timeout;
 
-  this.editor.$content.on('input', function () {
-    clearTimeout(timeout);
+  this.editor.$content.on('input' + this.editor.ns, function () {
+    clearTimeout(self.timeout);
 
-    timeout = setTimeout(function () {
+    self.timeout = setTimeout(function () {
       self.save();
     }, 300);
   });
 };
 
-HistoryManager.prototype.save = function () {
-  var html = this.editor.$content.html();
+HistoryManager.prototype.current = function () {
+  return this.undoStack.length ? this.undoStack[this.undoStack.length - 1] : null;
+};
 
-  if (this.undoStack.length && this.undoStack[this.undoStack.length - 1] === html) {
+HistoryManager.prototype.save = function () {
+  // Uma digitação pendente no debounce entra agora, antes de outra ação
+  clearTimeout(this.timeout);
+
+  var html = this.editor.$content.html();
+  var caret = this.editor.selection ? this.editor.selection.serialize() : null;
+  var top = this.current();
+
+  if (top && top.html === html) {
+    // Mesmo conteúdo: só atualiza onde o cursor está
+    if (caret) top.caret = caret;
     return;
   }
 
-  this.undoStack.push(html);
+  this.undoStack.push({ html: html, caret: caret });
 
   if (this.undoStack.length > this.maxStack) {
     this.undoStack.shift();
@@ -47,9 +59,7 @@ HistoryManager.prototype.undo = function () {
   var current = this.undoStack.pop();
   this.redoStack.push(current);
 
-  var previous = this.undoStack[this.undoStack.length - 1];
-
-  this.restore(previous);
+  this.restore(this.current());
 };
 
 HistoryManager.prototype.redo = function () {
@@ -61,9 +71,22 @@ HistoryManager.prototype.redo = function () {
   this.restore(next);
 };
 
-HistoryManager.prototype.restore = function (html) {
+HistoryManager.prototype.restore = function (entry) {
+  if (typeof entry === 'string') entry = { html: entry, caret: null };
+  if (!entry) return;
+
   // Não usar jQuery .html(): ele avalia <script> a cada desfazer/refazer.
-  this.editor.setContent(html);
+  this.editor.setContent(entry.html);
+
+  // Devolve o cursor para onde estava, em vez de jogá-lo para o início
+  if (!entry.caret || !this.editor.selection.deserialize(entry.caret)) {
+    var range = document.createRange();
+    range.selectNodeContents(this.editor.$content[0]);
+    range.collapse(false);
+    this.editor.selection.setRange(range);
+  }
+
+  this.editor.trigger('change');
 };
 
 window.HistoryManager = HistoryManager;

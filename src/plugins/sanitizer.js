@@ -25,7 +25,7 @@ SanitizerPlugin.prototype.init = function () {
 SanitizerPlugin.prototype.bind = function () {
   var self = this;
 
-  this.editor.$content.on('paste', function (e) {
+  this.editor.$content.on('paste' + this.editor.ns, function (e) {
     var clipboard = (e.originalEvent || e).clipboardData;
 
     e.preventDefault();

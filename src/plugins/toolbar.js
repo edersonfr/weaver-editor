@@ -129,8 +129,8 @@ ToolbarPlugin.prototype.render = function () {
         $btn.on('mousedown', function(e) { e.preventDefault(); });
         $btn.on('click', function(e) {
           var isVisible = $menu.is(':visible');
-          $('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
-          $('.editor-dropdown-btn').attr('aria-expanded', 'false');
+          editor.$toolbar.find('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
+          editor.$toolbar.find('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
             $menu.removeClass('right-0').addClass('left-0').show();
             $btn.attr('aria-expanded', 'true');
@@ -142,7 +142,7 @@ ToolbarPlugin.prototype.render = function () {
           }
         });
 
-        $(document).on('mousedown', function(e) {
+        $(document).on('mousedown' + editor.ns, function(e) {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
@@ -203,8 +203,8 @@ ToolbarPlugin.prototype.render = function () {
         $btn.on('mousedown', function(e) { e.preventDefault(); });
         $btn.on('click', function(e) {
           var isVisible = $menu.is(':visible');
-          $('.editor-dropdown-menu').hide(); 
-          $('.editor-dropdown-btn').attr('aria-expanded', 'false');
+          editor.$toolbar.find('.editor-dropdown-menu').hide(); 
+          editor.$toolbar.find('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
             $menu.removeClass('right-0').addClass('left-0').css('display', 'flex');
             $btn.attr('aria-expanded', 'true');
@@ -216,7 +216,7 @@ ToolbarPlugin.prototype.render = function () {
           }
         });
 
-        $(document).on('mousedown', function(e) {
+        $(document).on('mousedown' + editor.ns, function(e) {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
@@ -368,39 +368,27 @@ ToolbarPlugin.prototype.updateState = function () {
   var formats = this.editor.selection.getActiveFormats();
 
   for (var key in this.buttons) {
-    this.buttons[key].removeClass('bg-gray-200 shadow-inner active').addClass('bg-white');
+    this.buttons[key].removeClass('bg-gray-200 shadow-inner active').addClass('bg-white').removeAttr('aria-pressed');
   }
 
-  if (formats.bold && this.buttons.bold) {
-    this.buttons.bold.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
-  }
-
-  if (formats.italic && this.buttons.italic) {
-    this.buttons.italic.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
-  }
-
-  if (formats.link && this.buttons.link) {
-    this.buttons.link.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
-  }
-
-  // Verifica o estado nativo dos comandos executados via execCommand
-  var nativeCommands = {
-    'underline': 'underline',
-    'strikethrough': 'strikeThrough',
-    'subscript': 'subscript',
-    'superscript': 'superscript',
-    'ul': 'insertUnorderedList',
-    'ol': 'insertOrderedList',
-    'alignLeft': 'justifyLeft',
-    'alignCenter': 'justifyCenter',
-    'alignRight': 'justifyRight',
-    'justifyFull': 'justifyFull'
-  };
-
-  for (var btnName in nativeCommands) {
-    if (this.buttons[btnName] && document.queryCommandState(nativeCommands[btnName])) {
-      this.buttons[btnName].removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
+  // Estado lido do DOM (o editor não usa execCommand, então queryCommandState
+  // não refletia <strong>, <del> etc.)
+  var formatButtons = ['bold', 'italic', 'underline', 'strikethrough', 'subscript', 'superscript', 'link', 'ul', 'ol'];
+  for (var f = 0; f < formatButtons.length; f++) {
+    var name = formatButtons[f];
+    if (formats[name] && this.buttons[name]) {
+      this.buttons[name].removeClass('bg-white').addClass('bg-gray-200 shadow-inner active').attr('aria-pressed', 'true');
     }
+  }
+
+  // Alinhamento: lê o text-align calculado do bloco atual
+  var range = this.editor.selection.getRange();
+  var block = range ? this.editor.selection.closest(range.startContainer, 'p, div, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre') : null;
+  if (block) {
+    var align = (window.getComputedStyle(block).textAlign || '').toLowerCase();
+    var alignButtons = { left: 'alignLeft', start: 'alignLeft', center: 'alignCenter', right: 'alignRight', end: 'alignRight', justify: 'justifyFull' };
+    var alignBtn = this.buttons[alignButtons[align]];
+    if (alignBtn) alignBtn.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active').attr('aria-pressed', 'true');
   }
 
   if (this.editor.$content.hasClass('editor-show-blocks') && this.buttons.showBlocks) {

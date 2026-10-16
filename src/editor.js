@@ -2,7 +2,9 @@
 
   function Editor(element, options) {
     this.$el = $(element);
-    this.options = $.extend(true, {}, Editor.defaults, options);
+    this.options = Editor.mergeOptions(Editor.defaults, options || {});
+    this.id = ++Editor.instanceCount;
+    this.ns = '.weaver' + this.id; // namespace dos eventos desta instância
 
     this.plugins = [];
     this.commands = {};
@@ -10,6 +12,53 @@
 
     this.init();
   }
+
+  Editor.instanceCount = 0;
+
+  /**
+   * Opções que são listas ou mapas SUBSTITUEM o padrão em vez de serem fundidas.
+   * Com $.extend(true), arrays eram mesclados por posição: pedir só
+   * [['font', ['bold']]] gerava a toolbar padrão inteira com 'redo' no meio.
+   */
+  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources'];
+
+  Editor.mergeOptions = function (defaults, options) {
+    var merged = $.extend(true, {}, defaults);
+
+    for (var key in options) {
+      if (!options.hasOwnProperty(key)) continue;
+      var value = options[key];
+
+      if (Editor.REPLACE_OPTIONS.indexOf(key) !== -1 || $.isArray(value) || !$.isPlainObject(value)) {
+        merged[key] = $.isArray(value) ? value.slice() : value;
+      } else {
+        merged[key] = $.extend(true, {}, merged[key], value);
+      }
+    }
+
+    merged.toolbar = Editor.normalizeToolbar(merged.toolbar);
+    return merged;
+  };
+
+  /**
+   * Aceita grupos sem lista de botões (['color']) usando o nome do grupo
+   * como botão/alias, como no Summernote.
+   */
+  Editor.normalizeToolbar = function (toolbar) {
+    var normalized = [];
+    if (!$.isArray(toolbar)) return normalized;
+
+    for (var i = 0; i < toolbar.length; i++) {
+      var group = toolbar[i];
+      if (typeof group === 'string') {
+        normalized.push([group, [group]]);
+      } else if ($.isArray(group) && group.length) {
+        var buttons = $.isArray(group[1]) ? group[1].slice() : [group[0]];
+        normalized.push([group[0], buttons]);
+      }
+    }
+    return normalized;
+  };
 
   Editor.prototype.init = function () {
     this.injectStyles();
@@ -47,7 +96,7 @@
 
       // Garante a sincronização absoluta no momento do envio do formulário
       var self = this;
-      this.$el.closest('form').on('submit', function() {
+      this.$el.closest('form').on('submit' + this.ns, function() {
         self.$el.val(self.getContent());
       });
     } else {
@@ -124,12 +173,28 @@
 
     for (var i = 0; i < plugins.length; i++) {
       var plugin = new plugins[i](this);
+      // Nome estável para getPlugin(), mesmo com o código minificado
+      if (!plugin.name) plugin.name = Editor.pluginNameOf(plugins[i]);
       this.plugins.push(plugin);
 
       if (plugin.init) {
         plugin.init();
       }
     }
+  };
+
+  Editor.PLUGIN_NAMES = [
+    'ToolbarPlugin', 'BasicCommandsPlugin', 'SanitizerPlugin', 'NormalizerPlugin', 'HistoryPlugin',
+    'LinkPlugin', 'TablePlugin', 'ImagePlugin', 'VideoPlugin', 'CodeViewPlugin', 'PreviewPlugin',
+    'FullscreenPlugin', 'AiPlugin'
+  ];
+
+  Editor.pluginNameOf = function (PluginClass) {
+    if (PluginClass.pluginName) return PluginClass.pluginName;
+    for (var i = 0; i < Editor.PLUGIN_NAMES.length; i++) {
+      if (window[Editor.PLUGIN_NAMES[i]] === PluginClass) return Editor.PLUGIN_NAMES[i];
+    }
+    return PluginClass.name || '';
   };
 
   Editor.prototype.registerCommand = function (name, fn) {
@@ -151,13 +216,53 @@
   Editor.prototype.bindEvents = function () {
     var self = this;
 
-    this.$content.on('input', function () {
+    // Enter cria <p> em vez de <div> (Chrome/Edge); ajuda a manter o HTML limpo
+    try {
+      document.execCommand('defaultParagraphSeparator', false, 'p');
+    } catch (e) { /* navegador sem suporte */ }
+
+    this.$content.on('input' + this.ns, function (e) {
+      // A primeira linha digitada no Chrome fica como texto solto na raiz;
+      // envolve num <p> (fora de composição de IME, para não atrapalhar acentos)
+      var oe = e.originalEvent;
+      var root = self.$content[0];
+      if (!(oe && oe.isComposing) && root.firstChild && root.firstChild.nodeType === 3 && /\S/.test(root.firstChild.nodeValue)) {
+        self.selection.ensureBlock();
+      }
+
       self.trigger('change');
     });
 
-    this.$content.on('keyup mouseup', function () {
+    this.$content.on('keyup' + this.ns + ' mouseup' + this.ns, function () {
       self.updateToolbar();
     });
+  };
+
+  /**
+   * Remove o editor da página: desfaz todos os eventos (inclusive os de
+   * document), devolve o textarea com o conteúdo atual e libera a instância.
+   */
+  Editor.prototype.destroy = function () {
+    for (var i = 0; i < this.plugins.length; i++) {
+      if (this.plugins[i].destroy) this.plugins[i].destroy();
+    }
+
+    if (this.history) clearTimeout(this.history.timeout);
+
+    var content = this.getContent();
+
+    $(document).off(this.ns);
+    $(window).off(this.ns);
+    this.$el.closest('form').off(this.ns);
+    this.$content.off(this.ns);
+
+    if (this.isTextarea) {
+      this.$el.val(content).show();
+    }
+
+    this.$container.remove();
+    this.$el.removeData('weaver');
+    this.plugins = [];
   };
 
   Editor.prototype.trigger = function (event) {
@@ -175,6 +280,13 @@
     // O conteúdo já entrou sanitizado (setContent, insertHTML, colar, IA, code view).
     // Importante: sanitize também no servidor. Sanitização no navegador não é
     // uma barreira de segurança, pois o POST pode ser forjado.
+
+    // Com o code view aberto, o conteúdo vigente é o que está no código
+    // (antes, enviar o formulário nesse modo descartava as edições)
+    if (this.codeView && this.codeView.active) {
+      return this.sanitize(this.codeView.$textarea.val());
+    }
+
     return this.$content.html();
   };
 
@@ -189,8 +301,8 @@
 
   Editor.prototype.getPlugin = function (name) {
     for (var i = 0; i < this.plugins.length; i++) {
-      // Evita falhas caso o código seja minificado, buscando a propriedade `name`
-      if (this.plugins[i].name === name || this.plugins[i].constructor.name === name) {
+      // `name` é definido em initPlugins (constructor.name muda ao minificar)
+      if (this.plugins[i].name === name) {
         return this.plugins[i];
       }
     }
@@ -356,9 +468,15 @@
       '  color: #f9eb26;\n' +
       '}\n';
 
+    // Estilos base (equivalentes às classes Tailwind usadas): o editor
+    // funciona mesmo em páginas sem Tailwind
+    if (window.WeaverBaseStyles) {
+      css = window.WeaverBaseStyles + '\n' + css;
+    }
+
     var style = document.createElement('style');
     style.id = 'wysiwyg-editor-styles';
-    style.innerHTML = css;
+    style.textContent = css;
 
     document.head.appendChild(style);
   };
@@ -389,6 +507,17 @@
   // =========================
   $.fn.weaver = function (options) {
     return this.each(function () {
+      var existing = $(this).data('weaver');
+
+      // $('#x').weaver('destroy') remove o editor
+      if (options === 'destroy') {
+        if (existing) existing.destroy();
+        return;
+      }
+
+      // Inicializar duas vezes o mesmo elemento criava dois editores
+      if (existing) return;
+
       var editor = new Editor(this, options);
       $(this).data('weaver', editor);
     });

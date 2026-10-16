@@ -23,6 +23,21 @@ CodeViewPlugin.prototype.init = function () {
     self.updateView();
   });
 
+  // Tab indenta em vez de tirar o foco do código
+  this.$textarea.on('keydown', function (e) {
+    if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    var el = this;
+    var start = el.selectionStart;
+    var end = el.selectionEnd;
+    el.value = el.value.substring(0, start) + '  ' + el.value.substring(end);
+    el.selectionStart = el.selectionEnd = start + 2;
+    self.updateView();
+  });
+
+  // O editor lê daqui enquanto o code view estiver aberto (ex.: envio do formulário)
+  this.editor.codeView = this;
+
   this.$textarea.on('scroll', function () {
     self.$highlight.scrollTop($(this).scrollTop());
     self.$highlight.scrollLeft($(this).scrollLeft());
@@ -68,8 +83,9 @@ CodeViewPlugin.prototype.beautifyHtml = function (html) {
     return '<pre-placeholder id="' + (preBlocks.length - 1) + '"/>';
   });
 
-  // Remove quebras de linha pré-existentes para padronizar do zero
-  html = html.replace(/[\r\n]/g, '');
+  // Padroniza do zero: quebras de linha viram UM espaço. Antes elas eram
+  // apagadas e "palavra\noutra" virava "palavraoutra".
+  html = html.replace(/[ \t]*[\r\n]+[ \t]*/g, ' ');
 
   var tags = html.split(/(<[^>]+>)/g);
   var inlineTags = ['a', 'span', 'b', 'i', 'u', 'strong', 'em', 'strike', 's', 'sub', 'sup', 'code', 'font'];
@@ -80,6 +96,12 @@ CodeViewPlugin.prototype.beautifyHtml = function (html) {
 
     // Se não for uma tag (for apenas um nó de texto solto)
     if (tag.charAt(0) !== '<') {
+      // Logo após uma tag de bloco, o texto começa na linha indentada
+      if (result.length && result.charAt(result.length - 1) === '\n') {
+        tag = tag.replace(/^\s+/, '');
+        if (!tag) continue;
+        result += indent;
+      }
       result += tag;
       continue;
     }
@@ -131,7 +153,8 @@ CodeViewPlugin.prototype.toggle = function () {
   var $codeViewBtn = this.editor.$toolbar.find('[data-name="codeview"]');
 
   if (this.active) {
-    var html = this.editor.getContent();
+    // Lê direto do conteúdo: getContent() já considera o code view ativo
+    var html = this.editor.$content.html();
     
     // Aplica a formatação em cascata inteligente no HTML
     html = this.beautifyHtml(html);
@@ -146,7 +169,10 @@ CodeViewPlugin.prototype.toggle = function () {
     $codeViewBtn.addClass('active');
   } else {
     var val = this.$textarea.val();
-    this.editor.setContent(val);
+    this.editor.history.save();
+    this.editor.setContent(val); // setContent sanitiza
+    this.editor.history.save();
+    this.editor.trigger('change');
     this.$wrapper.hide();
     this.editor.$content.show();
     

@@ -51,13 +51,13 @@ ImagePlugin.prototype.bindContentEvents = function () {
   var self = this;
 
   // Mostra a barra de ferramentas ao clicar na imagem
-  this.editor.$content.on('click', 'img', function (e) {
+  this.editor.$content.on('click' + this.editor.ns, 'img', function (e) {
     e.stopPropagation();
     self.showToolbar(this);
   });
 
   // Esconde a barra de ferramentas ao clicar fora
-  $(document).on('click', function (e) {
+  $(document).on('click' + this.editor.ns, function (e) {
     if (self.activeImage && !$(e.target).is(self.activeImage) && !self.$toolbar.is(e.target) && self.$toolbar.has(e.target).length === 0) {
       self.hideToolbar();
     }
@@ -191,44 +191,103 @@ ImagePlugin.prototype.openFileDialog = function () {
 ImagePlugin.prototype.bindDragAndDrop = function () {
   var self = this;
   var $content = this.editor.$content;
+  var ns = this.editor.ns;
+  var internalDrag = false;
+  var dragDepth = 0;
 
-  $content.on('dragover', function (e) { e.preventDefault(); e.stopPropagation(); $content.addClass('drag-over'); });
-  $content.on('dragleave', function (e) { e.preventDefault(); e.stopPropagation(); $content.removeClass('drag-over'); });
+  function hasFiles(e) {
+    var dt = e.originalEvent && e.originalEvent.dataTransfer;
+    if (!dt || !dt.types) return false;
+    for (var i = 0; i < dt.types.length; i++) {
+      if (dt.types[i] === 'Files') return true;
+    }
+    return false;
+  }
 
-  $content.on('drop', function (e) {
+  function placeCaretAt(oe) {
+    var range = null;
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(oe.clientX, oe.clientY);
+    } else if (document.caretPositionFromPoint) {
+      var pos = document.caretPositionFromPoint(oe.clientX, oe.clientY);
+      if (pos) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+      }
+    } else if (oe.rangeParent) { // Firefox antigo
+      range = document.createRange();
+      range.setStart(oe.rangeParent, oe.rangeOffset);
+    }
+    if (range) {
+      range.collapse(true);
+      self.editor.selection.setRange(range);
+    }
+  }
+
+  // Arrastar texto DENTRO do editor continua nativo (o conteúdo já é seguro)
+  $content.on('dragstart' + ns, function () { internalDrag = true; });
+  $content.on('dragend' + ns, function () { internalDrag = false; });
+
+  $content.on('dragenter' + ns, function (e) {
+    if (!hasFiles(e)) return;
+    dragDepth++;
+    $content.addClass('drag-over');
+  });
+
+  $content.on('dragover' + ns, function (e) {
+    if (!hasFiles(e)) return;
     e.preventDefault();
-    e.stopPropagation();
+  });
+
+  // dragenter/dragleave disparam ao passar por cada filho; o contador evita
+  // que o destaque fique piscando
+  $content.on('dragleave' + ns, function (e) {
+    if (!hasFiles(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) $content.removeClass('drag-over');
+  });
+
+  $content.on('drop' + ns, function (e) {
+    var oe = e.originalEvent;
+    dragDepth = 0;
     $content.removeClass('drag-over');
 
-    var oe = e.originalEvent;
+    if (internalDrag) {
+      internalDrag = false;
+      setTimeout(function () {
+        self.editor.history.save();
+        self.editor.trigger('change');
+      }, 0);
+      return; // movimentação nativa de texto
+    }
+
+    var dt = oe.dataTransfer;
+    if (!dt) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
     self.editor.$content.focus();
+    placeCaretAt(oe);
 
-    // Tenta posicionar o cursor no local exato onde a imagem foi solta
-    if (document.caretRangeFromPoint) {
-      var range = document.caretRangeFromPoint(oe.clientX, oe.clientY);
-      if (range) {
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
+    if (hasFiles(e)) {
+      self.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
+      var files = dt.files;
+      if (files && files.length > 0 && /^image\//.test(files[0].type)) {
+        self.insertImage(files[0]);
       }
-    } else if (oe.rangeParent) { // fallback Firefox
-      var range = document.createRange();
-      range.setStart(oe.rangeParent, oe.rangeOffset);
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
+      return;
     }
 
-    if (self.editor.selection && self.editor.selection.isInsideEditor()) {
-      self.savedRange = self.editor.selection.getRange();
-    } else {
-      self.savedRange = null;
-    }
+    // Texto ou HTML vindo de fora (outra aba, outro app): passa pelo sanitizador
+    var html = dt.getData('text/html');
+    var text = dt.getData('text/plain');
+    if (!html && !text) return;
 
-    var files = oe.dataTransfer.files;
-    if (files && files.length > 0 && files[0].type.match(/^image\//)) {
-      self.insertImage(files[0]);
-    }
+    self.editor.history.save();
+    self.rangeFormatter.insertHTML(html || self.editor.sanitizer.textToHtml(text));
+    self.editor.history.save();
+    self.editor.trigger('change');
   });
 };
 
@@ -255,13 +314,9 @@ ImagePlugin.prototype.insertImage = function (file) {
     var img = document.createElement('img');
     img.src = url;
     
-    // Usa RangeFormatter para inserir de forma robusta
-    if (self.rangeFormatter) {
-      self.rangeFormatter.insertNode(img, false);
-    } else {
-      // Fallback para execCommand se RangeFormatter não estiver disponível
-      document.execCommand('insertImage', false, url);
-    }
+    self.editor.history.save();
+    self.rangeFormatter.insertNode(img, false);
+    self.editor.history.save();
     
     self.editor.trigger('change');
   };

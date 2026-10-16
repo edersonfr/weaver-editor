@@ -55,7 +55,7 @@ AiPlugin.prototype.buildPopover = function () {
     self.generateDescription();
   });
 
-  $(document).on('mousedown', function (e) {
+  $(document).on('mousedown' + this.editor.ns, function (e) {
     var $btn = self.editor.$toolbar.find('[data-name="ai"]');
     if (!self.$popover.is(e.target) && self.$popover.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
       self.togglePopover(false);
