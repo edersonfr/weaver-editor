@@ -430,6 +430,72 @@ test('Nenhum erro de JavaScript durante o uso básico', async function () {
 });
 
 // =========================
+// S9 - dependências externas
+// =========================
+
+test('S9: ícones carregados de versão fixa, com crossorigin', async function () {
+  var page = await setup();
+  var script = await page.evaluate(function () {
+    var el = document.getElementById('lucide-script');
+    return { src: el.src, crossOrigin: el.crossOrigin };
+  });
+  assert.ok(!/@latest/.test(script.src), script.src);
+  assert.ok(/lucide@\d+\.\d+\.\d+\//.test(script.src), script.src);
+  assert.strictEqual(script.crossOrigin, 'anonymous');
+});
+
+test('S9: iconsIntegrity vai para o atributo integrity', async function () {
+  var page = await setup('', { iconsIntegrity: 'sha384-abc' });
+  var integrity = await page.evaluate(function () { return document.getElementById('lucide-script').integrity; });
+  assert.strictEqual(integrity, 'sha384-abc');
+});
+
+test('S9: sem acesso ao CDN, a barra mostra o nome dos botões', async function () {
+  var page = await setup();
+  await page.waitForTimeout(300);
+  var result = await page.evaluate(function () {
+    var toolbar = window.$('.editor-toolbar');
+    return {
+      icons: toolbar.find('i[data-lucide]').length,
+      bold: toolbar.find('[data-name="bold"]').text().trim()
+    };
+  });
+  assert.strictEqual(result.icons, 0);
+  assert.strictEqual(result.bold, 'Negrito');
+});
+
+test('S9: iconsUrl e googleFonts desligados não carregam nada externo', async function () {
+  var page = await setup('<p>x</p>', { iconsUrl: false, googleFonts: false });
+  var result = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.exec('preview');
+    return {
+      script: !!document.getElementById('lucide-script'),
+      fonts: !!document.getElementById('weaver-google-fonts'),
+      previewFonts: /fonts\.googleapis/.test(window.$('.editor-preview-frame').attr('srcdoc'))
+    };
+  });
+  assert.deepStrictEqual(result, { script: false, fonts: false, previewFonts: false });
+});
+
+test('S9: ícones desenhados só dentro do editor', async function () {
+  var page = await browser.newPage();
+  await page.route('**/*', function (route) { return route.abort(); });
+  await page.setContent('<i data-lucide="star" id="host-icon"></i><form><textarea id="t"></textarea></form>');
+  await page.evaluate(function () {
+    window.__calls = [];
+    window.lucide = { createIcons: function (opts) { window.__calls.push(opts && opts.root ? 'root' : 'global'); } };
+  });
+  await page.addScriptTag({ content: JQUERY });
+  await page.addScriptTag({ content: EDITOR });
+  await page.evaluate(function () { window.$('#t').weaver(); });
+  var calls = await page.evaluate(function () { return window.__calls; });
+  assert.ok(calls.length > 0);
+  assert.ok(calls.every(function (c) { return c === 'root'; }), calls.join(','));
+  assert.strictEqual(await page.evaluate(function () { return !!document.getElementById('lucide-script'); }), false);
+});
+
+// =========================
 // RUNNER
 // =========================
 

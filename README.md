@@ -103,6 +103,12 @@ npm test
 - **iframes:** apenas players do YouTube (`youtube-nocookie.com`) e do Vimeo, sempre com `sandbox`. Para liberar outros, passe `allowedIframeSources` (lista de RegExp) nas opções.
 - **CSS inline:** só propriedades de formatação (cor, fonte, margens, bordas, tamanhos, alinhamento). `position` e `url()` são removidos. Personalize com `allowedStyles`.
 - **Preview:** roda num iframe com `sandbox` e CSP sem scripts.
+- **Dependências externas:** os ícones (Lucide) vêm de uma versão fixa, nunca `@latest`. Para garantir que o arquivo não foi adulterado no CDN, informe o hash SRI em `iconsIntegrity`, gerado com:
+  ```bash
+  curl -s https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js | openssl dgst -sha384 -binary | openssl base64 -A
+  ```
+  Prefere não depender de CDN? Sirva o arquivo do seu domínio (`iconsUrl: '/js/lucide.min.js'`) ou use `iconsUrl: false` se a página já carrega o Lucide. Se os ícones não carregarem, a barra mostra o nome dos botões.
+- **Google Fonts e LGPD:** as fontes do menu de fontes vêm do Google, que recebe o IP do visitante. Use `googleFonts: false` para desligar (no editor e no preview) e sirva as fontes localmente se precisar delas.
 - **`ai-api.php`:** aceita só `POST` da própria origem, exige sessão PHP quando há chave de API configurada, limita tamanho do prompt e número de chamadas, e sanitiza a resposta. Configuração por variáveis de ambiente, documentadas no topo do arquivo.
 
 ## 📂 Estrutura de Diretórios
