@@ -97,10 +97,7 @@ ImagePlugin.prototype.showToolbar = function (img) {
     this.$toolbar.css('left', leftPos - diff - 5);
   }
 
-  // Garante que os ícones sejam renderizados
-  if (window.lucide) {
-    window.lucide.createIcons({ root: this.$toolbar[0] });
-  }
+  WysiwygEditor.renderIcons(this.$toolbar[0]);
 };
 
 ImagePlugin.prototype.hideToolbar = function () {

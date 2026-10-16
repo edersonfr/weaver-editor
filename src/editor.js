@@ -333,28 +333,111 @@
   // STYLES
   // =========================
 
-  Editor.prototype.injectStyles = function () {
-    if (document.getElementById('wysiwyg-editor-styles')) return;
+  // =========================
+  // DEPENDÊNCIAS EXTERNAS (ícones e fontes)
+  // =========================
 
-    // Injeta a biblioteca do Lucide para os ícones da barra de ferramentas
-    if (!document.getElementById('lucide-script')) {
-      var lucideScript = document.createElement('script');
-      lucideScript.id = 'lucide-script';
-      lucideScript.src = 'https://unpkg.com/lucide@latest';
-      lucideScript.onload = function () {
-        if (window.lucide) window.lucide.createIcons();
-      };
-      document.head.appendChild(lucideScript);
+  Editor.GOOGLE_FONTS_URL = 'https://fonts.googleapis.com/css2?family=Lato&family=Montserrat&family=Open+Sans&family=Oswald&family=Poppins&family=Roboto&display=swap';
+
+  /** Estado do carregamento dos ícones na página: 'loading' | 'loaded' | 'failed' */
+  Editor.iconsState = null;
+
+  /**
+   * Carrega o Lucide numa versão FIXA (nunca @latest): uma versão nova
+   * publicada no CDN não muda nem quebra o editor sem aviso. Com
+   * `iconsIntegrity`, o navegador recusa o arquivo se ele for adulterado.
+   * `iconsUrl: false` não carrega nada (use quando a página já tem o Lucide
+   * ou quando ele é servido pelo seu próprio domínio).
+   */
+  Editor.prototype.loadIcons = function () {
+    if (window.lucide) {
+      Editor.iconsState = 'loaded';
+      return;
     }
 
-    // Injeta a chamada do Google Fonts no cabeçalho da página
+    var url = this.options.iconsUrl;
+    if (!url) return;
+    if (document.getElementById('lucide-script')) return; // outro editor já pediu
+
+    var script = document.createElement('script');
+    script.id = 'lucide-script';
+    script.src = url;
+    script.crossOrigin = 'anonymous';
+    script.referrerPolicy = 'no-referrer';
+    if (this.options.iconsIntegrity) {
+      script.integrity = this.options.iconsIntegrity;
+    }
+
+    Editor.iconsState = 'loading';
+
+    script.onload = function () {
+      Editor.iconsState = window.lucide ? 'loaded' : 'failed';
+      $('.wysiwyg-editor').each(function () {
+        Editor.renderIcons(this);
+      });
+    };
+
+    // CDN fora do ar, bloqueado ou com integridade inválida: mostra o nome
+    // dos botões em vez de deixar a barra cheia de botões em branco
+    script.onerror = function () {
+      Editor.iconsState = 'failed';
+      if (window.console && console.warn) console.warn('Weaver: não foi possível carregar os ícones de ' + url);
+      $('.wysiwyg-editor').each(function () {
+        Editor.renderIcons(this);
+      });
+    };
+
+    document.head.appendChild(script);
+  };
+
+  /**
+   * Desenha os ícones dentro de um elemento do editor (barra, menus).
+   * Limitado ao editor: antes, createIcons() sem root trocava qualquer
+   * <i data-lucide> da página hospedeira.
+   */
+  Editor.renderIcons = function (root) {
+    if (!root) return;
+
+    if (window.lucide && window.lucide.createIcons) {
+      window.lucide.createIcons({ root: root });
+      return;
+    }
+
+    if (Editor.iconsState === 'failed') {
+      $(root).find('i[data-lucide]').each(function () {
+        var $icon = $(this);
+        var $owner = $icon.closest('button, [title]');
+        var label = $owner.attr('aria-label') || $owner.attr('title') || '';
+        var $fallback = $('<span class="weaver-icon-fallback"/>').text(label.split(' ')[0]);
+        $icon.replaceWith(label ? $fallback : '');
+      });
+    }
+  };
+
+  /**
+   * Google Fonts é opcional (`googleFonts: false`): cada carregamento envia
+   * o IP do visitante ao Google, o que pede atenção à LGPD/GDPR.
+   */
+  Editor.prototype.loadFonts = function () {
+    if (!this.options.googleFonts || document.getElementById('weaver-google-fonts')) return;
+
     var fontLink = document.createElement('link');
+    fontLink.id = 'weaver-google-fonts';
     fontLink.rel = 'stylesheet';
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Lato&family=Montserrat&family=Open+Sans&family=Oswald&family=Poppins&family=Roboto&display=swap';
+    fontLink.referrerPolicy = 'no-referrer';
+    fontLink.href = Editor.GOOGLE_FONTS_URL;
     document.head.appendChild(fontLink);
+  };
+
+  Editor.prototype.injectStyles = function () {
+    this.loadIcons();
+    this.loadFonts();
+
+    if (document.getElementById('wysiwyg-editor-styles')) return;
 
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
+      '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
       '.editor-show-blocks p, .editor-show-blocks div, .editor-show-blocks ul, .editor-show-blocks ol, .editor-show-blocks blockquote, .editor-show-blocks table {\n' +
@@ -499,7 +582,14 @@
     placeholder: '',
     height: null,
     aiEndpoint: 'ai-api.php',
-    onAiGenerate: null
+    onAiGenerate: null,
+    // Ícones: versão fixa do Lucide. Para servir do seu domínio, aponte para
+    // o arquivo local; para usar o Lucide que a página já carrega, use false.
+    iconsUrl: 'https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js',
+    // Hash SRI opcional do arquivo de ícones (ex.: 'sha384-...'); veja o README
+    iconsIntegrity: null,
+    // Carrega as fontes do Google usadas no menu de fontes (editor e preview)
+    googleFonts: true
   };
 
   // =========================

@@ -227,9 +227,7 @@ TablePlugin.prototype.showContextMenu = function (e) {
     this.$contextMenu.css('top', Math.max(0, menuY - menuHeight - 5));
   }
 
-  if (window.lucide) {
-    window.lucide.createIcons({ root: this.$contextMenu[0] });
-  }
+  WysiwygEditor.renderIcons(this.$contextMenu[0]);
 };
 
 TablePlugin.prototype.hideContextMenu = function () {

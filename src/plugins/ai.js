@@ -111,9 +111,7 @@ AiPlugin.prototype.generateDescription = function () {
 
   this.$btnGenerate.html('<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin"></i> Gerando...').prop('disabled', true);
   
-  if (window.lucide) {
-    window.lucide.createIcons({ root: this.$btnGenerate[0] });
-  }
+  WysiwygEditor.renderIcons(this.$btnGenerate[0]);
 
   function handleSuccess(html) {
     self.insertHtml(html);

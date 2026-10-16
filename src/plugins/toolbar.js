@@ -356,10 +356,7 @@ ToolbarPlugin.prototype.render = function () {
   }
   if ($fsGroup.children().length > 0) editor.$toolbar.append($fsGroup);
 
-  // Caso o script do Lucide já tenha carregado
-  if (window.lucide) {
-    window.lucide.createIcons({ root: editor.$toolbar[0] });
-  }
+  WysiwygEditor.renderIcons(editor.$toolbar[0]);
 };
 
 ToolbarPlugin.prototype.updateState = function () {

@@ -52,7 +52,9 @@ PreviewPlugin.prototype.enable = function () {
   var html = this.editor.sanitize(this.editor.getContent());
 
   var cssLinks = this.buildCssLinks();
-  var googleFonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato&family=Montserrat&family=Open+Sans&family=Oswald&family=Poppins&family=Roboto&display=swap">';
+  var googleFonts = this.editor.options.googleFonts
+    ? '<link rel="stylesheet" referrerpolicy="no-referrer" href="' + HtmlSanitizer.escapeHtml(WysiwygEditor.GOOGLE_FONTS_URL) + '">'
+    : '';
 
   // Segunda camada além do sandbox: CSP que proíbe qualquer script
   var csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
