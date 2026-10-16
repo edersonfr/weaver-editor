@@ -270,7 +270,7 @@ npm install          # dependências do build
 npx gulp             # gera dist/weaver-editor.js e dist/weaver-editor.min.js
 ```
 
-Os testes abrem o editor num Chromium real. `tests/security.test.js` reproduz ataques de XSS conhecidos, e `tests/functional.test.js` cobre formatação, listas, tabelas, imagens, colar, histórico, teclado e acessibilidade.
+Os testes abrem o editor num Chromium real. `tests/security.test.js` reproduz ataques de XSS conhecidos, `tests/functional.test.js` cobre formatação, listas, tabelas, imagens, colar, histórico, teclado e acessibilidade, e `tests/site.test.js` verifica a página de demonstração.
 
 ```bash
 npm install --no-save playwright jquery@3.6.0

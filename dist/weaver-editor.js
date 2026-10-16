@@ -2312,9 +2312,14 @@ window.RangeFormatter = RangeFormatter;
       $(root).find('i[data-lucide]').each(function () {
         var $icon = $(this);
         var $owner = $icon.closest('button, [title]');
+        // Botão que já tem texto visível (ex.: "Formatos ▾"): o ícone só enfeita
+        var hasText = $.trim($owner.clone().find('i[data-lucide], .weaver-icon-fallback').remove().end().text()) !== '';
         var label = $owner.attr('aria-label') || $owner.attr('title') || '';
-        var $fallback = $('<span class="weaver-icon-fallback"/>').text(label.split(' ')[0]);
-        $icon.replaceWith(label ? $fallback : '');
+        if (hasText || !label) {
+          $icon.remove();
+          return;
+        }
+        $icon.replaceWith($('<span class="weaver-icon-fallback"/>').text(label));
       });
     }
   };
@@ -2343,6 +2348,8 @@ window.RangeFormatter = RangeFormatter;
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
+      '.wysiwyg-editor .editor-toolbar-group { flex-wrap: wrap; }\n' +
+      '.wysiwyg-editor button:has(.weaver-icon-fallback) { width: auto; min-width: 32px; }\n' +
       '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid #2563eb !important; outline-offset: 1px; }\n' +
       '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
       '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
