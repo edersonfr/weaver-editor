@@ -19,23 +19,42 @@ RangeFormatter.prototype.insertHTML = function (htmlString, preserveCaret) {
   if (!sel.rangeCount) return false;
   
   var range = sel.getRangeAt(0);
-  var fragment = range.createContextualFragment(htmlString);
-  
+
+  // Nunca usar range.createContextualFragment: ele EXECUTA <script>.
+  // O fragmento vem sanitizado de um documento inerte.
+  var fragment = this._sanitizer().toFragment(htmlString);
+  var lastNode = fragment.lastChild;
+
   // Remove a seleção atual
   range.deleteContents();
-  
+
   // Insere o novo conteúdo
   range.insertNode(fragment);
-  
+
   if (preserveCaret) {
     // Move o cursor para após o conteúdo inserido
-    range.collapse(false);
+    if (lastNode && lastNode.parentNode) {
+      range.setStartAfter(lastNode);
+      range.collapse(true);
+    } else {
+      range.collapse(false);
+    }
   }
   
   sel.removeAllRanges();
   sel.addRange(range);
   
   return true;
+};
+
+/**
+ * Sanitizador do editor (ou um padrão, se o RangeFormatter for usado sozinho)
+ * @private
+ */
+RangeFormatter.prototype._sanitizer = function () {
+  if (this.editor && this.editor.sanitizer) return this.editor.sanitizer;
+  if (!this._fallbackSanitizer) this._fallbackSanitizer = new HtmlSanitizer();
+  return this._fallbackSanitizer;
 };
 
 /**

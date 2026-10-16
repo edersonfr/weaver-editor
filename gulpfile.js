@@ -6,6 +6,7 @@ const rename = require('gulp-rename');
 const jsFiles = [
   'src/core/commands.js',
   'src/core/plugin.js',
+  'src/core/sanitizer.js',
   'src/core/selection.js',
   'src/core/history.js',
   'src/core/range-formatter.js',

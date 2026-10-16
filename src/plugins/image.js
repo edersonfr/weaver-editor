@@ -237,6 +237,13 @@ ImagePlugin.prototype.insertImage = function (file) {
   var uploadFn = this.editor.options.uploadImage;
 
   var doInsert = function (url) {
+    // A URL pode vir do callback de upload do integrador: valida o protocolo.
+    // data: só para formatos raster (SVG pode carregar script).
+    if (!self.editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
+      if (window.console && console.warn) console.warn('Weaver: URL de imagem recusada', url);
+      return;
+    }
+
     self.editor.$content.focus();
     if (self.savedRange) {
       var sel = window.getSelection();

@@ -156,7 +156,9 @@ AiPlugin.prototype.generateDescription = function () {
       }
     },
     error: function(xhr, status, error) {
-      handleError(error || 'Erro na requisição AJAX para ' + endpoint);
+      // O backend devolve { error: "mensagem" } com o status HTTP adequado
+      var message = xhr && xhr.responseJSON && xhr.responseJSON.error;
+      handleError(message || error || 'Erro na requisição AJAX para ' + endpoint);
     }
   });
 };
@@ -170,12 +172,12 @@ AiPlugin.prototype.insertHtml = function (html) {
     return;
   }
 
-  if (this.rangeFormatter) {
-    this.rangeFormatter.insertHTML(html);
-  } else {
-    document.execCommand('insertHTML', false, html);
-  }
-  
+  // A resposta da IA é conteúdo não confiável (pode ser induzida via prompt
+  // a devolver <script> ou onerror); insertHTML sempre sanitiza.
+  this.editor.history.save();
+  this.rangeFormatter.insertHTML(String(html || ''));
+  this.editor.history.save();
+
   this.editor.trigger('change');
   this.editor.updateToolbar();
 };
