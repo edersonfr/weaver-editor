@@ -4,6 +4,9 @@ function ImagePlugin(editor) {
   this.$toolbar = null;
 }
 
+/** Formatos aceitos: só raster (SVG pode carregar script). */
+ImagePlugin.ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
+
 ImagePlugin.prototype.init = function () {
   var self = this;
 
@@ -15,13 +18,14 @@ ImagePlugin.prototype.init = function () {
   });
 
   this.buildToolbar();
+  this.buildResizeHandle();
   this.bindContentEvents();
   this.bindDragAndDrop();
 };
 
 ImagePlugin.prototype.buildToolbar = function () {
   var self = this;
-  this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-white border border-gray-200 p-1.5 rounded flex flex-row flex-nowrap w-max gap-1 z-50 shadow-lg"></div>');
+  this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-white border border-gray-200 p-1.5 rounded flex flex-row flex-nowrap w-max gap-1 z-50 shadow-lg" role="toolbar" aria-label="Ferramentas da imagem"></div>');
 
   var buttons = [
     { label: '100%', title: 'Largura 100%', action: function() { self.resizeImage('100%'); } },
@@ -32,6 +36,7 @@ ImagePlugin.prototype.buildToolbar = function () {
     { label: '<i data-lucide="align-center"></i>', title: 'Centralizar', action: function() { self.setFloat('center'); } },
     { label: '<i data-lucide="align-right"></i>', title: 'Flutuar à Direita', action: function() { self.setFloat('right'); } },
     { label: '<i data-lucide="align-justify"></i>', title: 'Remover Flutuação', action: function() { self.removeFloat(); } },
+    { label: 'Alt', title: 'Texto alternativo', name: 'alt', action: function() { self.toggleAltEditor(); } },
     { label: '<i data-lucide="trash-2"></i>', title: 'Remover Imagem', action: function() { self.removeImage(); } }
   ];
 
@@ -39,12 +44,95 @@ ImagePlugin.prototype.buildToolbar = function () {
     var $btn = $('<button type="button" class="flex items-center justify-center min-w-[32px] h-8 px-2 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none [&>svg]:w-4 [&>svg]:h-4 text-xs font-medium"></button>')
       .html(btnData.label)
       .attr('title', btnData.title)
+      .attr('aria-label', btnData.title)
       .on('mousedown', function(e) { e.preventDefault(); }) // Evita perder o foco
       .on('click', btnData.action);
+    if (btnData.name) $btn.attr('data-name', 'image-' + btnData.name);
     self.$toolbar.append($btn);
   });
 
+  // Editor do texto alternativo (descrição para leitores de tela e SEO)
+  this.$altBox = $('<div class="editor-image-alt"/>').hide();
+  this.$altInput = $('<input type="text" placeholder="Descreva a imagem" aria-label="Texto alternativo da imagem">');
+  var $altSave = $('<button type="button" class="flex items-center justify-center h-8 px-2 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 text-xs font-medium">OK</button>');
+  this.$altBox.append(this.$altInput, $altSave);
+  this.$toolbar.append(this.$altBox);
+
+  $altSave.on('click', function () { self.saveAlt(); });
+  this.$altInput.on('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      self.saveAlt();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      self.$altBox.hide();
+    }
+  });
+
   this.editor.$container.append(this.$toolbar);
+};
+
+ImagePlugin.prototype.toggleAltEditor = function () {
+  if (!this.activeImage) return;
+  if (this.$altBox.is(':visible')) {
+    this.$altBox.hide();
+    return;
+  }
+  this.$altInput.val(this.activeImage.getAttribute('alt') || '');
+  this.$altBox.css('display', 'flex');
+  this.positionToolbar();
+  this.$altInput.focus();
+};
+
+ImagePlugin.prototype.saveAlt = function () {
+  if (!this.activeImage) return;
+  var alt = $.trim(this.$altInput.val());
+  this.editor.history.save();
+  this.activeImage.setAttribute('alt', alt);
+  this.editor.history.save();
+  this.editor.trigger('change');
+  this.$altBox.hide();
+  this.positionToolbar();
+};
+
+/**
+ * Alça no canto da imagem para redimensionar arrastando (mouse, toque ou caneta).
+ */
+ImagePlugin.prototype.buildResizeHandle = function () {
+  var self = this;
+  this.$handle = $('<div class="editor-image-resize" title="Arraste para redimensionar" aria-hidden="true"/>').hide();
+  this.editor.$container.append(this.$handle);
+
+  var drag = null;
+
+  this.$handle.on('pointerdown', function (e) {
+    if (!self.activeImage) return;
+    e.preventDefault();
+    var oe = e.originalEvent;
+    drag = {
+      startX: oe.clientX,
+      startWidth: self.activeImage.getBoundingClientRect().width,
+      maxWidth: self.editor.$content[0].clientWidth
+    };
+    self.editor.history.save();
+    if (this.setPointerCapture) this.setPointerCapture(oe.pointerId);
+  });
+
+  this.$handle.on('pointermove', function (e) {
+    if (!drag || !self.activeImage) return;
+    var width = Math.round(drag.startWidth + (e.originalEvent.clientX - drag.startX));
+    width = Math.max(30, Math.min(width, drag.maxWidth));
+    self.activeImage.style.width = width + 'px';
+    self.activeImage.style.height = 'auto';
+    self.positionToolbar();
+  });
+
+  this.$handle.on('pointerup pointercancel', function () {
+    if (!drag) return;
+    drag = null;
+    self.editor.history.save();
+    self.editor.trigger('change');
+  });
 };
 
 ImagePlugin.prototype.bindContentEvents = function () {
@@ -56,56 +144,77 @@ ImagePlugin.prototype.bindContentEvents = function () {
     self.showToolbar(this);
   });
 
+  // Barra e alça não acompanham a rolagem; escondem ao rolar ou editar
+  this.editor.$content.on('scroll' + this.editor.ns + ' input' + this.editor.ns, function () {
+    if (self.activeImage) self.hideToolbar();
+  });
+
   // Esconde a barra de ferramentas ao clicar fora
   $(document).on('click' + this.editor.ns, function (e) {
-    if (self.activeImage && !$(e.target).is(self.activeImage) && !self.$toolbar.is(e.target) && self.$toolbar.has(e.target).length === 0) {
+    if (self.activeImage && !$(e.target).is(self.activeImage) && !self.$toolbar.is(e.target) && self.$toolbar.has(e.target).length === 0 && !self.$handle.is(e.target)) {
       self.hideToolbar();
     }
   });
 };
 
 ImagePlugin.prototype.showToolbar = function (img) {
-  if (this.activeImage) {
-    $(this.activeImage).removeClass('active');
+  if (this.activeImage && this.activeImage !== img) {
+    $(this.activeImage).removeClass('weaver-selected');
+    this.$altBox.hide();
   }
 
   this.activeImage = img;
-  $(this.activeImage).addClass('active');
-
-  var $img = $(img);
-  var imgPos = $img.position(); // Posição relativa ao editor
+  // Classe de estado: removida do HTML salvo por Editor.cleanOutput
+  $(this.activeImage).addClass('weaver-selected');
 
   // Força o display flex (evita o display: block padrão do jQuery que quebra a linha)
-  this.$toolbar.css('display', 'flex'); 
-
-  var topPos = imgPos.top - this.$toolbar.outerHeight() - 5;
-  if (topPos < 0) {
-    topPos = imgPos.top + $img.outerHeight() + 5; // Joga pra baixo da imagem se vazar pelo topo da tela
-  }
-
-  var leftPos = imgPos.left + ($img.width() / 2) - (this.$toolbar.outerWidth() / 2);
-  if (leftPos < 0) leftPos = 5; // Impede vazar pela esquerda
-
-  this.$toolbar.css({
-    top: topPos,
-    left: leftPos
-  });
-
-  // Verifica se o painel vazou pela direita
-  if (this.$toolbar[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
-    var diff = this.$toolbar[0].getBoundingClientRect().right - this.editor.$container[0].getBoundingClientRect().right;
-    this.$toolbar.css('left', leftPos - diff - 5);
-  }
+  this.$toolbar.css('display', 'flex');
+  this.positionToolbar();
 
   WysiwygEditor.renderIcons(this.$toolbar[0]);
 };
 
+ImagePlugin.prototype.positionToolbar = function () {
+  var img = this.activeImage;
+  if (!img || !img.parentNode) return;
+
+  var containerRect = this.editor.$container[0].getBoundingClientRect();
+  var imgRect = img.getBoundingClientRect();
+  var top = imgRect.top - containerRect.top;
+  var left = imgRect.left - containerRect.left;
+
+  var topPos = top - this.$toolbar.outerHeight() - 5;
+  if (topPos < 0) {
+    topPos = top + imgRect.height + 5; // Joga pra baixo da imagem se vazar pelo topo
+  }
+
+  var leftPos = left + (imgRect.width / 2) - (this.$toolbar.outerWidth() / 2);
+  if (leftPos < 0) leftPos = 5; // Impede vazar pela esquerda
+
+  this.$toolbar.css({ top: topPos, left: leftPos });
+
+  // Verifica se o painel vazou pela direita
+  var overflow = this.$toolbar[0].getBoundingClientRect().right - containerRect.right;
+  if (overflow > 0) {
+    this.$toolbar.css('left', Math.max(5, leftPos - overflow - 5));
+  }
+
+  this.$handle.css({
+    display: 'block',
+    top: top + imgRect.height - 7,
+    left: left + imgRect.width - 7
+  });
+};
+
 ImagePlugin.prototype.hideToolbar = function () {
   if (this.activeImage) {
-    $(this.activeImage).removeClass('active');
+    $(this.activeImage).removeClass('weaver-selected');
+    if (!this.activeImage.getAttribute('class')) this.activeImage.removeAttribute('class');
   }
   this.activeImage = null;
   this.$toolbar.hide();
+  this.$handle.hide();
+  this.$altBox.hide();
 };
 
 // Ações da Barra de Ferramentas
@@ -171,7 +280,7 @@ ImagePlugin.prototype.openFileDialog = function () {
     this.savedRange = null;
   }
 
-  var $input = $('<input type="file" accept="image/*" style="display:none">');
+  var $input = $('<input type="file" style="display:none">').attr('accept', ImagePlugin.ACCEPTED_TYPES.join(','));
 
   $input.on('change', function () {
     var file = this.files[0];
@@ -270,8 +379,8 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
     if (hasFiles(e)) {
       self.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
       var files = dt.files;
-      if (files && files.length > 0 && /^image\//.test(files[0].type)) {
-        self.insertImage(files[0]);
+      if (files && files.length > 0) {
+        self.insertImage(files[0]); // valida formato e tamanho
       }
       return;
     }
@@ -288,47 +397,116 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
   });
 };
 
+/**
+ * Valida, envia (ou embute) e insere uma imagem.
+ * - Formatos: PNG, JPG, GIF, WebP, AVIF. Tamanho: options.maxImageSize.
+ * - Com options.uploadImage(file, done): chame done(url) no sucesso ou
+ *   done(null, 'mensagem') no erro; a mensagem aparece no editor.
+ * - Sem uploadImage: a imagem é embutida em base64, reduzida para no máximo
+ *   options.imageMaxWidth px de largura (GIF fica como está, por ser animado).
+ */
 ImagePlugin.prototype.insertImage = function (file) {
   var self = this;
-  var uploadFn = this.editor.options.uploadImage;
+  var editor = this.editor;
+  var options = editor.options;
+  var uploadFn = options.uploadImage;
+
+  if (!file || ImagePlugin.ACCEPTED_TYPES.indexOf(file.type) === -1) {
+    editor.notify('Formato de imagem não suportado. Use PNG, JPG, GIF, WebP ou AVIF.', { type: 'error' });
+    return;
+  }
+
+  if (options.maxImageSize && file.size > options.maxImageSize) {
+    editor.notify('A imagem tem ' + ImagePlugin.formatSize(file.size) + '. O máximo é ' + ImagePlugin.formatSize(options.maxImageSize) + '.', { type: 'error' });
+    return;
+  }
 
   var doInsert = function (url) {
     // A URL pode vir do callback de upload do integrador: valida o protocolo.
     // data: só para formatos raster (SVG pode carregar script).
-    if (!self.editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
-      if (window.console && console.warn) console.warn('Weaver: URL de imagem recusada', url);
+    if (!editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
+      editor.notify('O endereço da imagem foi recusado por segurança.', { type: 'error' });
       return;
     }
 
-    self.editor.$content.focus();
+    editor.$content.focus();
     if (self.savedRange) {
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(self.savedRange);
+      editor.selection.setRange(self.savedRange);
     }
     
     // Cria o elemento img
     var img = document.createElement('img');
     img.src = url;
+    img.setAttribute('alt', '');
     
-    self.editor.history.save();
+    editor.history.save();
     self.rangeFormatter.insertNode(img, false);
-    self.editor.history.save();
+    editor.history.save();
     
-    self.editor.trigger('change');
+    editor.trigger('change');
   };
 
   if (uploadFn && typeof uploadFn === 'function') {
-    uploadFn(file, function (url) {
+    editor.notify('Enviando imagem…', { timeout: 0 });
+    var finished = false;
+    uploadFn(file, function (url, error) {
+      if (finished) return;
+      finished = true;
+      if (error || !url) {
+        editor.notify(typeof error === 'string' ? error : 'Não foi possível enviar a imagem.', { type: 'error' });
+        return;
+      }
+      editor.notify('');
       doInsert(url);
-    });
-  } else {
-    var reader = new FileReader();
-    reader.onload = function (e) {
-      doInsert(e.target.result);
-    };
-    reader.readAsDataURL(file);
+    }, editor);
+    return;
   }
+
+  var reader = new FileReader();
+  reader.onerror = function () {
+    editor.notify('Não foi possível ler a imagem.', { type: 'error' });
+  };
+  reader.onload = function (e) {
+    ImagePlugin.downscale(e.target.result, file.type, options.imageMaxWidth, doInsert);
+  };
+  reader.readAsDataURL(file);
+};
+
+ImagePlugin.formatSize = function (bytes) {
+  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1).replace('.0', '') + ' MB';
+  return Math.round(bytes / 1024) + ' KB';
+};
+
+/**
+ * Reduz a imagem para maxWidth px (mantendo a proporção) antes de embutir.
+ * Fotos de celular com 4000 px viravam vários MB de base64 no HTML salvo.
+ */
+ImagePlugin.downscale = function (dataUrl, type, maxWidth, done) {
+  if (!maxWidth || type === 'image/gif') {
+    done(dataUrl);
+    return;
+  }
+
+  var image = new Image();
+  image.onload = function () {
+    if (image.naturalWidth <= maxWidth) {
+      done(dataUrl);
+      return;
+    }
+    var ratio = maxWidth / image.naturalWidth;
+    var canvas = document.createElement('canvas');
+    canvas.width = maxWidth;
+    canvas.height = Math.round(image.naturalHeight * ratio);
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    var outType = type === 'image/png' ? 'image/png' : 'image/jpeg';
+    try {
+      done(canvas.toDataURL(outType, 0.85));
+    } catch (e) {
+      done(dataUrl);
+    }
+  };
+  image.onerror = function () { done(dataUrl); };
+  image.src = dataUrl;
 };
 
 window.ImagePlugin = ImagePlugin;

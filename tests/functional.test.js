@@ -496,6 +496,177 @@ test('S9: ícones desenhados só dentro do editor', async function () {
 });
 
 // =========================
+// Melhorias: colar, atalhos e imagens
+// =========================
+
+async function pasteHtml(page, html, plainFirst) {
+  await page.evaluate(function (args) {
+    var ed = window.$('#t').data('weaver');
+    var target = ed.$content[0];
+    if (args.plainFirst) {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, shiftKey: true, bubbles: true }));
+    }
+    var dt = new DataTransfer();
+    dt.setData('text/html', args.html);
+    dt.setData('text/plain', args.text);
+    target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, { html: html, text: html.replace(/<[^>]+>/g, ''), plainFirst: !!plainFirst });
+}
+
+test('Ctrl+Shift+V cola sem formatação', async function () {
+  var page = await setup();
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await pasteHtml(page, '<b>negrito</b> <i>itálico</i>', true);
+  assert.strictEqual(await content(page), '<p>xnegrito itálico</p>');
+});
+
+test('Colar do Word: listas reais, sem classes e estilos Mso', async function () {
+  var word = '<html xmlns:o="urn:schemas-microsoft-com:office:office"><body>' +
+    '<p class="MsoNormal" style="margin:0cm;font-family:Calibri">Intro <b>forte</b><o:p></o:p></p>' +
+    '<p class="MsoListParagraphCxSpFirst" style="text-indent:-18pt;mso-list:l0 level1 lfo1"><span style="font-family:Symbol;mso-fareast-font-family:Symbol"><span style="mso-list:Ignore">·<span style="font:7.0pt Times">&nbsp;&nbsp; </span></span></span>Um<o:p></o:p></p>' +
+    '<p class="MsoListParagraphCxSpMiddle" style="mso-list:l0 level2 lfo1"><span style="mso-list:Ignore">o&nbsp; </span>Um.a</p>' +
+    '<p class="MsoListParagraphCxSpLast" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">·&nbsp; </span>Dois</p>' +
+    '<p class="MsoNormal">Meio</p>' +
+    '<p class="MsoListParagraph" style="mso-list:l1 level1 lfo2"><span style="mso-list:Ignore">1.&nbsp; </span>Primeiro</p>' +
+    '</body></html>';
+  var page = await setup();
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await pasteHtml(page, word);
+  var html = await content(page);
+  assert.ok(html.indexOf('<ul><li>Um<ul><li>Um.a</li></ul></li><li>Dois</li></ul>') !== -1, html);
+  assert.ok(html.indexOf('<ol><li>Primeiro</li></ol>') !== -1, html);
+  assert.ok(!/class=|mso-|Calibri|·/.test(html), html);
+});
+
+test('Colar do Google Docs não deixa tudo em negrito', async function () {
+  var gdocs = '<meta charset="utf-8"><b style="font-weight:normal;" id="docs-internal-guid-1234"><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;"><span style="font-size:11pt;font-family:Arial;color:#000000;background-color:transparent;font-weight:700;font-style:normal;">Forte</span><span style="font-size:11pt;font-family:Arial;color:#000000;font-weight:400;"> comum</span></p></b>';
+  var page = await setup();
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await pasteHtml(page, gdocs);
+  var html = await content(page);
+  assert.ok(html.indexOf('<span style="font-weight: 700">Forte</span> comum') !== -1, html);
+  assert.ok(html.indexOf('<b') === -1 && html.indexOf('font-family') === -1, html);
+});
+
+test('Ctrl+K abre o popover de link', async function () {
+  var page = await setup('<p>texto</p>');
+  await page.click('.editor-content p');
+  await page.keyboard.press('Control+k');
+  assert.strictEqual(await page.evaluate(function () { return window.$('.editor-link-popover').is(':visible'); }), true);
+});
+
+test('Tab e Shift+Tab aninham itens de lista', async function () {
+  var page = await setup();
+  await state(page, '<ul><li>a</li><li>b</li><li>c</li></ul>', { from: ['b', 1] });
+  await page.keyboard.press('Tab');
+  assert.strictEqual(await content(page), '<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>');
+  await page.keyboard.type('!');
+  assert.strictEqual(await content(page), '<ul><li>a<ul><li>b!</li></ul></li><li>c</li></ul>', 'cursor perdido');
+  await page.keyboard.press('Shift+Tab');
+  assert.strictEqual(await content(page), '<ul><li>a</li><li>b!</li><li>c</li></ul>');
+  await page.keyboard.press('Shift+Tab');
+  assert.strictEqual(await content(page), '<ul><li>a</li></ul><p>b!</p><ul><li>c</li></ul>');
+});
+
+test('Tab na última célula cria uma linha nova', async function () {
+  var page = await setup();
+  await state(page, '<table><tbody><tr><td>1</td><td>2</td></tr></tbody></table>', { from: ['1', 1] });
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('X');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('Y');
+  var html = await content(page);
+  assert.strictEqual(html, '<table><tbody><tr><td>1</td><td>X</td></tr><tr><td>Y</td><td>&nbsp;</td></tr></tbody></table>');
+});
+
+/** Gera uma imagem PNG (File) de largura x altura dentro da página. */
+async function makeImageFile(page, width, height, type, size) {
+  await page.evaluate(function (args) {
+    var canvas = document.createElement('canvas');
+    canvas.width = args.width;
+    canvas.height = args.height;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#3366cc';
+    ctx.fillRect(0, 0, args.width, args.height);
+    var data = atob(canvas.toDataURL('image/png').split(',')[1]);
+    var bytes = new Uint8Array(args.size || data.length);
+    for (var i = 0; i < data.length && i < bytes.length; i++) bytes[i] = data.charCodeAt(i);
+    window.__file = new File([bytes], 'foto.png', { type: args.type || 'image/png' });
+  }, { width: width, height: height, type: type, size: size });
+}
+
+test('Imagem: formato e tamanho inválidos mostram aviso no editor', async function () {
+  var page = await setup();
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await makeImageFile(page, 10, 10, 'image/svg+xml');
+  await page.evaluate(function () { window.$('#t').data('weaver').getPlugin('ImagePlugin').insertImage(window.__file); });
+  var notice = await page.evaluate(function () { return { text: window.$('.editor-notice').text(), role: window.$('.editor-notice').attr('role') }; });
+  assert.ok(/Formato de imagem não suportado/.test(notice.text), notice.text);
+  assert.strictEqual(notice.role, 'alert');
+
+  await makeImageFile(page, 10, 10, 'image/png', 6 * 1024 * 1024);
+  await page.evaluate(function () { window.$('#t').data('weaver').getPlugin('ImagePlugin').insertImage(window.__file); });
+  assert.ok(/O máximo é 5 MB/.test(await page.evaluate(function () { return window.$('.editor-notice').text(); })));
+  assert.ok((await content(page)).indexOf('<img') === -1);
+});
+
+test('Imagem: erro do upload aparece no editor; sucesso insere a URL', async function () {
+  var page = await setup();
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.options.uploadImage = function (file, done) {
+      if (window.__fail) done(null, 'Servidor fora do ar');
+      else done('uploads/foto.png');
+    };
+  });
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await makeImageFile(page, 10, 10);
+  await page.evaluate(function () { window.__fail = true; window.$('#t').data('weaver').getPlugin('ImagePlugin').insertImage(window.__file); });
+  assert.strictEqual(await page.evaluate(function () { return window.$('.editor-notice').text(); }), 'Servidor fora do ar');
+  await page.evaluate(function () { window.__fail = false; window.$('#t').data('weaver').getPlugin('ImagePlugin').insertImage(window.__file); });
+  assert.ok((await content(page)).indexOf('src="uploads/foto.png"') !== -1);
+});
+
+test('Imagem: sem upload, fotos grandes são reduzidas antes de embutir', async function () {
+  var page = await setup('', { imageMaxWidth: 800 });
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await makeImageFile(page, 2000, 1000);
+  await page.evaluate(function () { window.$('#t').data('weaver').getPlugin('ImagePlugin').insertImage(window.__file); });
+  await page.waitForFunction(function () { var img = document.querySelector('.editor-content img'); return img && img.complete && img.naturalWidth > 0; });
+  var size = await page.evaluate(function () { var img = document.querySelector('.editor-content img'); return [img.naturalWidth, img.naturalHeight]; });
+  assert.deepStrictEqual(size, [800, 400]);
+});
+
+test('Imagem: redimensionar arrastando a alça e texto alternativo', async function () {
+  var page = await setup();
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await makeImageFile(page, 200, 100);
+  await page.evaluate(function () {
+    var reader = new FileReader();
+    reader.onload = function (e) { window.$('#t').data('weaver').setContent('<p><img src="' + e.target.result + '" style="width: 200px"></p>'); };
+    reader.readAsDataURL(window.__file);
+  });
+  await page.waitForFunction(function () { var img = document.querySelector('.editor-content img'); return img && img.complete && img.naturalWidth > 0; });
+  await page.click('.editor-content img');
+
+  var handle = await page.$('.editor-image-resize');
+  var box = await handle.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 100, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  var width = await page.evaluate(function () { return document.querySelector('.editor-content img').style.width; });
+  assert.strictEqual(width, '300px');
+
+  await page.click('[data-name="image-alt"]');
+  await page.keyboard.type('Quadrado azul');
+  await page.keyboard.press('Enter');
+  var html = await page.evaluate(function () { return window.$('#t').data('weaver').getContent(); });
+  assert.ok(html.indexOf('alt="Quadrado azul"') !== -1, html);
+  assert.ok(html.indexOf('weaver-selected') === -1, 'estado visual vazou para o HTML salvo');
+});
+
+// =========================
 // RUNNER
 // =========================
 

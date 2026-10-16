@@ -328,11 +328,148 @@ BasicCommandsPlugin.prototype.init = function () {
     editor.$content.toggleClass('editor-show-blocks');
   });
 
+  // --- Tab em listas e tabelas ---
+
+  /** Executa fn preservando a seleção (mover nós no DOM reseta ranges). */
+  function keepSelection(fn) {
+    var range = editor.selection.getRange();
+    var saved = range ? [range.startContainer, range.startOffset, range.endContainer, range.endOffset] : null;
+    fn();
+    if (!saved) return;
+    try {
+      var restored = document.createRange();
+      restored.setStart(saved[0], saved[1]);
+      restored.setEnd(saved[2], saved[3]);
+      editor.selection.setRange(restored);
+    } catch (e) { /* nós removidos */ }
+  }
+
+  /** Tab num item: vira subitem do item anterior. */
+  function indentListItem(li) {
+    var prev = li.previousElementSibling;
+    if (!prev || prev.tagName !== 'LI') return false;
+
+    keepSelection(function () {
+      var listTag = li.parentNode.tagName.toLowerCase();
+      var sub = prev.lastElementChild;
+      if (!sub || (sub.tagName !== 'UL' && sub.tagName !== 'OL')) {
+        sub = document.createElement(listTag);
+        prev.appendChild(sub);
+      }
+      sub.appendChild(li);
+    });
+    return true;
+  }
+
+  /** Shift+Tab num item: sobe um nível (ou sai da lista no primeiro nível). */
+  function outdentListItem(li) {
+    var list = li.parentNode;
+    var parentItem = list.parentNode;
+
+    keepSelection(function () {
+      // Itens depois deste viram subitens dele, como nos editores de texto
+      var following = [];
+      for (var next = li.nextElementSibling; next; next = next.nextElementSibling) following.push(next);
+
+      if (parentItem && parentItem.tagName === 'LI') {
+        if (following.length) {
+          var sub = document.createElement(list.tagName.toLowerCase());
+          for (var i = 0; i < following.length; i++) sub.appendChild(following[i]);
+          li.appendChild(sub);
+        }
+        parentItem.parentNode.insertBefore(li, parentItem.nextSibling);
+        if (!list.children.length) list.parentNode.removeChild(list);
+      } else {
+        // Primeiro nível: o item vira parágrafo, dividindo a lista
+        var p = document.createElement('p');
+        while (li.firstChild) p.appendChild(li.firstChild);
+        if (!p.firstChild) p.appendChild(document.createElement('br'));
+        list.parentNode.insertBefore(p, list.nextSibling);
+        if (following.length) {
+          var rest = document.createElement(list.tagName.toLowerCase());
+          for (var j = 0; j < following.length; j++) rest.appendChild(following[j]);
+          list.parentNode.insertBefore(rest, p.nextSibling);
+        }
+        list.removeChild(li);
+        if (!list.children.length) list.parentNode.removeChild(list);
+      }
+    });
+    return true;
+  }
+
+  /** Tab numa célula: vai para a próxima (cria linha nova no fim da tabela). */
+  function moveCell(cell, backwards) {
+    var table = editor.selection.closest(cell, 'table');
+    if (!table) return false;
+
+    var cells = Array.prototype.slice.call(table.querySelectorAll('td, th')).filter(function (c) {
+      return editor.selection.closest(c, 'table') === table;
+    });
+    var index = cells.indexOf(cell);
+    var target = cells[index + (backwards ? -1 : 1)];
+
+    if (!target && !backwards) {
+      var lastRow = cell.parentNode;
+      var row = document.createElement('tr');
+      for (var i = 0; i < lastRow.children.length; i++) {
+        var newCell = document.createElement(lastRow.children[i].tagName === 'TH' ? 'td' : lastRow.children[i].tagName.toLowerCase());
+        var style = lastRow.children[i].getAttribute('style');
+        if (style) newCell.setAttribute('style', style);
+        newCell.innerHTML = '&nbsp;';
+        row.appendChild(newCell);
+      }
+      lastRow.parentNode.insertBefore(row, lastRow.nextSibling);
+      target = row.firstChild;
+    }
+
+    if (!target) return true; // primeira célula com Shift+Tab: fica onde está
+
+    // Seleciona o conteúdo da célula para digitar por cima
+    var range = document.createRange();
+    range.selectNodeContents(target);
+    editor.selection.setRange(range);
+    return true;
+  }
+
+  function handleTab(e) {
+    var range = editor.selection.getRange();
+    if (!range) return false;
+
+    var li = editor.selection.closest(range.startContainer, 'li');
+    var cell = editor.selection.closest(range.startContainer, 'td, th');
+
+    // O elemento mais próximo do cursor decide (lista dentro de célula etc.)
+    if (li && (!cell || cell.contains(li))) {
+      editor.history.save();
+      var changed = e.shiftKey ? outdentListItem(li) : indentListItem(li);
+      if (changed) {
+        editor.history.save();
+        editor.trigger('change');
+      }
+      return true; // dentro de lista, Tab nunca sai do editor
+    }
+
+    if (cell) {
+      editor.history.save();
+      moveCell(cell, e.shiftKey);
+      editor.history.save();
+      editor.trigger('change');
+      return true;
+    }
+
+    return false; // fora de listas e tabelas, Tab mantém o comportamento normal (foco)
+  }
+
   // Atalhos de teclado
   editor.$content.on('keydown' + editor.ns, function (e) {
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (handleTab(e)) e.preventDefault();
+      return;
+    }
+
     // Atalhos que usam Ctrl (Windows/Linux) ou Cmd (Mac)
     if (e.ctrlKey || e.metaKey) {
-      var key = e.key.toLowerCase();
+      var key = (e.key || '').toLowerCase();
       var prevent = false;
 
       switch (key) {
@@ -347,6 +484,20 @@ BasicCommandsPlugin.prototype.init = function () {
         case 'u':
           editor.exec('underline');
           prevent = true;
+          break;
+        case 'k':
+          // Ctrl+K: inserir/editar link (se o plugin de link estiver ativo)
+          if (editor.commandRegistry.commands.link) {
+            editor.exec('link');
+            prevent = true;
+          }
+          break;
+        case 'v':
+          // Ctrl+Shift+V: colar sem formatação (o paste vem logo em seguida)
+          if (e.shiftKey) {
+            editor._plainPaste = true;
+            setTimeout(function () { editor._plainPaste = false; }, 1000);
+          }
           break;
         case 'z':
           e.shiftKey ? editor.exec('redo') : editor.exec('undo');

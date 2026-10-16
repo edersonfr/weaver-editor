@@ -34,7 +34,8 @@ HistoryManager.prototype.save = function () {
   // Uma digitação pendente no debounce entra agora, antes de outra ação
   clearTimeout(this.timeout);
 
-  var html = this.editor.$content.html();
+  // Sem estados visuais (imagem selecionada etc.)
+  var html = WysiwygEditor.cleanOutput(this.editor.$content.html());
   var caret = this.editor.selection ? this.editor.selection.serialize() : null;
   var top = this.current();
 
