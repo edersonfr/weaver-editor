@@ -45,6 +45,21 @@ VideoPlugin.prototype.buildPopover = function () {
 
   this.editor.$container.append(this.$popover);
 
+  // Enter num campo de texto confirma
+  this.$popover.on('keydown', 'input[type="text"]', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $btnSave.trigger('click');
+    }
+  });
+
+  // Diálogo acessível: rótulos ligados, Esc fecha e Tab fica no popover
+  this.editor.dialogize(this.$popover, {
+    name: 'video',
+    label: 'Inserir vídeo',
+    close: function () { self.togglePopover(false); }
+  });
+
   // Evita que clicar no popover faça o editor perder o foco
   this.$popover.on('mousedown', function (e) {
     if (e.target.tagName !== 'INPUT') {

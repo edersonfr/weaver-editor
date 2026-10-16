@@ -667,6 +667,159 @@ test('Imagem: redimensionar arrastando a alça e texto alternativo', async funct
 });
 
 // =========================
+// Acessibilidade (teclado e leitores de tela)
+// =========================
+
+function activeInfo(page) {
+  return page.evaluate(function () {
+    var el = document.activeElement;
+    return {
+      name: el.getAttribute('data-name') || '',
+      role: el.getAttribute('role') || '',
+      tag: el.tagName,
+      inContent: !!(el.closest && el.closest('.editor-content')),
+      text: (el.textContent || '').trim()
+    };
+  });
+}
+
+test('A11y: Alt+F10 vai para a barra, setas andam e Esc volta ao texto', async function () {
+  var page = await setup('<p>texto</p>');
+  await page.click('.editor-content p');
+  await page.keyboard.press('Alt+F10');
+  assert.strictEqual((await activeInfo(page)).name, 'undo');
+  await page.keyboard.press('ArrowRight');
+  assert.strictEqual((await activeInfo(page)).name, 'redo');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  assert.strictEqual((await activeInfo(page)).name, 'codeview', 'seta para a esquerda no primeiro deveria ir ao último');
+  await page.keyboard.press('Escape');
+  assert.strictEqual((await activeInfo(page)).tag, 'DIV');
+  assert.strictEqual(await page.evaluate(function () { return document.activeElement.classList.contains('editor-content'); }), true);
+});
+
+test('A11y: menu de formatos operável pelo teclado', async function () {
+  var page = await setup();
+  await state(page, '<p>Título</p>', { from: ['Título', 2] });
+  await page.focus('[data-name="formatBlock"]');
+  await page.keyboard.press('Enter');
+  var info = await activeInfo(page);
+  assert.strictEqual(info.role, 'menuitem');
+  assert.strictEqual(info.text, 'Parágrafo');
+  assert.strictEqual(await page.getAttribute('[data-name="formatBlock"]', 'aria-expanded'), 'true');
+  await page.keyboard.press('ArrowDown');
+  assert.strictEqual((await activeInfo(page)).text, 'Título 1');
+  await page.keyboard.press('Enter');
+  assert.strictEqual(await content(page), '<h1>Título</h1>');
+  assert.strictEqual(await page.getAttribute('[data-name="formatBlock"]', 'aria-expanded'), 'false');
+  assert.strictEqual((await activeInfo(page)).inContent || (await page.evaluate(function () { return document.activeElement.classList.contains('editor-content'); })), true);
+});
+
+test('A11y: Esc fecha o menu e devolve o foco ao botão', async function () {
+  var page = await setup();
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await page.focus('[data-name="fontSize"]');
+  await page.keyboard.press('ArrowDown');
+  assert.strictEqual((await activeInfo(page)).role, 'menuitem');
+  await page.keyboard.press('Escape');
+  assert.strictEqual((await activeInfo(page)).name, 'fontSize');
+  assert.strictEqual(await page.evaluate(function () { return window.$('.editor-dropdown-menu:visible').length; }), 0);
+});
+
+test('A11y: popover de link é um diálogo com rótulos, Tab preso e Esc', async function () {
+  var page = await setup('<p>texto</p>');
+  await page.click('.editor-content p');
+  await page.keyboard.press('Control+k');
+  var dialog = await page.evaluate(function () {
+    var pop = window.$('.editor-link-popover')[0];
+    var labels = Array.prototype.map.call(pop.querySelectorAll('label[for]'), function (l) {
+      var field = document.getElementById(l.htmlFor);
+      return !!field && pop.contains(field);
+    });
+    return { role: pop.getAttribute('role'), name: pop.getAttribute('aria-label'), labels: labels };
+  });
+  assert.deepStrictEqual(dialog, { role: 'dialog', name: 'Inserir link', labels: [true, true] });
+
+  for (var i = 0; i < 8; i++) await page.keyboard.press('Tab');
+  assert.strictEqual(await page.evaluate(function () { return window.$('.editor-link-popover')[0].contains(document.activeElement); }), true, 'foco escapou do diálogo');
+
+  await page.keyboard.press('Escape');
+  assert.strictEqual(await page.evaluate(function () { return window.$('.editor-link-popover').is(':visible'); }), false);
+  assert.strictEqual((await activeInfo(page)).name, 'link');
+});
+
+test('A11y: erro da IA aparece no popover, sem alert()', async function () {
+  var page = await setup('<p>x</p>');
+  var dialogs = 0;
+  page.on('dialog', function (d) { dialogs++; d.dismiss(); });
+  await page.evaluate(function () {
+    window.$('#t').data('weaver').options.onAiGenerate = function (prompt, done) { done(null, 'cota esgotada'); };
+  });
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await exec(page, 'ai');
+  await page.fill('.editor-ai-popover textarea', 'Escreva algo');
+  await page.keyboard.press('Control+Enter');
+  var err = await page.evaluate(function () { var e = window.$('.editor-ai-error'); return { visible: e.is(':visible'), role: e.attr('role'), text: e.text() }; });
+  assert.strictEqual(dialogs, 0);
+  assert.deepStrictEqual(err, { visible: true, role: 'alert', text: 'Não foi possível gerar o conteúdo: cota esgotada' });
+});
+
+test('A11y: grade de tabela pelo teclado', async function () {
+  var page = await setup();
+  await state(page, '<p>x</p>', { from: ['x', 1] });
+  await page.focus('[data-name="table"]');
+  await page.keyboard.press('Enter');
+  assert.strictEqual(await page.evaluate(function () { return document.activeElement.classList.contains('editor-table-grid'); }), true);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowDown');
+  assert.strictEqual(await page.evaluate(function () { return window.$('.grid-label').text(); }), '3 x 2');
+  await page.keyboard.press('Enter');
+  var html = await content(page);
+  assert.strictEqual((html.match(/<tr>/g) || []).length, 2, html);
+  assert.strictEqual((html.match(/<td/g) || []).length, 6, html);
+});
+
+test('A11y: menu da tabela pelo teclado (tecla de menu)', async function () {
+  var page = await setup('<table><tbody><tr><td>1</td></tr></tbody></table>');
+  await page.evaluate(function () {
+    var td = document.querySelector('.editor-content td');
+    td.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  });
+  assert.strictEqual((await activeInfo(page)).role, 'menuitem');
+  await page.keyboard.press('ArrowDown'); // Inserir Linha Abaixo
+  await page.keyboard.press('Enter');
+  var rows = await page.evaluate(function () { return document.querySelectorAll('.editor-content tr').length; });
+  assert.strictEqual(rows, 2);
+  assert.strictEqual(await page.evaluate(function () { return window.$('.editor-table-context-menu').is(':visible'); }), false);
+});
+
+test('A11y: <label for> da página nomeia a área de edição', async function () {
+  var page = await browser.newPage();
+  await page.route('**/*', function (route) { return route.abort(); });
+  await page.setContent('<form><label for="t">Corpo do artigo</label><textarea id="t"></textarea></form>');
+  await page.addScriptTag({ content: JQUERY });
+  await page.addScriptTag({ content: EDITOR });
+  await page.evaluate(function () { window.$('#t').weaver(); });
+  var info = await page.evaluate(function () {
+    var content = document.querySelector('.editor-content');
+    var labelId = content.getAttribute('aria-labelledby');
+    return { label: labelId && document.getElementById(labelId).textContent, ariaLabel: content.getAttribute('aria-label') };
+  });
+  assert.deepStrictEqual(info, { label: 'Corpo do artigo', ariaLabel: null });
+  await page.click('label');
+  assert.strictEqual(await page.evaluate(function () { return document.activeElement.classList.contains('editor-content'); }), true);
+});
+
+test('A11y: botões ativos expõem aria-pressed', async function () {
+  var page = await setup();
+  await state(page, '<p><b>forte</b></p>', { from: ['forte', 2] });
+  await page.evaluate(function () { window.$('#t').data('weaver').updateToolbar(); });
+  assert.strictEqual(await page.getAttribute('[data-name="bold"]', 'aria-pressed'), 'true');
+  assert.strictEqual(await page.getAttribute('[data-name="italic"]', 'aria-pressed'), null);
+});
+
+// =========================
 // RUNNER
 // =========================
 

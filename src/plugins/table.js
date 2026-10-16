@@ -34,7 +34,20 @@ TablePlugin.prototype.buildGrid = function () {
     }
   }
 
-  var $label = $('<div class="grid-label text-center text-xs mt-2 text-gray-500 font-sans">0 x 0</div>');
+  var $label = $('<div class="grid-label text-center text-xs mt-2 text-gray-500 font-sans" aria-live="polite">0 x 0</div>');
+
+  // Grade operável pelo teclado: setas escolhem linhas/colunas, Enter insere
+  this.$grid.attr({ tabindex: '0', role: 'dialog', 'aria-label': 'Inserir tabela: use as setas para escolher o tamanho e Enter para inserir' });
+
+  var paint = function (row, col) {
+    self.gridSel = { row: row, col: col };
+    self.$grid.find('.grid-cell').each(function () {
+      var $this = $(this);
+      $this.css('background', $this.data('row') <= row && $this.data('col') <= col ? '#3b82f6' : 'transparent');
+    });
+    $label.text(col + ' x ' + row);
+  };
+  this.paintGrid = paint;
 
   this.$grid.append($gridInner).append($label);
   this.editor.$container.append(this.$grid);
@@ -46,18 +59,40 @@ TablePlugin.prototype.buildGrid = function () {
 
   // Pinta de azul as células correspondentes ao passar o mouse
   this.$grid.on('mouseover', '.grid-cell', function () {
-    var row = $(this).data('row');
-    var col = $(this).data('col');
-    
-    self.$grid.find('.grid-cell').each(function () {
-      var $this = $(this);
-      if ($this.data('row') <= row && $this.data('col') <= col) {
-        $this.css('background', '#3b82f6'); // azul do tailwind
-      } else {
-        $this.css('background', 'transparent');
-      }
-    });
-    $label.text(col + ' x ' + row);
+    paint($(this).data('row'), $(this).data('col'));
+  });
+
+  this.$grid.on('keydown', function (e) {
+    var sel = self.gridSel || { row: 1, col: 1 };
+    var row = sel.row;
+    var col = sel.col;
+
+    switch (e.key) {
+      case 'ArrowRight': col = Math.min(10, col + 1); break;
+      case 'ArrowLeft': col = Math.max(1, col - 1); break;
+      case 'ArrowDown': row = Math.min(10, row + 1); break;
+      case 'ArrowUp': row = Math.max(1, row - 1); break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        self.toggleGrid(false);
+        self.editor.$content[0].focus();
+        self.insertTable(row, col);
+        return;
+      case 'Escape':
+        e.preventDefault();
+        self.toggleGrid(false);
+        self.editor.focusToolbarButton('table');
+        return;
+      case 'Tab':
+        self.toggleGrid(false);
+        return;
+      default:
+        return;
+    }
+
+    e.preventDefault();
+    paint(row, col);
   });
 
   // Dispara a criação da tabela quando clicado e oculta o grid
@@ -94,9 +129,17 @@ TablePlugin.prototype.toggleGrid = function (forceState) {
       top: btnOffset.top + $btn.outerHeight() + 5,
       left: btnOffset.left
     });
+    var fromKeyboard = document.activeElement === $btn[0];
     this.$grid.show();
+    this.gridSel = null;
     this.$grid.find('.grid-cell').css('background', 'transparent');
     this.$grid.find('.grid-label').text('0 x 0');
+
+    // Aberta pelo teclado: o foco vai para a grade, já com 1 x 1
+    if (fromKeyboard) {
+      this.paintGrid(1, 1);
+      this.$grid[0].focus();
+    }
 
     // Verifica se o painel vazou pela direita
     if (this.$grid[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
@@ -141,7 +184,7 @@ TablePlugin.prototype.insertTable = function (rows, cols) {
 TablePlugin.prototype.buildContextMenu = function () {
   var self = this;
 
-  this.$contextMenu = $('<div class="editor-table-context-menu absolute bg-white border border-gray-200 rounded-md shadow-md z-[100] py-1 font-sans min-w-[180px] hidden flex-col"></div>');
+  this.$contextMenu = $('<div class="editor-table-context-menu absolute bg-white border border-gray-200 rounded-md shadow-md z-[100] py-1 font-sans min-w-[180px] hidden flex-col" role="menu" aria-label="Opções da tabela"></div>');
   
   var menuItems = [
     { label: '<i data-lucide="arrow-up" class="w-4 h-4 mr-2 opacity-70"></i> Inserir Linha Acima', action: 'insertRowAbove' },
@@ -158,10 +201,11 @@ TablePlugin.prototype.buildContextMenu = function () {
 
   $.each(menuItems, function(i, item) {
     if (item.divider) {
-      self.$contextMenu.append('<div class="h-px bg-gray-200 my-1 mx-1"></div>');
+      self.$contextMenu.append('<div class="h-px bg-gray-200 my-1 mx-1" role="separator"></div>');
     } else {
       var hoverClass = item.isDestructive ? 'hover:bg-red-50 text-red-600 hover:text-red-700' : 'hover:bg-gray-100 text-gray-700 hover:text-gray-900';
       var $btn = $('<button type="button" class="flex items-center mx-1 px-2 py-1.5 text-left text-sm rounded-sm focus:outline-none transition-colors select-none ' + hoverClass + '"></button>')
+        .attr({ role: 'menuitem', tabindex: '-1' })
         .html(item.label)
         .on('click', function(e) {
           e.preventDefault();
@@ -173,6 +217,16 @@ TablePlugin.prototype.buildContextMenu = function () {
   });
 
   this.editor.$container.append(this.$contextMenu);
+
+  // Teclado (também abre com a tecla de menu ou Shift+F10 na célula)
+  WysiwygEditor.menuKeyboard(this.$contextMenu, {
+    items: '[role="menuitem"]',
+    close: function () {
+      var cell = self.activeCell;
+      self.hideContextMenu();
+      if (cell) self.editor.$content[0].focus();
+    }
+  });
 
   // Fecha o menu ao clicar fora
   $(document).on('mousedown' + this.editor.ns, function (e) {
@@ -208,6 +262,13 @@ TablePlugin.prototype.showContextMenu = function (e) {
   var menuX = e.pageX - containerOffset.left;
   var menuY = e.pageY - containerOffset.top;
 
+  // Aberto pelo teclado (tecla de menu, Shift+F10): sem posição do mouse
+  if (!e.pageX && !e.pageY) {
+    var cellOffset = $(this.activeCell).offset();
+    menuX = cellOffset.left - containerOffset.left + 10;
+    menuY = cellOffset.top - containerOffset.top + $(this.activeCell).outerHeight();
+  }
+
   this.$contextMenu.css({
     display: 'flex',
     left: menuX,
@@ -228,6 +289,10 @@ TablePlugin.prototype.showContextMenu = function (e) {
   }
 
   WysiwygEditor.renderIcons(this.$contextMenu[0]);
+
+  // Foco no primeiro item: as setas já navegam e Esc fecha
+  var first = this.$contextMenu.find('[role="menuitem"]')[0];
+  if (first) first.focus();
 };
 
 TablePlugin.prototype.hideContextMenu = function () {

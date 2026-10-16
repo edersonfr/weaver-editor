@@ -27,6 +27,10 @@ AiPlugin.prototype.buildPopover = function () {
   this.$promptInput = $('<textarea rows="3" placeholder="Ex: Crie uma descrição persuasiva para uma camiseta preta de algodão..." class="px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 w-full resize-none"></textarea>');
   $promptGroup.append(this.$promptInput);
 
+  // Erro mostrado no próprio popover (antes era um alert() que travava a página)
+  this.$error = $('<div class="editor-ai-error text-xs text-red-600 hidden" role="alert"></div>');
+  $promptGroup.append(this.$error);
+
   var $btnGroup = $('<div class="flex mt-1"></div>');
   
   var $rightBtns = $('<div class="flex gap-2 ml-auto"></div>');
@@ -41,6 +45,13 @@ AiPlugin.prototype.buildPopover = function () {
 
   this.editor.$container.append(this.$popover);
 
+  // Diálogo acessível: rótulos ligados, Esc fecha e Tab fica no popover
+  this.editor.dialogize(this.$popover, {
+    name: 'ai',
+    label: 'Assistente de IA',
+    close: function () { self.togglePopover(false); }
+  });
+
   this.$popover.on('mousedown', function (e) {
     if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
@@ -53,6 +64,14 @@ AiPlugin.prototype.buildPopover = function () {
 
   this.$btnGenerate.on('click', function () {
     self.generateDescription();
+  });
+
+  // Ctrl+Enter (Cmd+Enter no Mac) gera sem precisar sair do campo
+  this.$promptInput.on('keydown', function (e) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      self.generateDescription();
+    }
   });
 
   $(document).on('mousedown' + this.editor.ns, function (e) {
@@ -77,7 +96,8 @@ AiPlugin.prototype.togglePopover = function (forceState) {
     }
 
     this.$promptInput.val('');
-    this.$btnGenerate.html('Gerar').prop('disabled', false);
+    this.$error.text('').addClass('hidden').hide();
+    this.$btnGenerate.html('Gerar').prop('disabled', false).removeAttr('aria-busy');
 
     var btnOffset = $btn.position();
     this.$popover.css({
@@ -109,7 +129,8 @@ AiPlugin.prototype.generateDescription = function () {
     return;
   }
 
-  this.$btnGenerate.html('<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin"></i> Gerando...').prop('disabled', true);
+  this.$error.text('').addClass('hidden').hide();
+  this.$btnGenerate.html('<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin" aria-hidden="true"></i> Gerando...').prop('disabled', true).attr('aria-busy', 'true');
   
   WysiwygEditor.renderIcons(this.$btnGenerate[0]);
 
@@ -119,8 +140,9 @@ AiPlugin.prototype.generateDescription = function () {
   }
 
   function handleError(errorMsg) {
-    alert('Erro ao gerar conteúdo com IA: ' + (errorMsg || 'Falha na comunicação com a API.'));
-    self.$btnGenerate.html('Gerar').prop('disabled', false);
+    self.$error.text('Não foi possível gerar o conteúdo: ' + (errorMsg || 'falha na comunicação com a API.')).removeClass('hidden').show();
+    self.$btnGenerate.html('Gerar').prop('disabled', false).removeAttr('aria-busy');
+    self.$promptInput.focus();
   }
 
   // 1. Caso o desenvolvedor tenha informado um callback customizado (ex: onAiGenerate)
