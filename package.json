@@ -15,8 +15,8 @@
     "url": "git+https://github.com/edersonfr/weaver-editor.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Ederson F. Ribeiro",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/edersonfr/weaver-editor/issues"

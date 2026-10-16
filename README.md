@@ -1,88 +1,185 @@
 # Weaver Editor
 
-O **Weaver Editor** é um editor HTML WYSIWYG leve, moderno e altamente customizável, desenvolvido com JavaScript (ES5) e jQuery. Inspirado nos maiores editores do mercado, este projeto foi construído sob medida para ser fácil de integrar, leve no carregamento e extremamente poderoso.
+[![CI](https://github.com/edersonfr/weaver-editor/actions/workflows/ci.yml/badge.svg)](https://github.com/edersonfr/weaver-editor/actions/workflows/ci.yml)
+[![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg)](LICENSE)
 
-## ✨ Funcionalidades
+Editor HTML WYSIWYG leve para jQuery. Transforma qualquer `<textarea>` num editor completo, com um único arquivo JavaScript, sem build no seu projeto e sem depender de Tailwind.
 
-- **Substituição Transparente:** Transforma qualquer `<textarea>` automaticamente, mantendo a sincronização de dados invisível para submissões de formulários perfeitas.
-- **Barra de Ferramentas Inteligente (Smart Toolbar):** Carregamento de módulos sob demanda. Se você não configurar o botão de Vídeo, o script de vídeo sequer consumirá memória!
-- **Visualização de Código (Code View):** Editor de código-fonte integrado com _Syntax Highlighting_ e um formatador inteligente (Pretty Print) de HTML.
-- **Modo Preview Responsivo:** Visualize como seu texto ficará em dispositivos Desktop, Tablet e Mobile diretamente de dentro do editor.
-- **Imagens Avançadas:** Suporte a arrastar e soltar (Drag & Drop), redimensionamento visual e alinhamento flutuante.
-- **Tabelas Interativas:** Construtor visual de tabelas (grid estilo Microsoft Word).
-- **Embeds Mágicos:** Cole a URL de um vídeo do YouTube ou Vimeo e ele será convertido automaticamente em um _iframe_ responsivo.
-- **Segurança Embutida:** Sanitizador por allowlist (`HtmlSanitizer`) aplicado a toda entrada de conteúdo (textarea inicial, colar, code view, IA, desfazer/refazer), protegendo contra XSS. Veja a seção [Segurança](#-segurança).
-- **Histórico:** Suporte completo a Desfazer (Undo) e Refazer (Redo) com atalhos de teclado.
+**[Ver a demonstração ao vivo](https://edersonfr.github.io/weaver-editor/)**
 
-## 🚀 Instalação
+## Sumário
 
-O editor foi empacotado para ser distribuído em um único arquivo minificado. Basta incluir o jQuery, (opcionalmente uma biblioteca de ícones como Lucide) e o arquivo do editor.
+- [Funcionalidades](#funcionalidades)
+- [Instalação](#instalação)
+- [Uso básico](#uso-básico)
+- [Barra de ferramentas](#barra-de-ferramentas)
+- [Opções](#opções)
+- [API e eventos](#api-e-eventos)
+- [Imagens](#imagens)
+- [Assistente de IA](#assistente-de-ia)
+- [Atalhos de teclado](#atalhos-de-teclado)
+- [Acessibilidade](#acessibilidade)
+- [Segurança](#segurança)
+- [Desenvolvimento](#desenvolvimento)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Licença](#licença)
+
+## Funcionalidades
+
+- **Substitui o `<textarea>`:** o conteúdo continua indo no envio do formulário, sem código extra.
+- **Formatação completa:** títulos, citações, código, fontes, tamanhos, cores, listas, alinhamento e recuo.
+- **Tabelas:** grade visual para escolher o tamanho, menu de linhas e colunas e `Tab` entre células.
+- **Imagens:** envio pelo botão ou arrastando o arquivo, redimensionamento com a alça, alinhamento, texto alternativo e upload para o seu servidor.
+- **Vídeos:** cole o link do YouTube ou do Vimeo e o player é incorporado.
+- **Colar limpo:** conteúdo do Word e do Google Docs chega sem lixo, e listas viram listas de verdade.
+- **Código-fonte:** edite o HTML com realce de sintaxe e formatação automática.
+- **Pré-visualização:** veja o resultado em desktop, tablet e celular.
+- **Assistente de IA (opcional):** gera texto em HTML com Gemini ou OpenAI.
+- **Seguro por padrão:** todo HTML que entra passa por um sanitizador contra XSS.
+- **Acessível:** tudo funciona pelo teclado e é anunciado por leitores de tela.
+- **Desfazer e refazer:** histórico que guarda também a posição do cursor.
+
+## Instalação
+
+O editor é um único arquivo, que depende só do jQuery (testado com a versão 3.6). Ícones e estilos são carregados automaticamente.
+
+**Baixando o arquivo:** copie [`dist/weaver-editor.min.js`](dist/weaver-editor.min.js) para o seu projeto.
 
 ```html
-<!-- jQuery -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-<!-- Editor WYSIWYG -->
-<script src="dist/weaver-editor.min.js"></script>
+<script src="/js/weaver-editor.min.js"></script>
 ```
 
-*Nota:* A estilização do editor insere automaticamente as regras via JavaScript (não é preciso ter Tailwind na página) e os ícones via Lucide.
+**Pelo CDN do jsDelivr**, direto deste repositório (troque `main` por um commit para fixar a versão):
 
-## 💻 Como Usar
+```html
+<script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@main/dist/weaver-editor.min.js"></script>
+```
 
-Crie um formulário com um `textarea` padrão:
+Funciona nas versões atuais do Chrome, Edge, Firefox e Safari. O Internet Explorer não é suportado.
+
+## Uso básico
 
 ```html
 <form action="/salvar" method="POST">
-  <textarea id="meu-editor" name="conteudo_html"></textarea>
-  <button type="submit">Enviar</button>
+  <label for="artigo">Artigo</label>
+  <textarea id="artigo" name="conteudo_html"></textarea>
+  <button type="submit">Salvar</button>
 </form>
+
+<script>
+  $(function () {
+    $('#artigo').weaver({
+      height: 400,
+      placeholder: 'Comece a escrever...'
+    });
+  });
+</script>
 ```
 
-Inicialize o editor via jQuery:
+O HTML do editor é copiado para o `textarea` a cada alteração e no envio do formulário. O conteúdo que já estiver no `textarea` é carregado ao iniciar.
+
+## Barra de ferramentas
+
+A barra é uma lista de grupos, cada um com seus botões. Os grupos aparecem separados por uma divisória:
 
 ```javascript
-$(document).ready(function() {
-  $('#meu-editor').weaver({
-    height: 500,
-    placeholder: 'Comece a escrever sua história aqui...',
-    toolbar: [
-      ['history', ['undo', 'redo']],
-      ['style', ['style', 'fontName', 'fontSize']],
-      ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']],
-      ['color', ['color']],
-      ['para', ['ul', 'ol', 'paragraph']],
-      ['insert', ['link', 'table', 'picture', 'video', 'hr']],
-      ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
-    ]
-  });
+$('#artigo').weaver({
+  toolbar: [
+    ['history', ['undo', 'redo']],
+    ['style', ['style', 'fontName', 'fontSize']],
+    ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']],
+    ['color', ['color']],
+    ['para', ['ul', 'ol', 'paragraph']],
+    ['insert', ['link', 'table', 'picture', 'video', 'hr', 'ai']],
+    ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
+  ]
 });
 ```
 
-Para remover o editor (por exemplo, ao trocar de tela numa SPA), use `$('#meu-editor').weaver('destroy')`. O textarea volta a aparecer com o conteúdo atual e todos os eventos são removidos.
+A lista que você passar substitui a padrão por inteiro. Um grupo sem lista, como `['color']`, usa o nome do grupo como botão.
 
-## ⚙️ Configuração da Barra de Ferramentas (Aliases)
+**Botões disponíveis:**
 
-O sistema de toolbar aceita a mesma sintaxe amigável do Summernote, permitindo agrupar botões em "blocos" divididos visualmente.
+| Botão | Função |
+| --- | --- |
+| `undo`, `redo` | Desfazer e refazer |
+| `formatBlock` | Parágrafo, títulos H1 a H6, citação e bloco de código |
+| `fontName`, `fontSize` | Fonte e tamanho do texto |
+| `bold`, `italic`, `underline`, `strikethrough` | Negrito, itálico, sublinhado e tachado |
+| `subscript`, `superscript` | Subscrito e sobrescrito |
+| `removeFormat` | Remove a formatação do trecho selecionado |
+| `foreColor`, `backColor` | Cor do texto e cor de destaque |
+| `ul`, `ol` | Lista com marcadores e lista numerada |
+| `paragraphGroup` | Alinhamentos e recuo, num menu |
+| `link`, `table`, `image`, `video`, `hr` | Inserir link, tabela, imagem, vídeo e linha horizontal |
+| `ai` | Assistente de IA |
+| `preview`, `fullscreen`, `showBlocks`, `codeview` | Pré-visualizar, tela cheia, mostrar blocos e código-fonte |
 
-**Principais Apelidos (Aliases) Suportados:**
-- `'style'`: Carrega os formatos de bloco (Parágrafo, H1-H6, Blockquote, Bloco de Código).
-- `'clear'`: Limpa a formatação atual.
-- `'picture'`: Injeta a funcionalidade de Imagens.
-- `'color'`: Abre os seletores de Cor da Fonte e Cor de Fundo.
-- `'paragraph'`: Agrupa os alinhamentos (Esquerda, Centro, Direita, Justificado) e Indentação.
+**Apelidos** (compatíveis com o Summernote): `style` = `formatBlock`, `clear` = `removeFormat`, `picture` = `image`, `paragraph` = `paragraphGroup`, `color` = `foreColor` + `backColor`.
 
-## 🖼️ Imagens
+Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização, tela cheia e IA só são ativados quando o botão correspondente está na barra.
 
-Sem configuração, a imagem escolhida é embutida no HTML em base64, reduzida para no máximo `imageMaxWidth` pixels de largura. Para enviar ao servidor, use `uploadImage` e chame `done(url)` no sucesso ou `done(null, 'mensagem')` no erro (a mensagem aparece dentro do editor):
+## Opções
+
+| Opção | Padrão | Descrição |
+| --- | --- | --- |
+| `toolbar` | barra completa | Grupos e botões da barra (veja acima) |
+| `height` | `300` | Altura mínima da área de edição, em pixels |
+| `placeholder` | o do `textarea` | Texto exibido com o editor vazio |
+| `fontNames` | lista padrão | Fontes do menu de fontes |
+| `googleFonts` | `true` | Carrega do Google as fontes do menu (editor e pré-visualização) |
+| `previewCss` | — | Folhas de estilo do seu site, aplicadas na pré-visualização |
+| `uploadImage` | — | Função de upload de imagens (veja [Imagens](#imagens)) |
+| `maxImageSize` | `5242880` | Tamanho máximo da imagem, em bytes (5 MB) |
+| `imageMaxWidth` | `1600` | Largura máxima ao embutir a imagem em base64 |
+| `aiEndpoint` | `'ai-api.php'` | URL do backend do assistente de IA |
+| `onAiGenerate` | — | Função própria para gerar o conteúdo da IA |
+| `iconsUrl` | Lucide 0.525.0 (unpkg) | Arquivo de ícones; `false` usa o Lucide já carregado na página |
+| `iconsIntegrity` | — | Hash SRI do arquivo de ícones |
+| `allowedTags` | lista segura | Tags aceitas no conteúdo |
+| `allowedAttributes` | lista segura | Atributos aceitos, por tag (`'*'` vale para todas) |
+| `allowedStyles` | lista segura | Propriedades CSS aceitas no atributo `style` |
+| `allowedIframeSources` | YouTube e Vimeo | Lista de RegExp com os endereços de iframe aceitos |
+| `plugins` | automático | Lista de plugins, para montar o editor à mão |
+
+## API e eventos
+
+A instância fica guardada no elemento:
 
 ```javascript
-$('#meu-editor').weaver({
-  maxImageSize: 5 * 1024 * 1024, // 5 MB (padrão)
-  imageMaxWidth: 1600,           // só vale para base64 (padrão)
+var editor = $('#artigo').data('weaver');
+
+editor.getContent();                    // HTML atual (já sanitizado)
+editor.setContent('<p>Novo texto</p>'); // substitui o conteúdo (sanitiza antes)
+editor.exec('bold');                    // executa um comando da barra
+editor.sanitize(html);                  // sanitiza um HTML com as regras do editor
+editor.notify('Salvo!');                // mostra um aviso dentro do editor
+
+$('#artigo').weaver('destroy');         // remove o editor e devolve o textarea
+```
+
+A cada alteração, o elemento original dispara `change` com o HTML:
+
+```javascript
+$('#artigo').on('change', function (event, html) {
+  console.log('Novo conteúdo:', html);
+});
+```
+
+Use `destroy` ao trocar de tela numa SPA: ele remove todos os eventos e devolve o `textarea` com o conteúdo atual.
+
+## Imagens
+
+Sem configuração, a imagem é embutida no HTML em base64, reduzida para no máximo `imageMaxWidth` pixels de largura. Para guardar as imagens no seu servidor, use `uploadImage` e chame `done(url)` no sucesso ou `done(null, 'mensagem')` no erro. A mensagem aparece dentro do editor.
+
+```javascript
+$('#artigo').weaver({
+  maxImageSize: 5 * 1024 * 1024,
   uploadImage: function (file, done) {
     var data = new FormData();
     data.append('imagem', file);
+
     fetch('/upload.php', { method: 'POST', body: data })
       .then(function (r) { return r.json(); })
       .then(function (json) { json.url ? done(json.url) : done(null, json.error || 'Falha no envio.'); })
@@ -91,9 +188,40 @@ $('#meu-editor').weaver({
 });
 ```
 
-Formatos aceitos: PNG, JPG, GIF, WebP e AVIF. Ao clicar numa imagem, a barra permite mudar o tamanho (ou arrastar a alça no canto), alinhar, definir o **texto alternativo** e remover.
+Formatos aceitos: PNG, JPG, GIF, WebP e AVIF. No servidor, confira o tipo e o tamanho de novo antes de salvar.
 
-## ⌨️ Atalhos
+## Assistente de IA
+
+Adicione o botão `ai` à barra. Ele envia a instrução para o `ai-api.php` (ou o endereço em `aiEndpoint`), que responde em HTML usando Google Gemini ou OpenAI. Sem chave configurada, o backend responde em modo demonstração.
+
+Configure o backend por variáveis de ambiente:
+
+| Variável | Descrição |
+| --- | --- |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | Chave de ao menos um provedor |
+| `GEMINI_MODEL` / `OPENAI_MODEL` | Modelo usado (padrões no topo do arquivo) |
+| `WEAVER_AI_SESSION_KEY` | Chave em `$_SESSION` que indica o usuário logado (padrão: `user_id`) |
+| `WEAVER_AI_ALLOWED_ORIGINS` | Origens aceitas, separadas por vírgula (padrão: o próprio domínio) |
+| `WEAVER_AI_RATE_LIMIT` / `WEAVER_AI_RATE_WINDOW` | Limite de chamadas por usuário (padrão: 20 por hora) |
+| `WEAVER_AI_MAX_PROMPT` | Tamanho máximo da instrução (padrão: 2000 caracteres) |
+
+Com uma chave real configurada, o endpoint exige usuário logado, para ninguém gastar a sua cota de fora do painel.
+
+Para usar o seu próprio backend, passe `onAiGenerate`:
+
+```javascript
+$('#artigo').weaver({
+  onAiGenerate: function (prompt, done) {
+    minhaApi.gerar(prompt)
+      .then(function (html) { done(html); })
+      .catch(function (erro) { done(null, erro.message); });
+  }
+});
+```
+
+A resposta da IA sempre passa pelo sanitizador antes de entrar no texto.
+
+## Atalhos de teclado
 
 | Atalho | Ação |
 | --- | --- |
@@ -103,75 +231,75 @@ Formatos aceitos: PNG, JPG, GIF, WebP e AVIF. Ao clicar numa imagem, a barra per
 | `Ctrl+Z` / `Ctrl+Y` (ou `Ctrl+Shift+Z`) | Desfazer / refazer |
 | `Tab` / `Shift+Tab` em lista | Aumentar / diminuir o nível do item |
 | `Tab` / `Shift+Tab` em tabela | Próxima / célula anterior (no fim, cria uma linha) |
-| `Alt+F10` | Ir para a barra de ferramentas (setas andam entre os botões, `Esc` volta ao texto) |
+| `Alt+F10` | Ir para a barra de ferramentas |
 
-No Mac, use `Cmd` no lugar de `Ctrl`. Texto colado do Word e do Google Docs é limpo automaticamente: listas viram listas de verdade e classes e estilos repetidos são removidos.
+No Mac, use `Cmd` no lugar de `Ctrl`.
 
-## ♿ Acessibilidade
+## Acessibilidade
 
-- Tudo funciona pelo teclado: barra de ferramentas (`Alt+F10` e setas), menus (setas, `Enter`, `Esc`), grade de tabela (setas e `Enter`), menu da tabela (tecla de menu ou `Shift+F10`) e popovers.
-- Popovers de link, vídeo e IA são diálogos: o foco fica dentro deles, `Esc` fecha e devolve o foco ao botão, e os rótulos estão ligados aos campos.
-- Botões ativos informam `aria-pressed`; erros (upload, IA, URL inválida) são anunciados por leitores de tela, sem `alert()`.
-- Se a página tem `<label for="id-do-textarea">`, ele vira o nome da área de edição.
+- **Teclado:** na barra, as setas andam entre os botões e `Esc` volta ao texto. Menus, grade de tabela, menu da tabela (tecla de menu ou `Shift+F10`) e popovers também funcionam só pelo teclado.
+- **Diálogos:** os popovers de link, vídeo e IA prendem o foco, fecham com `Esc` e devolvem o foco ao botão.
+- **Leitores de tela:** botões ativos informam `aria-pressed`, e erros são anunciados sem `alert()`.
+- **Nome do editor:** um `<label for="id-do-textarea">` na página vira o nome da área de edição.
 
-## 🛠️ Desenvolvimento e Build
+## Segurança
 
-O projeto utiliza o **Gulp** para automatizar a concatenação e minificação dos arquivos em `src/` para a versão final de produção em `dist/`.
+O editor sanitiza todo HTML que entra: conteúdo inicial, colar, arrastar, código-fonte, IA e desfazer/refazer. Scripts, eventos (`onclick`, `onerror`...), links `javascript:` e iframes de domínios desconhecidos são removidos.
 
-### 1. Instalar dependências
-Certifique-se de ter o Node.js instalado.
+> **Sanitize também no servidor.** O editor protege quem está editando, mas o envio do formulário pode ser forjado. Antes de salvar ou exibir o HTML, passe-o por uma biblioteca de servidor, como o [HTML Purifier](http://htmlpurifier.org/) (PHP) ou o [DOMPurify](https://github.com/cure53/DOMPurify) (Node).
+
+- **Tags bloqueadas sempre:** `script`, `style`, `svg`, `math`, `object`, `embed`, `form` e similares saem mesmo se estiverem em `allowedTags`.
+- **iframes:** só players do YouTube (`youtube-nocookie.com`) e do Vimeo, sempre com `sandbox`. Para liberar outros, use `allowedIframeSources`.
+- **CSS inline:** só propriedades de formatação. `position` e `url()` são removidos.
+- **Pré-visualização:** roda num iframe com `sandbox` e sem scripts.
+- **Ícones:** vêm de uma versão fixa do Lucide. Para o navegador recusar um arquivo adulterado no CDN, informe o hash em `iconsIntegrity`:
+
+  ```bash
+  curl -s https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js | openssl dgst -sha384 -binary | openssl base64 -A
+  ```
+
+  Para não depender de CDN, sirva o arquivo do seu domínio com `iconsUrl: '/js/lucide.min.js'`. Se os ícones não carregarem, os botões mostram o nome.
+- **Google Fonts e LGPD:** as fontes do menu vêm do Google, que recebe o IP do visitante. Use `googleFonts: false` para desligar.
+
+## Desenvolvimento
+
+O código-fonte fica em `src/` (ES5, sem transpilação). O Gulp junta e minifica os arquivos em `dist/`.
+
 ```bash
-npm install
+npm install          # dependências do build
+npx gulp             # gera dist/weaver-editor.js e dist/weaver-editor.min.js
 ```
 
-### 2. Compilar o Editor
-Sempre que fizer alterações nos arquivos de código dentro da pasta `src/`, rode o comando abaixo para gerar o arquivo `dist/weaver-editor.min.js`:
-```bash
-npx gulp
-```
+Os testes abrem o editor num Chromium real. `tests/security.test.js` reproduz ataques de XSS conhecidos, e `tests/functional.test.js` cobre formatação, listas, tabelas, imagens, colar, histórico, teclado e acessibilidade.
 
-Não é obrigatório commitar o `dist/` nos PRs: quando o código entra na `main`, o workflow **Build** do GitHub Actions roda o Gulp e faz o commit do `dist/` sozinho.
-
-### 3. Rodar os testes
-Os testes abrem o editor num Chromium real: `tests/security.test.js` reproduz ataques conhecidos (XSS por colar, links, vídeo, preview, IA) e `tests/functional.test.js` cobre formatação, listas, code view, histórico e o ciclo de vida do editor.
 ```bash
 npm install --no-save playwright jquery@3.6.0
 npx playwright install chromium
 npm test
 ```
 
-No GitHub, o workflow **CI** roda o build e os testes (versões normal e minificada) em todo PR e em cada push na `main`.
+**No GitHub:**
 
-## 🔒 Segurança
+- O workflow **CI** roda o build e os testes, nas versões normal e minificada, em todo PR e em cada push na `main`.
+- Ao entrar código na `main`, o workflow **Build** regenera o `dist/` com o Gulp e faz o commit. Não é preciso commitar o `dist/` nos PRs.
 
-- **Sanitize também no servidor.** O sanitizador do editor protege quem está editando, mas o POST do formulário pode ser forjado. Antes de salvar ou exibir o HTML, passe-o por uma biblioteca de servidor como [HTML Purifier](http://htmlpurifier.org/) (PHP) ou [DOMPurify](https://github.com/cure53/DOMPurify) (Node).
-- **Tags nunca permitidas:** `script`, `style`, `svg`, `math`, `object`, `embed`, `form` e similares são removidas mesmo se incluídas em `allowedTags`.
-- **iframes:** apenas players do YouTube (`youtube-nocookie.com`) e do Vimeo, sempre com `sandbox`. Para liberar outros, passe `allowedIframeSources` (lista de RegExp) nas opções.
-- **CSS inline:** só propriedades de formatação (cor, fonte, margens, bordas, tamanhos, alinhamento). `position` e `url()` são removidos. Personalize com `allowedStyles`.
-- **Preview:** roda num iframe com `sandbox` e CSP sem scripts.
-- **Dependências externas:** os ícones (Lucide) vêm de uma versão fixa, nunca `@latest`. Para garantir que o arquivo não foi adulterado no CDN, informe o hash SRI em `iconsIntegrity`, gerado com:
-  ```bash
-  curl -s https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js | openssl dgst -sha384 -binary | openssl base64 -A
-  ```
-  Prefere não depender de CDN? Sirva o arquivo do seu domínio (`iconsUrl: '/js/lucide.min.js'`) ou use `iconsUrl: false` se a página já carrega o Lucide. Se os ícones não carregarem, a barra mostra o nome dos botões.
-- **Google Fonts e LGPD:** as fontes do menu de fontes vêm do Google, que recebe o IP do visitante. Use `googleFonts: false` para desligar (no editor e no preview) e sirva as fontes localmente se precisar delas.
-- **`ai-api.php`:** aceita só `POST` da própria origem, exige sessão PHP quando há chave de API configurada, limita tamanho do prompt e número de chamadas, e sanitiza a resposta. Configuração por variáveis de ambiente, documentadas no topo do arquivo.
-
-## 📂 Estrutura de Diretórios
+## Estrutura do projeto
 
 ```text
-/wysiwyg-editor
-├── dist/                   # Versões finais de produção (.min.js)
-├── examples/               # Exemplos práticos de uso em HTML
-├── src/                    # Arquivos fontes em desenvolvimento
-│   ├── core/               # Núcleo: plugins, comandos, seleção e histórico
-│   ├── plugins/            # Ferramentas modulares (Tabelas, Imagens, Vídeos, etc)
-│   └── editor.js           # Orquestrador principal do editor
-├── gulpfile.js             # Pipeline de automação do build
-├── package.json            # Dependências do Node.js
-└── README.md               # Esta documentação
+weaver-editor/
+├── src/
+│   ├── core/            # Sanitizador, seleção, histórico, estilos base
+│   ├── plugins/         # Barra, formatação, link, tabela, imagem, vídeo, IA...
+│   └── editor.js        # Núcleo: opções, ciclo de vida, API
+├── dist/                # Arquivos prontos para uso (gerados pelo Gulp)
+├── docs/                # Página de demonstração (GitHub Pages)
+├── examples/            # Exemplo de uso em HTML
+├── tests/               # Testes com Playwright
+├── ai-api.php           # Backend de exemplo do assistente de IA
+├── .github/workflows/   # CI e build automático
+└── gulpfile.js          # Build
 ```
 
-## 📄 Licença
+## Licença
 
-Este projeto está licenciado sob a ISC License.
+[MIT](LICENSE) © 2026 Ederson F. Ribeiro
