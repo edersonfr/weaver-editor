@@ -72,6 +72,40 @@ O sistema de toolbar aceita a mesma sintaxe amigável do Summernote, permitindo 
 - `'color'`: Abre os seletores de Cor da Fonte e Cor de Fundo.
 - `'paragraph'`: Agrupa os alinhamentos (Esquerda, Centro, Direita, Justificado) e Indentação.
 
+## 🖼️ Imagens
+
+Sem configuração, a imagem escolhida é embutida no HTML em base64, reduzida para no máximo `imageMaxWidth` pixels de largura. Para enviar ao servidor, use `uploadImage` e chame `done(url)` no sucesso ou `done(null, 'mensagem')` no erro (a mensagem aparece dentro do editor):
+
+```javascript
+$('#meu-editor').weaver({
+  maxImageSize: 5 * 1024 * 1024, // 5 MB (padrão)
+  imageMaxWidth: 1600,           // só vale para base64 (padrão)
+  uploadImage: function (file, done) {
+    var data = new FormData();
+    data.append('imagem', file);
+    fetch('/upload.php', { method: 'POST', body: data })
+      .then(function (r) { return r.json(); })
+      .then(function (json) { json.url ? done(json.url) : done(null, json.error || 'Falha no envio.'); })
+      .catch(function () { done(null, 'Não foi possível enviar a imagem.'); });
+  }
+});
+```
+
+Formatos aceitos: PNG, JPG, GIF, WebP e AVIF. Ao clicar numa imagem, a barra permite mudar o tamanho (ou arrastar a alça no canto), alinhar, definir o **texto alternativo** e remover.
+
+## ⌨️ Atalhos
+
+| Atalho | Ação |
+| --- | --- |
+| `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Negrito / itálico / sublinhado |
+| `Ctrl+K` | Inserir ou editar link |
+| `Ctrl+Shift+V` | Colar sem formatação |
+| `Ctrl+Z` / `Ctrl+Y` (ou `Ctrl+Shift+Z`) | Desfazer / refazer |
+| `Tab` / `Shift+Tab` em lista | Aumentar / diminuir o nível do item |
+| `Tab` / `Shift+Tab` em tabela | Próxima / célula anterior (no fim, cria uma linha) |
+
+No Mac, use `Cmd` no lugar de `Ctrl`. Texto colado do Word e do Google Docs é limpo automaticamente: listas viram listas de verdade e classes e estilos repetidos são removidos.
+
 ## 🛠️ Desenvolvimento e Build
 
 O projeto utiliza o **Gulp** para automatizar a concatenação e minificação dos arquivos em `src/` para a versão final de produção em `dist/`.

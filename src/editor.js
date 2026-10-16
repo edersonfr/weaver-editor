@@ -82,7 +82,10 @@
       .css('min-height', minHeight)
       .attr('data-placeholder', placeholder);
 
-    this.$container.append(this.$toolbar, this.$content);
+    // Área de avisos (erros de upload, IA etc.), lida por leitores de tela
+    this.$notice = $('<div class="editor-notice" role="status" aria-live="polite"/>').hide();
+
+    this.$container.append(this.$toolbar, this.$notice, this.$content);
     
     this.isTextarea = this.$el.is('textarea');
 
@@ -287,7 +290,62 @@
       return this.sanitize(this.codeView.$textarea.val());
     }
 
-    return this.$content.html();
+    return Editor.cleanOutput(this.$content.html());
+  };
+
+  /**
+   * Remove do HTML final os estados visuais do editor (imagem selecionada,
+   * marcadores), que não devem ser salvos no conteúdo.
+   */
+  Editor.cleanOutput = function (html) {
+    if (html.indexOf('weaver-') === -1) return html;
+
+    var holder = document.createElement('div');
+    holder.innerHTML = html;
+
+    var states = holder.querySelectorAll('.weaver-selected');
+    for (var i = 0; i < states.length; i++) {
+      states[i].classList.remove('weaver-selected');
+      if (!states[i].getAttribute('class')) states[i].removeAttribute('class');
+    }
+
+    var markers = holder.querySelectorAll('weaver-marker');
+    for (var m = 0; m < markers.length; m++) {
+      markers[m].parentNode.removeChild(markers[m]);
+    }
+
+    return holder.innerHTML;
+  };
+
+  /**
+   * Mostra um aviso curto dentro do editor, no lugar de alert().
+   * @param {string} message
+   * @param {{type?: 'error'|'info', timeout?: number}} [opts] timeout 0 = fica até ser trocado
+   */
+  Editor.prototype.notify = function (message, opts) {
+    opts = opts || {};
+    var self = this;
+    var type = opts.type || 'info';
+    var timeout = opts.timeout === undefined ? 6000 : opts.timeout;
+
+    clearTimeout(this._noticeTimer);
+
+    if (!message) {
+      this.$notice.hide().text('');
+      return;
+    }
+
+    this.$notice
+      .attr('role', type === 'error' ? 'alert' : 'status')
+      .attr('data-type', type)
+      .text(message)
+      .show();
+
+    if (timeout) {
+      this._noticeTimer = setTimeout(function () {
+        self.$notice.hide().text('');
+      }, timeout);
+    }
   };
 
   /**
@@ -438,6 +496,11 @@
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
+      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
+      '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
+      '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
+      '.wysiwyg-editor .editor-image-alt { display: flex; gap: 4px; align-items: center; }\n' +
+      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
       '.editor-show-blocks p, .editor-show-blocks div, .editor-show-blocks ul, .editor-show-blocks ol, .editor-show-blocks blockquote, .editor-show-blocks table {\n' +
@@ -476,7 +539,7 @@
       '  bottom: -5px;\n' +
       '  cursor: se-resize;\n' +
       '}\n' +
-      '.editor-content img.active {\n' +
+      '.editor-content img.weaver-selected {\n' +
       '  outline: 2px solid #007bff;\n' +
       '  outline-offset: 2px;\n' +
       '}\n' +
@@ -588,6 +651,10 @@
     iconsUrl: 'https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js',
     // Hash SRI opcional do arquivo de ícones (ex.: 'sha384-...'); veja o README
     iconsIntegrity: null,
+    // Imagens: tamanho máximo do arquivo (bytes) e largura máxima ao
+    // embutir em base64 (sem uploadImage), para não inchar o HTML salvo
+    maxImageSize: 5 * 1024 * 1024,
+    imageMaxWidth: 1600,
     // Carrega as fontes do Google usadas no menu de fontes (editor e preview)
     googleFonts: true
   };

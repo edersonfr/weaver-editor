@@ -1230,7 +1230,8 @@ HistoryManager.prototype.save = function () {
   // Uma digitação pendente no debounce entra agora, antes de outra ação
   clearTimeout(this.timeout);
 
-  var html = this.editor.$content.html();
+  // Sem estados visuais (imagem selecionada etc.)
+  var html = WysiwygEditor.cleanOutput(this.editor.$content.html());
   var caret = this.editor.selection ? this.editor.selection.serialize() : null;
   var top = this.current();
 
@@ -1759,7 +1760,10 @@ window.RangeFormatter = RangeFormatter;
       .css('min-height', minHeight)
       .attr('data-placeholder', placeholder);
 
-    this.$container.append(this.$toolbar, this.$content);
+    // Área de avisos (erros de upload, IA etc.), lida por leitores de tela
+    this.$notice = $('<div class="editor-notice" role="status" aria-live="polite"/>').hide();
+
+    this.$container.append(this.$toolbar, this.$notice, this.$content);
     
     this.isTextarea = this.$el.is('textarea');
 
@@ -1964,7 +1968,62 @@ window.RangeFormatter = RangeFormatter;
       return this.sanitize(this.codeView.$textarea.val());
     }
 
-    return this.$content.html();
+    return Editor.cleanOutput(this.$content.html());
+  };
+
+  /**
+   * Remove do HTML final os estados visuais do editor (imagem selecionada,
+   * marcadores), que não devem ser salvos no conteúdo.
+   */
+  Editor.cleanOutput = function (html) {
+    if (html.indexOf('weaver-') === -1) return html;
+
+    var holder = document.createElement('div');
+    holder.innerHTML = html;
+
+    var states = holder.querySelectorAll('.weaver-selected');
+    for (var i = 0; i < states.length; i++) {
+      states[i].classList.remove('weaver-selected');
+      if (!states[i].getAttribute('class')) states[i].removeAttribute('class');
+    }
+
+    var markers = holder.querySelectorAll('weaver-marker');
+    for (var m = 0; m < markers.length; m++) {
+      markers[m].parentNode.removeChild(markers[m]);
+    }
+
+    return holder.innerHTML;
+  };
+
+  /**
+   * Mostra um aviso curto dentro do editor, no lugar de alert().
+   * @param {string} message
+   * @param {{type?: 'error'|'info', timeout?: number}} [opts] timeout 0 = fica até ser trocado
+   */
+  Editor.prototype.notify = function (message, opts) {
+    opts = opts || {};
+    var self = this;
+    var type = opts.type || 'info';
+    var timeout = opts.timeout === undefined ? 6000 : opts.timeout;
+
+    clearTimeout(this._noticeTimer);
+
+    if (!message) {
+      this.$notice.hide().text('');
+      return;
+    }
+
+    this.$notice
+      .attr('role', type === 'error' ? 'alert' : 'status')
+      .attr('data-type', type)
+      .text(message)
+      .show();
+
+    if (timeout) {
+      this._noticeTimer = setTimeout(function () {
+        self.$notice.hide().text('');
+      }, timeout);
+    }
   };
 
   /**
@@ -2115,6 +2174,11 @@ window.RangeFormatter = RangeFormatter;
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
+      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
+      '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
+      '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
+      '.wysiwyg-editor .editor-image-alt { display: flex; gap: 4px; align-items: center; }\n' +
+      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
       '.editor-show-blocks p, .editor-show-blocks div, .editor-show-blocks ul, .editor-show-blocks ol, .editor-show-blocks blockquote, .editor-show-blocks table {\n' +
@@ -2153,7 +2217,7 @@ window.RangeFormatter = RangeFormatter;
       '  bottom: -5px;\n' +
       '  cursor: se-resize;\n' +
       '}\n' +
-      '.editor-content img.active {\n' +
+      '.editor-content img.weaver-selected {\n' +
       '  outline: 2px solid #007bff;\n' +
       '  outline-offset: 2px;\n' +
       '}\n' +
@@ -2265,6 +2329,10 @@ window.RangeFormatter = RangeFormatter;
     iconsUrl: 'https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js',
     // Hash SRI opcional do arquivo de ícones (ex.: 'sha384-...'); veja o README
     iconsIntegrity: null,
+    // Imagens: tamanho máximo do arquivo (bytes) e largura máxima ao
+    // embutir em base64 (sem uploadImage), para não inchar o HTML salvo
+    maxImageSize: 5 * 1024 * 1024,
+    imageMaxWidth: 1600,
     // Carrega as fontes do Google usadas no menu de fontes (editor e preview)
     googleFonts: true
   };
@@ -3019,11 +3087,148 @@ BasicCommandsPlugin.prototype.init = function () {
     editor.$content.toggleClass('editor-show-blocks');
   });
 
+  // --- Tab em listas e tabelas ---
+
+  /** Executa fn preservando a seleção (mover nós no DOM reseta ranges). */
+  function keepSelection(fn) {
+    var range = editor.selection.getRange();
+    var saved = range ? [range.startContainer, range.startOffset, range.endContainer, range.endOffset] : null;
+    fn();
+    if (!saved) return;
+    try {
+      var restored = document.createRange();
+      restored.setStart(saved[0], saved[1]);
+      restored.setEnd(saved[2], saved[3]);
+      editor.selection.setRange(restored);
+    } catch (e) { /* nós removidos */ }
+  }
+
+  /** Tab num item: vira subitem do item anterior. */
+  function indentListItem(li) {
+    var prev = li.previousElementSibling;
+    if (!prev || prev.tagName !== 'LI') return false;
+
+    keepSelection(function () {
+      var listTag = li.parentNode.tagName.toLowerCase();
+      var sub = prev.lastElementChild;
+      if (!sub || (sub.tagName !== 'UL' && sub.tagName !== 'OL')) {
+        sub = document.createElement(listTag);
+        prev.appendChild(sub);
+      }
+      sub.appendChild(li);
+    });
+    return true;
+  }
+
+  /** Shift+Tab num item: sobe um nível (ou sai da lista no primeiro nível). */
+  function outdentListItem(li) {
+    var list = li.parentNode;
+    var parentItem = list.parentNode;
+
+    keepSelection(function () {
+      // Itens depois deste viram subitens dele, como nos editores de texto
+      var following = [];
+      for (var next = li.nextElementSibling; next; next = next.nextElementSibling) following.push(next);
+
+      if (parentItem && parentItem.tagName === 'LI') {
+        if (following.length) {
+          var sub = document.createElement(list.tagName.toLowerCase());
+          for (var i = 0; i < following.length; i++) sub.appendChild(following[i]);
+          li.appendChild(sub);
+        }
+        parentItem.parentNode.insertBefore(li, parentItem.nextSibling);
+        if (!list.children.length) list.parentNode.removeChild(list);
+      } else {
+        // Primeiro nível: o item vira parágrafo, dividindo a lista
+        var p = document.createElement('p');
+        while (li.firstChild) p.appendChild(li.firstChild);
+        if (!p.firstChild) p.appendChild(document.createElement('br'));
+        list.parentNode.insertBefore(p, list.nextSibling);
+        if (following.length) {
+          var rest = document.createElement(list.tagName.toLowerCase());
+          for (var j = 0; j < following.length; j++) rest.appendChild(following[j]);
+          list.parentNode.insertBefore(rest, p.nextSibling);
+        }
+        list.removeChild(li);
+        if (!list.children.length) list.parentNode.removeChild(list);
+      }
+    });
+    return true;
+  }
+
+  /** Tab numa célula: vai para a próxima (cria linha nova no fim da tabela). */
+  function moveCell(cell, backwards) {
+    var table = editor.selection.closest(cell, 'table');
+    if (!table) return false;
+
+    var cells = Array.prototype.slice.call(table.querySelectorAll('td, th')).filter(function (c) {
+      return editor.selection.closest(c, 'table') === table;
+    });
+    var index = cells.indexOf(cell);
+    var target = cells[index + (backwards ? -1 : 1)];
+
+    if (!target && !backwards) {
+      var lastRow = cell.parentNode;
+      var row = document.createElement('tr');
+      for (var i = 0; i < lastRow.children.length; i++) {
+        var newCell = document.createElement(lastRow.children[i].tagName === 'TH' ? 'td' : lastRow.children[i].tagName.toLowerCase());
+        var style = lastRow.children[i].getAttribute('style');
+        if (style) newCell.setAttribute('style', style);
+        newCell.innerHTML = '&nbsp;';
+        row.appendChild(newCell);
+      }
+      lastRow.parentNode.insertBefore(row, lastRow.nextSibling);
+      target = row.firstChild;
+    }
+
+    if (!target) return true; // primeira célula com Shift+Tab: fica onde está
+
+    // Seleciona o conteúdo da célula para digitar por cima
+    var range = document.createRange();
+    range.selectNodeContents(target);
+    editor.selection.setRange(range);
+    return true;
+  }
+
+  function handleTab(e) {
+    var range = editor.selection.getRange();
+    if (!range) return false;
+
+    var li = editor.selection.closest(range.startContainer, 'li');
+    var cell = editor.selection.closest(range.startContainer, 'td, th');
+
+    // O elemento mais próximo do cursor decide (lista dentro de célula etc.)
+    if (li && (!cell || cell.contains(li))) {
+      editor.history.save();
+      var changed = e.shiftKey ? outdentListItem(li) : indentListItem(li);
+      if (changed) {
+        editor.history.save();
+        editor.trigger('change');
+      }
+      return true; // dentro de lista, Tab nunca sai do editor
+    }
+
+    if (cell) {
+      editor.history.save();
+      moveCell(cell, e.shiftKey);
+      editor.history.save();
+      editor.trigger('change');
+      return true;
+    }
+
+    return false; // fora de listas e tabelas, Tab mantém o comportamento normal (foco)
+  }
+
   // Atalhos de teclado
   editor.$content.on('keydown' + editor.ns, function (e) {
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (handleTab(e)) e.preventDefault();
+      return;
+    }
+
     // Atalhos que usam Ctrl (Windows/Linux) ou Cmd (Mac)
     if (e.ctrlKey || e.metaKey) {
-      var key = e.key.toLowerCase();
+      var key = (e.key || '').toLowerCase();
       var prevent = false;
 
       switch (key) {
@@ -3038,6 +3243,20 @@ BasicCommandsPlugin.prototype.init = function () {
         case 'u':
           editor.exec('underline');
           prevent = true;
+          break;
+        case 'k':
+          // Ctrl+K: inserir/editar link (se o plugin de link estiver ativo)
+          if (editor.commandRegistry.commands.link) {
+            editor.exec('link');
+            prevent = true;
+          }
+          break;
+        case 'v':
+          // Ctrl+Shift+V: colar sem formatação (o paste vem logo em seguida)
+          if (e.shiftKey) {
+            editor._plainPaste = true;
+            setTimeout(function () { editor._plainPaste = false; }, 1000);
+          }
           break;
         case 'z':
           e.shiftKey ? editor.exec('redo') : editor.exec('undo');
@@ -3098,14 +3317,188 @@ SanitizerPlugin.prototype.bind = function () {
       text = window.clipboardData.getData('Text');
     }
 
+    // Ctrl+Shift+V (marcado no keydown) cola sem formatação
+    var plain = self.editor._plainPaste;
+    self.editor._plainPaste = false;
+
     // Texto puro é escapado: "<b>" colado como texto continua sendo texto.
-    var content = html ? html : self.editor.sanitizer.textToHtml(text);
+    var content = html && !plain
+      ? SanitizerPlugin.cleanOfficeHtml(html)
+      : self.editor.sanitizer.textToHtml(text || $('<div/>').html(self.editor.sanitizer.sanitize(html)).text());
 
     self.editor.history.save();
     self.rangeFormatter.insertHTML(content); // insertHTML sanitiza
     self.editor.history.save();
     self.editor.trigger('change');
   });
+};
+
+SanitizerPlugin.WORD_PATTERN = /urn:schemas-microsoft-com|class="?Mso|mso-[a-z-]+\s*:/i;
+SanitizerPlugin.GDOCS_PATTERN = /docs-internal-guid/;
+
+/** Estilos que Word e Google Docs repetem em todo trecho e só poluem o HTML. */
+SanitizerPlugin.OFFICE_NOISE_STYLES = /^(font-family|font-size|line-height|margin(-\w+)?|text-indent|white-space|vertical-align|font-variant[\w-]*|background-color|color)$/i;
+
+/**
+ * Limpa HTML colado do Word e do Google Docs antes da sanitização:
+ * - listas do Word (parágrafos com mso-list) viram <ul>/<ol> de verdade;
+ * - o <b id="docs-internal-guid"> do Google Docs (que deixaria tudo em
+ *   negrito) é removido;
+ * - classes (MsoNormal...) e estilos repetidos de fonte e margem saem.
+ * Conteúdo de outras fontes passa direto.
+ * @param {string} html
+ * @returns {string}
+ */
+SanitizerPlugin.cleanOfficeHtml = function (html) {
+  var isWord = SanitizerPlugin.WORD_PATTERN.test(html);
+  var isGDocs = SanitizerPlugin.GDOCS_PATTERN.test(html);
+  if (!isWord && !isGDocs) return html;
+
+  var doc = document.implementation.createHTMLDocument('');
+  var body = doc.body;
+  body.innerHTML = html;
+
+  // Google Docs: wrapper <b style="font-weight:normal" id="docs-internal-guid-...">
+  var wrappers = body.querySelectorAll('b[id^="docs-internal-guid"]');
+  for (var w = 0; w < wrappers.length; w++) {
+    SanitizerPlugin.unwrap(wrappers[w]);
+  }
+
+  if (isWord) SanitizerPlugin.convertWordLists(body);
+
+  // Classes e estilos repetitivos
+  var all = body.querySelectorAll('*');
+  for (var i = 0; i < all.length; i++) {
+    var el = all[i];
+    el.removeAttribute('class');
+    el.removeAttribute('lang');
+
+    var style = el.getAttribute('style');
+    if (style === null) continue;
+
+    var kept = [];
+    var decls = HtmlSanitizer.splitDeclarations(style);
+    for (var d = 0; d < decls.length; d++) {
+      var colon = decls[d].indexOf(':');
+      if (colon === -1) continue;
+      var prop = $.trim(decls[d].substring(0, colon)).toLowerCase();
+      var value = $.trim(decls[d].substring(colon + 1));
+      if (prop.indexOf('mso-') === 0 || SanitizerPlugin.OFFICE_NOISE_STYLES.test(prop)) continue;
+      // Google Docs marca negrito/itálico por estilo: "normal" não acrescenta nada
+      if ((prop === 'font-weight' && /^(normal|400)$/.test(value)) || (prop === 'font-style' && value === 'normal') || (prop === 'text-decoration' && /^none/.test(value))) continue;
+      kept.push(prop + ': ' + value);
+    }
+
+    if (kept.length) {
+      el.setAttribute('style', kept.join('; '));
+    } else {
+      el.removeAttribute('style');
+    }
+  }
+
+  // Spans sem atributos não servem para nada depois da limpeza
+  var spans = body.querySelectorAll('span');
+  for (var sp = spans.length - 1; sp >= 0; sp--) {
+    if (!spans[sp].attributes.length) SanitizerPlugin.unwrap(spans[sp]);
+  }
+
+  return body.innerHTML;
+};
+
+SanitizerPlugin.unwrap = function (el) {
+  var parent = el.parentNode;
+  if (!parent) return;
+  while (el.firstChild) parent.insertBefore(el.firstChild, el);
+  parent.removeChild(el);
+};
+
+/**
+ * O Word cola listas como parágrafos com o marcador ("·", "1.") num span
+ * mso-list:Ignore. Reconstrói as listas, inclusive aninhadas (levelN).
+ */
+SanitizerPlugin.convertWordLists = function (body) {
+  var paragraphs = Array.prototype.slice.call(body.querySelectorAll('p'));
+  var stack = []; // [{ list, level }]
+  var lastItem = null;
+  var lastParagraph = null;
+
+  for (var i = 0; i < paragraphs.length; i++) {
+    var p = paragraphs[i];
+    var style = p.getAttribute('style') || '';
+    var match = /mso-list:\s*\w+\s+level(\d+)/i.exec(style);
+
+    if (!match) {
+      stack = [];
+      lastItem = null;
+      lastParagraph = null;
+      continue;
+    }
+
+    var level = parseInt(match[1], 10) || 1;
+
+    // Parágrafos de lista separados por outro conteúdo começam outra lista
+    if (lastParagraph && !SanitizerPlugin.isNextSibling(lastParagraph, p)) {
+      stack = [];
+      lastItem = null;
+    }
+
+    // Marcador do Word: decide entre lista numerada e com marcadores
+    var marker = '';
+    var ignored = p.querySelectorAll('[style*="mso-list"]');
+    for (var m = 0; m < ignored.length; m++) {
+      if (/mso-list:\s*ignore/i.test(ignored[m].getAttribute('style') || '')) {
+        marker += ignored[m].textContent;
+        ignored[m].parentNode.removeChild(ignored[m]);
+      }
+    }
+    var ordered = /^\s*(\d+|[a-zA-Z]|[ivxlcdmIVXLCDM]+)[.)]/.test(marker);
+    var tag = ordered ? 'ol' : 'ul';
+
+    while (stack.length && stack[stack.length - 1].level > level) stack.pop();
+
+    var top = stack[stack.length - 1];
+    if (!top || top.level < level) {
+      var list = body.ownerDocument.createElement(tag);
+      if (top && lastItem) {
+        lastItem.appendChild(list); // sublista dentro do item anterior
+      } else {
+        p.parentNode.insertBefore(list, p);
+      }
+      stack.push({ list: list, level: level });
+      top = stack[stack.length - 1];
+    }
+
+    var li = body.ownerDocument.createElement('li');
+    while (p.firstChild) li.appendChild(p.firstChild);
+    // Remove o espaçamento que o Word põe depois do marcador
+    if (li.firstChild && li.firstChild.nodeType === 3) {
+      li.firstChild.nodeValue = li.firstChild.nodeValue.replace(/^\s+/, '');
+    }
+    top.list.appendChild(li);
+    lastItem = li;
+
+    var placeholder = body.ownerDocument.createComment('weaver-list');
+    p.parentNode.replaceChild(placeholder, p);
+    lastParagraph = placeholder;
+  }
+
+  // Remove os marcadores de posição usados para saber a ordem
+  var walker = body.ownerDocument.createTreeWalker(body, NodeFilter.SHOW_COMMENT, null, false);
+  var comments = [];
+  var c;
+  while ((c = walker.nextNode())) comments.push(c);
+  for (var k = 0; k < comments.length; k++) {
+    if (comments[k].nodeValue === 'weaver-list') comments[k].parentNode.removeChild(comments[k]);
+  }
+};
+
+/** Indica se b vem logo depois de a (ignorando espaços e listas criadas). */
+SanitizerPlugin.isNextSibling = function (a, b) {
+  var node = a.nextSibling;
+  while (node && ((node.nodeType === 3 && !/\S/.test(node.nodeValue)) || (node.nodeType === 1 && /^(UL|OL)$/.test(node.tagName)))) {
+    node = node.nextSibling;
+  }
+  return node === b;
 };
 
 /**
@@ -3963,6 +4356,9 @@ function ImagePlugin(editor) {
   this.$toolbar = null;
 }
 
+/** Formatos aceitos: só raster (SVG pode carregar script). */
+ImagePlugin.ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
+
 ImagePlugin.prototype.init = function () {
   var self = this;
 
@@ -3974,13 +4370,14 @@ ImagePlugin.prototype.init = function () {
   });
 
   this.buildToolbar();
+  this.buildResizeHandle();
   this.bindContentEvents();
   this.bindDragAndDrop();
 };
 
 ImagePlugin.prototype.buildToolbar = function () {
   var self = this;
-  this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-white border border-gray-200 p-1.5 rounded flex flex-row flex-nowrap w-max gap-1 z-50 shadow-lg"></div>');
+  this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-white border border-gray-200 p-1.5 rounded flex flex-row flex-nowrap w-max gap-1 z-50 shadow-lg" role="toolbar" aria-label="Ferramentas da imagem"></div>');
 
   var buttons = [
     { label: '100%', title: 'Largura 100%', action: function() { self.resizeImage('100%'); } },
@@ -3991,6 +4388,7 @@ ImagePlugin.prototype.buildToolbar = function () {
     { label: '<i data-lucide="align-center"></i>', title: 'Centralizar', action: function() { self.setFloat('center'); } },
     { label: '<i data-lucide="align-right"></i>', title: 'Flutuar à Direita', action: function() { self.setFloat('right'); } },
     { label: '<i data-lucide="align-justify"></i>', title: 'Remover Flutuação', action: function() { self.removeFloat(); } },
+    { label: 'Alt', title: 'Texto alternativo', name: 'alt', action: function() { self.toggleAltEditor(); } },
     { label: '<i data-lucide="trash-2"></i>', title: 'Remover Imagem', action: function() { self.removeImage(); } }
   ];
 
@@ -3998,12 +4396,95 @@ ImagePlugin.prototype.buildToolbar = function () {
     var $btn = $('<button type="button" class="flex items-center justify-center min-w-[32px] h-8 px-2 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none [&>svg]:w-4 [&>svg]:h-4 text-xs font-medium"></button>')
       .html(btnData.label)
       .attr('title', btnData.title)
+      .attr('aria-label', btnData.title)
       .on('mousedown', function(e) { e.preventDefault(); }) // Evita perder o foco
       .on('click', btnData.action);
+    if (btnData.name) $btn.attr('data-name', 'image-' + btnData.name);
     self.$toolbar.append($btn);
   });
 
+  // Editor do texto alternativo (descrição para leitores de tela e SEO)
+  this.$altBox = $('<div class="editor-image-alt"/>').hide();
+  this.$altInput = $('<input type="text" placeholder="Descreva a imagem" aria-label="Texto alternativo da imagem">');
+  var $altSave = $('<button type="button" class="flex items-center justify-center h-8 px-2 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 text-xs font-medium">OK</button>');
+  this.$altBox.append(this.$altInput, $altSave);
+  this.$toolbar.append(this.$altBox);
+
+  $altSave.on('click', function () { self.saveAlt(); });
+  this.$altInput.on('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      self.saveAlt();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      self.$altBox.hide();
+    }
+  });
+
   this.editor.$container.append(this.$toolbar);
+};
+
+ImagePlugin.prototype.toggleAltEditor = function () {
+  if (!this.activeImage) return;
+  if (this.$altBox.is(':visible')) {
+    this.$altBox.hide();
+    return;
+  }
+  this.$altInput.val(this.activeImage.getAttribute('alt') || '');
+  this.$altBox.css('display', 'flex');
+  this.positionToolbar();
+  this.$altInput.focus();
+};
+
+ImagePlugin.prototype.saveAlt = function () {
+  if (!this.activeImage) return;
+  var alt = $.trim(this.$altInput.val());
+  this.editor.history.save();
+  this.activeImage.setAttribute('alt', alt);
+  this.editor.history.save();
+  this.editor.trigger('change');
+  this.$altBox.hide();
+  this.positionToolbar();
+};
+
+/**
+ * Alça no canto da imagem para redimensionar arrastando (mouse, toque ou caneta).
+ */
+ImagePlugin.prototype.buildResizeHandle = function () {
+  var self = this;
+  this.$handle = $('<div class="editor-image-resize" title="Arraste para redimensionar" aria-hidden="true"/>').hide();
+  this.editor.$container.append(this.$handle);
+
+  var drag = null;
+
+  this.$handle.on('pointerdown', function (e) {
+    if (!self.activeImage) return;
+    e.preventDefault();
+    var oe = e.originalEvent;
+    drag = {
+      startX: oe.clientX,
+      startWidth: self.activeImage.getBoundingClientRect().width,
+      maxWidth: self.editor.$content[0].clientWidth
+    };
+    self.editor.history.save();
+    if (this.setPointerCapture) this.setPointerCapture(oe.pointerId);
+  });
+
+  this.$handle.on('pointermove', function (e) {
+    if (!drag || !self.activeImage) return;
+    var width = Math.round(drag.startWidth + (e.originalEvent.clientX - drag.startX));
+    width = Math.max(30, Math.min(width, drag.maxWidth));
+    self.activeImage.style.width = width + 'px';
+    self.activeImage.style.height = 'auto';
+    self.positionToolbar();
+  });
+
+  this.$handle.on('pointerup pointercancel', function () {
+    if (!drag) return;
+    drag = null;
+    self.editor.history.save();
+    self.editor.trigger('change');
+  });
 };
 
 ImagePlugin.prototype.bindContentEvents = function () {
@@ -4015,56 +4496,77 @@ ImagePlugin.prototype.bindContentEvents = function () {
     self.showToolbar(this);
   });
 
+  // Barra e alça não acompanham a rolagem; escondem ao rolar ou editar
+  this.editor.$content.on('scroll' + this.editor.ns + ' input' + this.editor.ns, function () {
+    if (self.activeImage) self.hideToolbar();
+  });
+
   // Esconde a barra de ferramentas ao clicar fora
   $(document).on('click' + this.editor.ns, function (e) {
-    if (self.activeImage && !$(e.target).is(self.activeImage) && !self.$toolbar.is(e.target) && self.$toolbar.has(e.target).length === 0) {
+    if (self.activeImage && !$(e.target).is(self.activeImage) && !self.$toolbar.is(e.target) && self.$toolbar.has(e.target).length === 0 && !self.$handle.is(e.target)) {
       self.hideToolbar();
     }
   });
 };
 
 ImagePlugin.prototype.showToolbar = function (img) {
-  if (this.activeImage) {
-    $(this.activeImage).removeClass('active');
+  if (this.activeImage && this.activeImage !== img) {
+    $(this.activeImage).removeClass('weaver-selected');
+    this.$altBox.hide();
   }
 
   this.activeImage = img;
-  $(this.activeImage).addClass('active');
-
-  var $img = $(img);
-  var imgPos = $img.position(); // Posição relativa ao editor
+  // Classe de estado: removida do HTML salvo por Editor.cleanOutput
+  $(this.activeImage).addClass('weaver-selected');
 
   // Força o display flex (evita o display: block padrão do jQuery que quebra a linha)
-  this.$toolbar.css('display', 'flex'); 
-
-  var topPos = imgPos.top - this.$toolbar.outerHeight() - 5;
-  if (topPos < 0) {
-    topPos = imgPos.top + $img.outerHeight() + 5; // Joga pra baixo da imagem se vazar pelo topo da tela
-  }
-
-  var leftPos = imgPos.left + ($img.width() / 2) - (this.$toolbar.outerWidth() / 2);
-  if (leftPos < 0) leftPos = 5; // Impede vazar pela esquerda
-
-  this.$toolbar.css({
-    top: topPos,
-    left: leftPos
-  });
-
-  // Verifica se o painel vazou pela direita
-  if (this.$toolbar[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
-    var diff = this.$toolbar[0].getBoundingClientRect().right - this.editor.$container[0].getBoundingClientRect().right;
-    this.$toolbar.css('left', leftPos - diff - 5);
-  }
+  this.$toolbar.css('display', 'flex');
+  this.positionToolbar();
 
   WysiwygEditor.renderIcons(this.$toolbar[0]);
 };
 
+ImagePlugin.prototype.positionToolbar = function () {
+  var img = this.activeImage;
+  if (!img || !img.parentNode) return;
+
+  var containerRect = this.editor.$container[0].getBoundingClientRect();
+  var imgRect = img.getBoundingClientRect();
+  var top = imgRect.top - containerRect.top;
+  var left = imgRect.left - containerRect.left;
+
+  var topPos = top - this.$toolbar.outerHeight() - 5;
+  if (topPos < 0) {
+    topPos = top + imgRect.height + 5; // Joga pra baixo da imagem se vazar pelo topo
+  }
+
+  var leftPos = left + (imgRect.width / 2) - (this.$toolbar.outerWidth() / 2);
+  if (leftPos < 0) leftPos = 5; // Impede vazar pela esquerda
+
+  this.$toolbar.css({ top: topPos, left: leftPos });
+
+  // Verifica se o painel vazou pela direita
+  var overflow = this.$toolbar[0].getBoundingClientRect().right - containerRect.right;
+  if (overflow > 0) {
+    this.$toolbar.css('left', Math.max(5, leftPos - overflow - 5));
+  }
+
+  this.$handle.css({
+    display: 'block',
+    top: top + imgRect.height - 7,
+    left: left + imgRect.width - 7
+  });
+};
+
 ImagePlugin.prototype.hideToolbar = function () {
   if (this.activeImage) {
-    $(this.activeImage).removeClass('active');
+    $(this.activeImage).removeClass('weaver-selected');
+    if (!this.activeImage.getAttribute('class')) this.activeImage.removeAttribute('class');
   }
   this.activeImage = null;
   this.$toolbar.hide();
+  this.$handle.hide();
+  this.$altBox.hide();
 };
 
 // Ações da Barra de Ferramentas
@@ -4130,7 +4632,7 @@ ImagePlugin.prototype.openFileDialog = function () {
     this.savedRange = null;
   }
 
-  var $input = $('<input type="file" accept="image/*" style="display:none">');
+  var $input = $('<input type="file" style="display:none">').attr('accept', ImagePlugin.ACCEPTED_TYPES.join(','));
 
   $input.on('change', function () {
     var file = this.files[0];
@@ -4229,8 +4731,8 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
     if (hasFiles(e)) {
       self.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
       var files = dt.files;
-      if (files && files.length > 0 && /^image\//.test(files[0].type)) {
-        self.insertImage(files[0]);
+      if (files && files.length > 0) {
+        self.insertImage(files[0]); // valida formato e tamanho
       }
       return;
     }
@@ -4247,47 +4749,116 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
   });
 };
 
+/**
+ * Valida, envia (ou embute) e insere uma imagem.
+ * - Formatos: PNG, JPG, GIF, WebP, AVIF. Tamanho: options.maxImageSize.
+ * - Com options.uploadImage(file, done): chame done(url) no sucesso ou
+ *   done(null, 'mensagem') no erro; a mensagem aparece no editor.
+ * - Sem uploadImage: a imagem é embutida em base64, reduzida para no máximo
+ *   options.imageMaxWidth px de largura (GIF fica como está, por ser animado).
+ */
 ImagePlugin.prototype.insertImage = function (file) {
   var self = this;
-  var uploadFn = this.editor.options.uploadImage;
+  var editor = this.editor;
+  var options = editor.options;
+  var uploadFn = options.uploadImage;
+
+  if (!file || ImagePlugin.ACCEPTED_TYPES.indexOf(file.type) === -1) {
+    editor.notify('Formato de imagem não suportado. Use PNG, JPG, GIF, WebP ou AVIF.', { type: 'error' });
+    return;
+  }
+
+  if (options.maxImageSize && file.size > options.maxImageSize) {
+    editor.notify('A imagem tem ' + ImagePlugin.formatSize(file.size) + '. O máximo é ' + ImagePlugin.formatSize(options.maxImageSize) + '.', { type: 'error' });
+    return;
+  }
 
   var doInsert = function (url) {
     // A URL pode vir do callback de upload do integrador: valida o protocolo.
     // data: só para formatos raster (SVG pode carregar script).
-    if (!self.editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
-      if (window.console && console.warn) console.warn('Weaver: URL de imagem recusada', url);
+    if (!editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
+      editor.notify('O endereço da imagem foi recusado por segurança.', { type: 'error' });
       return;
     }
 
-    self.editor.$content.focus();
+    editor.$content.focus();
     if (self.savedRange) {
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(self.savedRange);
+      editor.selection.setRange(self.savedRange);
     }
     
     // Cria o elemento img
     var img = document.createElement('img');
     img.src = url;
+    img.setAttribute('alt', '');
     
-    self.editor.history.save();
+    editor.history.save();
     self.rangeFormatter.insertNode(img, false);
-    self.editor.history.save();
+    editor.history.save();
     
-    self.editor.trigger('change');
+    editor.trigger('change');
   };
 
   if (uploadFn && typeof uploadFn === 'function') {
-    uploadFn(file, function (url) {
+    editor.notify('Enviando imagem…', { timeout: 0 });
+    var finished = false;
+    uploadFn(file, function (url, error) {
+      if (finished) return;
+      finished = true;
+      if (error || !url) {
+        editor.notify(typeof error === 'string' ? error : 'Não foi possível enviar a imagem.', { type: 'error' });
+        return;
+      }
+      editor.notify('');
       doInsert(url);
-    });
-  } else {
-    var reader = new FileReader();
-    reader.onload = function (e) {
-      doInsert(e.target.result);
-    };
-    reader.readAsDataURL(file);
+    }, editor);
+    return;
   }
+
+  var reader = new FileReader();
+  reader.onerror = function () {
+    editor.notify('Não foi possível ler a imagem.', { type: 'error' });
+  };
+  reader.onload = function (e) {
+    ImagePlugin.downscale(e.target.result, file.type, options.imageMaxWidth, doInsert);
+  };
+  reader.readAsDataURL(file);
+};
+
+ImagePlugin.formatSize = function (bytes) {
+  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1).replace('.0', '') + ' MB';
+  return Math.round(bytes / 1024) + ' KB';
+};
+
+/**
+ * Reduz a imagem para maxWidth px (mantendo a proporção) antes de embutir.
+ * Fotos de celular com 4000 px viravam vários MB de base64 no HTML salvo.
+ */
+ImagePlugin.downscale = function (dataUrl, type, maxWidth, done) {
+  if (!maxWidth || type === 'image/gif') {
+    done(dataUrl);
+    return;
+  }
+
+  var image = new Image();
+  image.onload = function () {
+    if (image.naturalWidth <= maxWidth) {
+      done(dataUrl);
+      return;
+    }
+    var ratio = maxWidth / image.naturalWidth;
+    var canvas = document.createElement('canvas');
+    canvas.width = maxWidth;
+    canvas.height = Math.round(image.naturalHeight * ratio);
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    var outType = type === 'image/png' ? 'image/png' : 'image/jpeg';
+    try {
+      done(canvas.toDataURL(outType, 0.85));
+    } catch (e) {
+      done(dataUrl);
+    }
+  };
+  image.onerror = function () { done(dataUrl); };
+  image.src = dataUrl;
 };
 
 window.ImagePlugin = ImagePlugin;
