@@ -111,17 +111,20 @@ ToolbarPlugin.prototype.render = function () {
           var $item = $('<div class="editor-dropdown-item px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 border-b border-gray-50 last:border-0 leading-tight"/>')
             .html(btn.options[j].label)
             .attr('role', 'menuitem')
-            .attr('tabindex', '0')
+            .attr('tabindex', '-1')
             .attr('data-value', btn.options[j].value);
           
           $item.on('mousedown', function(e) { e.preventDefault(); }); // Evita perder o foco
           $item.on('click', function(e) {
             var val = $(this).attr('data-value');
+            var fromKeyboard = $menu[0].contains(document.activeElement);
             if (val) {
               editor.exec(btn.name, val);
             }
             $menu.hide();
+            $btn.attr('aria-expanded', 'false');
             self.updateState();
+            if (fromKeyboard) editor.$content[0].focus();
           });
           $menu.append($item);
         }
@@ -146,6 +149,30 @@ ToolbarPlugin.prototype.render = function () {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
+          }
+        });
+
+        // Teclado: Enter/Espaço/seta para baixo abrem e focam o primeiro item;
+        // setas navegam; Esc fecha e devolve o foco ao botão
+        WysiwygEditor.menuKeyboard($menu, {
+          items: '[role="menuitem"]',
+          close: function (returnFocus) {
+            $menu.hide();
+            $btn.attr('aria-expanded', 'false');
+            if (returnFocus) $btn[0].focus();
+          }
+        });
+        $btn.on('click', function (e) {
+          // e.detail === 0: ativado pelo teclado (Enter/Espaço)
+          if (e.detail === 0 && $menu.is(':visible')) {
+            $menu.find('[role="menuitem"]').first().focus();
+          }
+        });
+        $btn.on('keydown', function (e) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!$menu.is(':visible')) $btn.trigger('click');
+            $menu.find('[role="menuitem"]').first().focus();
           }
         });
 
@@ -183,14 +210,17 @@ ToolbarPlugin.prototype.render = function () {
               .attr('title', subBtn.title || '')
               .attr('aria-label', subBtn.title || '')
               .attr('role', 'menuitem')
+              .attr('tabindex', '-1')
               .html(subBtn.label)
               .on('mousedown', function(e) { e.preventDefault(); })
               .on('click', (function(cmdName) {
                 return function(e) {
+                  var fromKeyboard = $menu[0].contains(document.activeElement);
                   editor.exec(cmdName);
                   $menu.hide();
                   $btn.attr('aria-expanded', 'false');
                   self.updateState();
+                  if (fromKeyboard) editor.$content[0].focus();
                 };
               })(subBtn.name));
 
@@ -220,6 +250,30 @@ ToolbarPlugin.prototype.render = function () {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
+          }
+        });
+
+        // Teclado: Enter/Espaço/seta para baixo abrem e focam o primeiro item;
+        // setas navegam; Esc fecha e devolve o foco ao botão
+        WysiwygEditor.menuKeyboard($menu, {
+          items: '[role="menuitem"]',
+          close: function (returnFocus) {
+            $menu.hide();
+            $btn.attr('aria-expanded', 'false');
+            if (returnFocus) $btn[0].focus();
+          }
+        });
+        $btn.on('click', function (e) {
+          // e.detail === 0: ativado pelo teclado (Enter/Espaço)
+          if (e.detail === 0 && $menu.is(':visible')) {
+            $menu.find('[role="menuitem"]').first().focus();
+          }
+        });
+        $btn.on('keydown', function (e) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!$menu.is(':visible')) $btn.trigger('click');
+            $menu.find('[role="menuitem"]').first().focus();
           }
         });
 
