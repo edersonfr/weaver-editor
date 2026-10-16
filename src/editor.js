@@ -89,6 +89,21 @@
     
     this.isTextarea = this.$el.is('textarea');
 
+    // Se a página tem <label for="..."> para o textarea, ele vira o nome
+    // acessível da área de edição (em vez do genérico "Editor de conteúdo")
+    var elId = this.$el.attr('id');
+    var $label = elId ? $('label[for="' + elId + '"]') : $();
+    if ($label.length) {
+      if (!$label.attr('id')) $label.attr('id', elId + '-weaver-label');
+      this.$content.removeAttr('aria-label').attr('aria-labelledby', $label.attr('id'));
+      // Clicar no label foca o editor, já que o textarea fica escondido
+      var content = this.$content[0];
+      $label.on('click' + this.ns, function (e) {
+        e.preventDefault();
+        content.focus();
+      });
+    }
+
     if (this.isTextarea) {
       // Oculta o textarea nativo e injeta a interface do editor na frente dele
       this.$el.hide();
@@ -186,6 +201,131 @@
     }
   };
 
+  // =========================
+  // ACESSIBILIDADE (teclado e leitores de tela)
+  // =========================
+
+  Editor.FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  /**
+   * Transforma um popover (link, vídeo, IA...) num diálogo acessível:
+   * role="dialog" com nome, rótulos ligados aos campos, Esc fecha e devolve
+   * o foco ao botão que abriu, e Tab circula só dentro do popover.
+   * @param {jQuery} $popover
+   * @param {{label: string, name: string, close: function}} opts
+   */
+  Editor.prototype.dialogize = function ($popover, opts) {
+    var self = this;
+    var prefix = 'weaver' + this.id + '-' + opts.name;
+
+    $popover.attr({ role: 'dialog', 'aria-label': opts.label });
+
+    // <label> sem for: liga ao campo do mesmo grupo
+    $popover.find('label').each(function (i) {
+      var label = this;
+      if (label.htmlFor || label.querySelector('input, textarea, select')) return;
+      var field = label.parentNode.querySelector('input, textarea, select');
+      if (!field) return;
+      if (!field.id) field.id = prefix + '-field-' + i;
+      label.htmlFor = field.id;
+    });
+
+    // Mensagens de erro descrevem o campo ao lado
+    $popover.find('[role="alert"]').each(function (i) {
+      var msg = this;
+      var field = msg.parentNode.querySelector('input, textarea');
+      if (!field) return;
+      if (!msg.id) msg.id = prefix + '-error-' + i;
+      field.setAttribute('aria-describedby', msg.id);
+    });
+
+    $popover.on('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        opts.close();
+        self.focusToolbarButton(opts.name);
+        return;
+      }
+
+      if (e.key !== 'Tab') return;
+
+      var focusable = $popover.find(Editor.FOCUSABLE).filter(':visible');
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+  };
+
+  /** Devolve o foco ao botão da barra (ou ao conteúdo, se ele não existir). */
+  Editor.prototype.focusToolbarButton = function (name) {
+    var $btn = this.$toolbar.find('[data-name="' + name + '"]').first();
+    if ($btn.length && $btn.is(':visible')) {
+      $btn[0].focus();
+    } else {
+      this.$content[0].focus();
+    }
+  };
+
+  /**
+   * Navegação por teclado num menu (role="menu"): setas movem entre os itens,
+   * Home/End vão às pontas, Enter/Espaço ativam e Esc fecha.
+   * @param {jQuery} $menu
+   * @param {{items: string, close: function}} opts
+   */
+  Editor.menuKeyboard = function ($menu, opts) {
+    $menu.on('keydown', function (e) {
+      var items = $menu.find(opts.items).filter(':visible');
+      var index = items.index(document.activeElement);
+      var next = null;
+
+      switch (e.key) {
+        case 'ArrowDown':
+        case 'ArrowRight':
+          next = items[(index + 1) % items.length];
+          break;
+        case 'ArrowUp':
+        case 'ArrowLeft':
+          next = items[(index - 1 + items.length) % items.length];
+          break;
+        case 'Home':
+          next = items[0];
+          break;
+        case 'End':
+          next = items[items.length - 1];
+          break;
+        case 'Enter':
+        case ' ':
+          if (index !== -1) {
+            e.preventDefault();
+            $(items[index]).trigger('click');
+          }
+          return;
+        case 'Escape':
+          e.preventDefault();
+          e.stopPropagation();
+          opts.close(true);
+          return;
+        case 'Tab':
+          opts.close(false);
+          return;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      if (next) next.focus();
+    });
+  };
+
   Editor.PLUGIN_NAMES = [
     'ToolbarPlugin', 'BasicCommandsPlugin', 'SanitizerPlugin', 'NormalizerPlugin', 'HistoryPlugin',
     'LinkPlugin', 'TablePlugin', 'ImagePlugin', 'VideoPlugin', 'CodeViewPlugin', 'PreviewPlugin',
@@ -239,6 +379,34 @@
     this.$content.on('keyup' + this.ns + ' mouseup' + this.ns, function () {
       self.updateToolbar();
     });
+
+    // Alt+F10 leva o foco para a barra de ferramentas (padrão de editores)
+    this.$content.on('keydown' + this.ns, function (e) {
+      if (e.altKey && e.key === 'F10') {
+        e.preventDefault();
+        var first = self.$toolbar.find('button:visible:not([disabled])').first();
+        if (first.length) first[0].focus();
+      }
+    });
+
+    // Barra de ferramentas: setas esquerda/direita andam entre os botões;
+    // Esc volta para o texto
+    this.$toolbar.on('keydown' + this.ns, function (e) {
+      if ($(e.target).closest('[role="menu"]').length) return;
+
+      var buttons = self.$toolbar.find('.editor-toolbar-group > button, .editor-toolbar-group > .editor-dropdown-wrapper > button').filter(':visible:not([disabled])');
+      var index = buttons.index(e.target);
+      if (index === -1) return;
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        var step = e.key === 'ArrowRight' ? 1 : -1;
+        buttons[(index + step + buttons.length) % buttons.length].focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        self.$content[0].focus();
+      }
+    });
   };
 
   /**
@@ -256,6 +424,7 @@
 
     $(document).off(this.ns);
     $(window).off(this.ns);
+    $('label').off(this.ns);
     this.$el.closest('form').off(this.ns);
     this.$content.off(this.ns);
 
@@ -496,6 +665,7 @@
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
+      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid #2563eb !important; outline-offset: 1px; }\n' +
       '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
       '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
       '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +

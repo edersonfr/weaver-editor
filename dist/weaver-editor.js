@@ -1767,6 +1767,21 @@ window.RangeFormatter = RangeFormatter;
     
     this.isTextarea = this.$el.is('textarea');
 
+    // Se a página tem <label for="..."> para o textarea, ele vira o nome
+    // acessível da área de edição (em vez do genérico "Editor de conteúdo")
+    var elId = this.$el.attr('id');
+    var $label = elId ? $('label[for="' + elId + '"]') : $();
+    if ($label.length) {
+      if (!$label.attr('id')) $label.attr('id', elId + '-weaver-label');
+      this.$content.removeAttr('aria-label').attr('aria-labelledby', $label.attr('id'));
+      // Clicar no label foca o editor, já que o textarea fica escondido
+      var content = this.$content[0];
+      $label.on('click' + this.ns, function (e) {
+        e.preventDefault();
+        content.focus();
+      });
+    }
+
     if (this.isTextarea) {
       // Oculta o textarea nativo e injeta a interface do editor na frente dele
       this.$el.hide();
@@ -1864,6 +1879,131 @@ window.RangeFormatter = RangeFormatter;
     }
   };
 
+  // =========================
+  // ACESSIBILIDADE (teclado e leitores de tela)
+  // =========================
+
+  Editor.FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  /**
+   * Transforma um popover (link, vídeo, IA...) num diálogo acessível:
+   * role="dialog" com nome, rótulos ligados aos campos, Esc fecha e devolve
+   * o foco ao botão que abriu, e Tab circula só dentro do popover.
+   * @param {jQuery} $popover
+   * @param {{label: string, name: string, close: function}} opts
+   */
+  Editor.prototype.dialogize = function ($popover, opts) {
+    var self = this;
+    var prefix = 'weaver' + this.id + '-' + opts.name;
+
+    $popover.attr({ role: 'dialog', 'aria-label': opts.label });
+
+    // <label> sem for: liga ao campo do mesmo grupo
+    $popover.find('label').each(function (i) {
+      var label = this;
+      if (label.htmlFor || label.querySelector('input, textarea, select')) return;
+      var field = label.parentNode.querySelector('input, textarea, select');
+      if (!field) return;
+      if (!field.id) field.id = prefix + '-field-' + i;
+      label.htmlFor = field.id;
+    });
+
+    // Mensagens de erro descrevem o campo ao lado
+    $popover.find('[role="alert"]').each(function (i) {
+      var msg = this;
+      var field = msg.parentNode.querySelector('input, textarea');
+      if (!field) return;
+      if (!msg.id) msg.id = prefix + '-error-' + i;
+      field.setAttribute('aria-describedby', msg.id);
+    });
+
+    $popover.on('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        opts.close();
+        self.focusToolbarButton(opts.name);
+        return;
+      }
+
+      if (e.key !== 'Tab') return;
+
+      var focusable = $popover.find(Editor.FOCUSABLE).filter(':visible');
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+  };
+
+  /** Devolve o foco ao botão da barra (ou ao conteúdo, se ele não existir). */
+  Editor.prototype.focusToolbarButton = function (name) {
+    var $btn = this.$toolbar.find('[data-name="' + name + '"]').first();
+    if ($btn.length && $btn.is(':visible')) {
+      $btn[0].focus();
+    } else {
+      this.$content[0].focus();
+    }
+  };
+
+  /**
+   * Navegação por teclado num menu (role="menu"): setas movem entre os itens,
+   * Home/End vão às pontas, Enter/Espaço ativam e Esc fecha.
+   * @param {jQuery} $menu
+   * @param {{items: string, close: function}} opts
+   */
+  Editor.menuKeyboard = function ($menu, opts) {
+    $menu.on('keydown', function (e) {
+      var items = $menu.find(opts.items).filter(':visible');
+      var index = items.index(document.activeElement);
+      var next = null;
+
+      switch (e.key) {
+        case 'ArrowDown':
+        case 'ArrowRight':
+          next = items[(index + 1) % items.length];
+          break;
+        case 'ArrowUp':
+        case 'ArrowLeft':
+          next = items[(index - 1 + items.length) % items.length];
+          break;
+        case 'Home':
+          next = items[0];
+          break;
+        case 'End':
+          next = items[items.length - 1];
+          break;
+        case 'Enter':
+        case ' ':
+          if (index !== -1) {
+            e.preventDefault();
+            $(items[index]).trigger('click');
+          }
+          return;
+        case 'Escape':
+          e.preventDefault();
+          e.stopPropagation();
+          opts.close(true);
+          return;
+        case 'Tab':
+          opts.close(false);
+          return;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      if (next) next.focus();
+    });
+  };
+
   Editor.PLUGIN_NAMES = [
     'ToolbarPlugin', 'BasicCommandsPlugin', 'SanitizerPlugin', 'NormalizerPlugin', 'HistoryPlugin',
     'LinkPlugin', 'TablePlugin', 'ImagePlugin', 'VideoPlugin', 'CodeViewPlugin', 'PreviewPlugin',
@@ -1917,6 +2057,34 @@ window.RangeFormatter = RangeFormatter;
     this.$content.on('keyup' + this.ns + ' mouseup' + this.ns, function () {
       self.updateToolbar();
     });
+
+    // Alt+F10 leva o foco para a barra de ferramentas (padrão de editores)
+    this.$content.on('keydown' + this.ns, function (e) {
+      if (e.altKey && e.key === 'F10') {
+        e.preventDefault();
+        var first = self.$toolbar.find('button:visible:not([disabled])').first();
+        if (first.length) first[0].focus();
+      }
+    });
+
+    // Barra de ferramentas: setas esquerda/direita andam entre os botões;
+    // Esc volta para o texto
+    this.$toolbar.on('keydown' + this.ns, function (e) {
+      if ($(e.target).closest('[role="menu"]').length) return;
+
+      var buttons = self.$toolbar.find('.editor-toolbar-group > button, .editor-toolbar-group > .editor-dropdown-wrapper > button').filter(':visible:not([disabled])');
+      var index = buttons.index(e.target);
+      if (index === -1) return;
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        var step = e.key === 'ArrowRight' ? 1 : -1;
+        buttons[(index + step + buttons.length) % buttons.length].focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        self.$content[0].focus();
+      }
+    });
   };
 
   /**
@@ -1934,6 +2102,7 @@ window.RangeFormatter = RangeFormatter;
 
     $(document).off(this.ns);
     $(window).off(this.ns);
+    $('label').off(this.ns);
     this.$el.closest('form').off(this.ns);
     this.$content.off(this.ns);
 
@@ -2174,6 +2343,7 @@ window.RangeFormatter = RangeFormatter;
     // Convertido para concatenação de strings para garantir a compatibilidade com o ES5
     var css = 
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
+      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid #2563eb !important; outline-offset: 1px; }\n' +
       '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
       '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
       '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
@@ -2476,17 +2646,20 @@ ToolbarPlugin.prototype.render = function () {
           var $item = $('<div class="editor-dropdown-item px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 border-b border-gray-50 last:border-0 leading-tight"/>')
             .html(btn.options[j].label)
             .attr('role', 'menuitem')
-            .attr('tabindex', '0')
+            .attr('tabindex', '-1')
             .attr('data-value', btn.options[j].value);
           
           $item.on('mousedown', function(e) { e.preventDefault(); }); // Evita perder o foco
           $item.on('click', function(e) {
             var val = $(this).attr('data-value');
+            var fromKeyboard = $menu[0].contains(document.activeElement);
             if (val) {
               editor.exec(btn.name, val);
             }
             $menu.hide();
+            $btn.attr('aria-expanded', 'false');
             self.updateState();
+            if (fromKeyboard) editor.$content[0].focus();
           });
           $menu.append($item);
         }
@@ -2511,6 +2684,30 @@ ToolbarPlugin.prototype.render = function () {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
+          }
+        });
+
+        // Teclado: Enter/Espaço/seta para baixo abrem e focam o primeiro item;
+        // setas navegam; Esc fecha e devolve o foco ao botão
+        WysiwygEditor.menuKeyboard($menu, {
+          items: '[role="menuitem"]',
+          close: function (returnFocus) {
+            $menu.hide();
+            $btn.attr('aria-expanded', 'false');
+            if (returnFocus) $btn[0].focus();
+          }
+        });
+        $btn.on('click', function (e) {
+          // e.detail === 0: ativado pelo teclado (Enter/Espaço)
+          if (e.detail === 0 && $menu.is(':visible')) {
+            $menu.find('[role="menuitem"]').first().focus();
+          }
+        });
+        $btn.on('keydown', function (e) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!$menu.is(':visible')) $btn.trigger('click');
+            $menu.find('[role="menuitem"]').first().focus();
           }
         });
 
@@ -2548,14 +2745,17 @@ ToolbarPlugin.prototype.render = function () {
               .attr('title', subBtn.title || '')
               .attr('aria-label', subBtn.title || '')
               .attr('role', 'menuitem')
+              .attr('tabindex', '-1')
               .html(subBtn.label)
               .on('mousedown', function(e) { e.preventDefault(); })
               .on('click', (function(cmdName) {
                 return function(e) {
+                  var fromKeyboard = $menu[0].contains(document.activeElement);
                   editor.exec(cmdName);
                   $menu.hide();
                   $btn.attr('aria-expanded', 'false');
                   self.updateState();
+                  if (fromKeyboard) editor.$content[0].focus();
                 };
               })(subBtn.name));
 
@@ -2585,6 +2785,30 @@ ToolbarPlugin.prototype.render = function () {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
+          }
+        });
+
+        // Teclado: Enter/Espaço/seta para baixo abrem e focam o primeiro item;
+        // setas navegam; Esc fecha e devolve o foco ao botão
+        WysiwygEditor.menuKeyboard($menu, {
+          items: '[role="menuitem"]',
+          close: function (returnFocus) {
+            $menu.hide();
+            $btn.attr('aria-expanded', 'false');
+            if (returnFocus) $btn[0].focus();
+          }
+        });
+        $btn.on('click', function (e) {
+          // e.detail === 0: ativado pelo teclado (Enter/Espaço)
+          if (e.detail === 0 && $menu.is(':visible')) {
+            $menu.find('[role="menuitem"]').first().focus();
+          }
+        });
+        $btn.on('keydown', function (e) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!$menu.is(':visible')) $btn.trigger('click');
+            $menu.find('[role="menuitem"]').first().focus();
           }
         });
 
@@ -3816,6 +4040,21 @@ LinkPlugin.prototype.buildPopover = function () {
 
   this.editor.$container.append(this.$popover);
 
+  // Enter num campo de texto confirma
+  this.$popover.on('keydown', 'input[type="text"]', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $btnSave.trigger('click');
+    }
+  });
+
+  // Diálogo acessível: rótulos ligados, Esc fecha e Tab fica no popover
+  this.editor.dialogize(this.$popover, {
+    name: 'link',
+    label: 'Inserir link',
+    close: function () { self.togglePopover(false); }
+  });
+
   // Evita que clicar no popover faça o editor perder o foco
   this.$popover.on('mousedown', function (e) {
     if (e.target.tagName !== 'INPUT') {
@@ -4063,7 +4302,20 @@ TablePlugin.prototype.buildGrid = function () {
     }
   }
 
-  var $label = $('<div class="grid-label text-center text-xs mt-2 text-gray-500 font-sans">0 x 0</div>');
+  var $label = $('<div class="grid-label text-center text-xs mt-2 text-gray-500 font-sans" aria-live="polite">0 x 0</div>');
+
+  // Grade operável pelo teclado: setas escolhem linhas/colunas, Enter insere
+  this.$grid.attr({ tabindex: '0', role: 'dialog', 'aria-label': 'Inserir tabela: use as setas para escolher o tamanho e Enter para inserir' });
+
+  var paint = function (row, col) {
+    self.gridSel = { row: row, col: col };
+    self.$grid.find('.grid-cell').each(function () {
+      var $this = $(this);
+      $this.css('background', $this.data('row') <= row && $this.data('col') <= col ? '#3b82f6' : 'transparent');
+    });
+    $label.text(col + ' x ' + row);
+  };
+  this.paintGrid = paint;
 
   this.$grid.append($gridInner).append($label);
   this.editor.$container.append(this.$grid);
@@ -4075,18 +4327,40 @@ TablePlugin.prototype.buildGrid = function () {
 
   // Pinta de azul as células correspondentes ao passar o mouse
   this.$grid.on('mouseover', '.grid-cell', function () {
-    var row = $(this).data('row');
-    var col = $(this).data('col');
-    
-    self.$grid.find('.grid-cell').each(function () {
-      var $this = $(this);
-      if ($this.data('row') <= row && $this.data('col') <= col) {
-        $this.css('background', '#3b82f6'); // azul do tailwind
-      } else {
-        $this.css('background', 'transparent');
-      }
-    });
-    $label.text(col + ' x ' + row);
+    paint($(this).data('row'), $(this).data('col'));
+  });
+
+  this.$grid.on('keydown', function (e) {
+    var sel = self.gridSel || { row: 1, col: 1 };
+    var row = sel.row;
+    var col = sel.col;
+
+    switch (e.key) {
+      case 'ArrowRight': col = Math.min(10, col + 1); break;
+      case 'ArrowLeft': col = Math.max(1, col - 1); break;
+      case 'ArrowDown': row = Math.min(10, row + 1); break;
+      case 'ArrowUp': row = Math.max(1, row - 1); break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        self.toggleGrid(false);
+        self.editor.$content[0].focus();
+        self.insertTable(row, col);
+        return;
+      case 'Escape':
+        e.preventDefault();
+        self.toggleGrid(false);
+        self.editor.focusToolbarButton('table');
+        return;
+      case 'Tab':
+        self.toggleGrid(false);
+        return;
+      default:
+        return;
+    }
+
+    e.preventDefault();
+    paint(row, col);
   });
 
   // Dispara a criação da tabela quando clicado e oculta o grid
@@ -4123,9 +4397,17 @@ TablePlugin.prototype.toggleGrid = function (forceState) {
       top: btnOffset.top + $btn.outerHeight() + 5,
       left: btnOffset.left
     });
+    var fromKeyboard = document.activeElement === $btn[0];
     this.$grid.show();
+    this.gridSel = null;
     this.$grid.find('.grid-cell').css('background', 'transparent');
     this.$grid.find('.grid-label').text('0 x 0');
+
+    // Aberta pelo teclado: o foco vai para a grade, já com 1 x 1
+    if (fromKeyboard) {
+      this.paintGrid(1, 1);
+      this.$grid[0].focus();
+    }
 
     // Verifica se o painel vazou pela direita
     if (this.$grid[0].getBoundingClientRect().right > this.editor.$container[0].getBoundingClientRect().right) {
@@ -4170,7 +4452,7 @@ TablePlugin.prototype.insertTable = function (rows, cols) {
 TablePlugin.prototype.buildContextMenu = function () {
   var self = this;
 
-  this.$contextMenu = $('<div class="editor-table-context-menu absolute bg-white border border-gray-200 rounded-md shadow-md z-[100] py-1 font-sans min-w-[180px] hidden flex-col"></div>');
+  this.$contextMenu = $('<div class="editor-table-context-menu absolute bg-white border border-gray-200 rounded-md shadow-md z-[100] py-1 font-sans min-w-[180px] hidden flex-col" role="menu" aria-label="Opções da tabela"></div>');
   
   var menuItems = [
     { label: '<i data-lucide="arrow-up" class="w-4 h-4 mr-2 opacity-70"></i> Inserir Linha Acima', action: 'insertRowAbove' },
@@ -4187,10 +4469,11 @@ TablePlugin.prototype.buildContextMenu = function () {
 
   $.each(menuItems, function(i, item) {
     if (item.divider) {
-      self.$contextMenu.append('<div class="h-px bg-gray-200 my-1 mx-1"></div>');
+      self.$contextMenu.append('<div class="h-px bg-gray-200 my-1 mx-1" role="separator"></div>');
     } else {
       var hoverClass = item.isDestructive ? 'hover:bg-red-50 text-red-600 hover:text-red-700' : 'hover:bg-gray-100 text-gray-700 hover:text-gray-900';
       var $btn = $('<button type="button" class="flex items-center mx-1 px-2 py-1.5 text-left text-sm rounded-sm focus:outline-none transition-colors select-none ' + hoverClass + '"></button>')
+        .attr({ role: 'menuitem', tabindex: '-1' })
         .html(item.label)
         .on('click', function(e) {
           e.preventDefault();
@@ -4202,6 +4485,16 @@ TablePlugin.prototype.buildContextMenu = function () {
   });
 
   this.editor.$container.append(this.$contextMenu);
+
+  // Teclado (também abre com a tecla de menu ou Shift+F10 na célula)
+  WysiwygEditor.menuKeyboard(this.$contextMenu, {
+    items: '[role="menuitem"]',
+    close: function () {
+      var cell = self.activeCell;
+      self.hideContextMenu();
+      if (cell) self.editor.$content[0].focus();
+    }
+  });
 
   // Fecha o menu ao clicar fora
   $(document).on('mousedown' + this.editor.ns, function (e) {
@@ -4237,6 +4530,13 @@ TablePlugin.prototype.showContextMenu = function (e) {
   var menuX = e.pageX - containerOffset.left;
   var menuY = e.pageY - containerOffset.top;
 
+  // Aberto pelo teclado (tecla de menu, Shift+F10): sem posição do mouse
+  if (!e.pageX && !e.pageY) {
+    var cellOffset = $(this.activeCell).offset();
+    menuX = cellOffset.left - containerOffset.left + 10;
+    menuY = cellOffset.top - containerOffset.top + $(this.activeCell).outerHeight();
+  }
+
   this.$contextMenu.css({
     display: 'flex',
     left: menuX,
@@ -4257,6 +4557,10 @@ TablePlugin.prototype.showContextMenu = function (e) {
   }
 
   WysiwygEditor.renderIcons(this.$contextMenu[0]);
+
+  // Foco no primeiro item: as setas já navegam e Esc fecha
+  var first = this.$contextMenu.find('[role="menuitem"]')[0];
+  if (first) first.focus();
 };
 
 TablePlugin.prototype.hideContextMenu = function () {
@@ -4909,6 +5213,21 @@ VideoPlugin.prototype.buildPopover = function () {
 
   this.editor.$container.append(this.$popover);
 
+  // Enter num campo de texto confirma
+  this.$popover.on('keydown', 'input[type="text"]', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $btnSave.trigger('click');
+    }
+  });
+
+  // Diálogo acessível: rótulos ligados, Esc fecha e Tab fica no popover
+  this.editor.dialogize(this.$popover, {
+    name: 'video',
+    label: 'Inserir vídeo',
+    close: function () { self.togglePopover(false); }
+  });
+
   // Evita que clicar no popover faça o editor perder o foco
   this.$popover.on('mousedown', function (e) {
     if (e.target.tagName !== 'INPUT') {
@@ -5305,6 +5624,10 @@ AiPlugin.prototype.buildPopover = function () {
   this.$promptInput = $('<textarea rows="3" placeholder="Ex: Crie uma descrição persuasiva para uma camiseta preta de algodão..." class="px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 w-full resize-none"></textarea>');
   $promptGroup.append(this.$promptInput);
 
+  // Erro mostrado no próprio popover (antes era um alert() que travava a página)
+  this.$error = $('<div class="editor-ai-error text-xs text-red-600 hidden" role="alert"></div>');
+  $promptGroup.append(this.$error);
+
   var $btnGroup = $('<div class="flex mt-1"></div>');
   
   var $rightBtns = $('<div class="flex gap-2 ml-auto"></div>');
@@ -5319,6 +5642,13 @@ AiPlugin.prototype.buildPopover = function () {
 
   this.editor.$container.append(this.$popover);
 
+  // Diálogo acessível: rótulos ligados, Esc fecha e Tab fica no popover
+  this.editor.dialogize(this.$popover, {
+    name: 'ai',
+    label: 'Assistente de IA',
+    close: function () { self.togglePopover(false); }
+  });
+
   this.$popover.on('mousedown', function (e) {
     if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
@@ -5331,6 +5661,14 @@ AiPlugin.prototype.buildPopover = function () {
 
   this.$btnGenerate.on('click', function () {
     self.generateDescription();
+  });
+
+  // Ctrl+Enter (Cmd+Enter no Mac) gera sem precisar sair do campo
+  this.$promptInput.on('keydown', function (e) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      self.generateDescription();
+    }
   });
 
   $(document).on('mousedown' + this.editor.ns, function (e) {
@@ -5355,7 +5693,8 @@ AiPlugin.prototype.togglePopover = function (forceState) {
     }
 
     this.$promptInput.val('');
-    this.$btnGenerate.html('Gerar').prop('disabled', false);
+    this.$error.text('').addClass('hidden').hide();
+    this.$btnGenerate.html('Gerar').prop('disabled', false).removeAttr('aria-busy');
 
     var btnOffset = $btn.position();
     this.$popover.css({
@@ -5387,7 +5726,8 @@ AiPlugin.prototype.generateDescription = function () {
     return;
   }
 
-  this.$btnGenerate.html('<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin"></i> Gerando...').prop('disabled', true);
+  this.$error.text('').addClass('hidden').hide();
+  this.$btnGenerate.html('<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin" aria-hidden="true"></i> Gerando...').prop('disabled', true).attr('aria-busy', 'true');
   
   WysiwygEditor.renderIcons(this.$btnGenerate[0]);
 
@@ -5397,8 +5737,9 @@ AiPlugin.prototype.generateDescription = function () {
   }
 
   function handleError(errorMsg) {
-    alert('Erro ao gerar conteúdo com IA: ' + (errorMsg || 'Falha na comunicação com a API.'));
-    self.$btnGenerate.html('Gerar').prop('disabled', false);
+    self.$error.text('Não foi possível gerar o conteúdo: ' + (errorMsg || 'falha na comunicação com a API.')).removeClass('hidden').show();
+    self.$btnGenerate.html('Gerar').prop('disabled', false).removeAttr('aria-busy');
+    self.$promptInput.focus();
   }
 
   // 1. Caso o desenvolvedor tenha informado um callback customizado (ex: onAiGenerate)

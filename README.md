@@ -103,8 +103,16 @@ Formatos aceitos: PNG, JPG, GIF, WebP e AVIF. Ao clicar numa imagem, a barra per
 | `Ctrl+Z` / `Ctrl+Y` (ou `Ctrl+Shift+Z`) | Desfazer / refazer |
 | `Tab` / `Shift+Tab` em lista | Aumentar / diminuir o nível do item |
 | `Tab` / `Shift+Tab` em tabela | Próxima / célula anterior (no fim, cria uma linha) |
+| `Alt+F10` | Ir para a barra de ferramentas (setas andam entre os botões, `Esc` volta ao texto) |
 
 No Mac, use `Cmd` no lugar de `Ctrl`. Texto colado do Word e do Google Docs é limpo automaticamente: listas viram listas de verdade e classes e estilos repetidos são removidos.
+
+## ♿ Acessibilidade
+
+- Tudo funciona pelo teclado: barra de ferramentas (`Alt+F10` e setas), menus (setas, `Enter`, `Esc`), grade de tabela (setas e `Enter`), menu da tabela (tecla de menu ou `Shift+F10`) e popovers.
+- Popovers de link, vídeo e IA são diálogos: o foco fica dentro deles, `Esc` fecha e devolve o foco ao botão, e os rótulos estão ligados aos campos.
+- Botões ativos informam `aria-pressed`; erros (upload, IA, URL inválida) são anunciados por leitores de tela, sem `alert()`.
+- Se a página tem `<label for="id-do-textarea">`, ele vira o nome da área de edição.
 
 ## 🛠️ Desenvolvimento e Build
 
