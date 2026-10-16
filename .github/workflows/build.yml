@@ -1,0 +1,53 @@
+# Quando o código-fonte muda na main, gera o build com o Gulp e faz o commit
+# do dist/ automaticamente. Assim ninguém precisa rodar `npx gulp` à mão
+# antes do merge.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'gulpfile.js'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-main
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Regenerar dist/
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build (gulp)
+        run: npx gulp
+
+      - name: Commit do dist/ se mudou
+        run: |
+          if git diff --quiet -- dist docs/weaver-editor.min.js; then
+            echo "dist/ já está atualizado."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist docs/weaver-editor.min.js
+          git commit -m "build: regenerar dist com gulp [skip ci]"
+          git push

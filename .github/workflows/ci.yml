@@ -1,0 +1,60 @@
+# Roda em todo PR e em cada push na main: gera o build com o Gulp e testa
+# o editor num Chromium real (segurança + funcional), nas versões normal e
+# minificada. Também valida a sintaxe do ai-api.php.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build (gulp)
+        run: npx gulp
+
+      - name: Avisar se o dist/ do PR está desatualizado
+        if: github.event_name == 'pull_request'
+        run: |
+          if ! git diff --quiet -- dist docs/weaver-editor.min.js; then
+            echo "::warning::dist/ difere do build do Gulp. Não precisa corrigir: ao entrar na main, o workflow Build regenera o dist/ sozinho."
+          fi
+
+      - name: Validar sintaxe do ai-api.php
+        run: php -l ai-api.php
+
+      - name: Instalar Playwright e jQuery (só para os testes)
+        run: |
+          npm install --no-save playwright jquery@3.6.0
+          npx playwright install --with-deps chromium
+
+      - name: Testes (dist/weaver-editor.js)
+        run: npm test
+
+      - name: Testes (dist/weaver-editor.min.js)
+        run: npm test
+        env:
+          WEAVER_DIST: dist/weaver-editor.min.js

@@ -88,13 +88,17 @@ Sempre que fizer alterações nos arquivos de código dentro da pasta `src/`, ro
 npx gulp
 ```
 
-### 3. Rodar os testes de segurança
+Não é obrigatório commitar o `dist/` nos PRs: quando o código entra na `main`, o workflow **Build** do GitHub Actions roda o Gulp e faz o commit do `dist/` sozinho.
+
+### 3. Rodar os testes
 Os testes abrem o editor num Chromium real: `tests/security.test.js` reproduz ataques conhecidos (XSS por colar, links, vídeo, preview, IA) e `tests/functional.test.js` cobre formatação, listas, code view, histórico e o ciclo de vida do editor.
 ```bash
 npm install --no-save playwright jquery@3.6.0
 npx playwright install chromium
 npm test
 ```
+
+No GitHub, o workflow **CI** roda o build e os testes (versões normal e minificada) em todo PR e em cada push na `main`.
 
 ## 🔒 Segurança
 
