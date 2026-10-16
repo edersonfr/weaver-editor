@@ -7,7 +7,8 @@
     "example": "examples"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "gulp",
+    "test": "node tests/security.test.js"
   },
   "repository": {
     "type": "git",

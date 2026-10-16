@@ -11,7 +11,7 @@ O **Weaver Editor** é um editor HTML WYSIWYG leve, moderno e altamente customiz
 - **Imagens Avançadas:** Suporte a arrastar e soltar (Drag & Drop), redimensionamento visual e alinhamento flutuante.
 - **Tabelas Interativas:** Construtor visual de tabelas (grid estilo Microsoft Word).
 - **Embeds Mágicos:** Cole a URL de um vídeo do YouTube ou Vimeo e ele será convertido automaticamente em um _iframe_ responsivo.
-- **Segurança Embutida:** Sanitizador nativo (`SanitizerPlugin`) que varre códigos colados protegendo contra ataques XSS e limpando sujeiras do Word/Excel.
+- **Segurança Embutida:** Sanitizador por allowlist (`HtmlSanitizer`) aplicado a toda entrada de conteúdo (textarea inicial, colar, code view, IA, desfazer/refazer), protegendo contra XSS. Veja a seção [Segurança](#-segurança).
 - **Histórico:** Suporte completo a Desfazer (Undo) e Refazer (Redo) com atalhos de teclado.
 
 ## 🚀 Instalação
@@ -81,10 +81,27 @@ npm install
 ```
 
 ### 2. Compilar o Editor
-Sempre que fizer alterações nos arquivos de código dentro da pasta `src/`, rode o comando abaixo para gerar o arquivo `dist/wysiwyg-editor.min.js`:
+Sempre que fizer alterações nos arquivos de código dentro da pasta `src/`, rode o comando abaixo para gerar o arquivo `dist/weaver-editor.min.js`:
 ```bash
 npx gulp
 ```
+
+### 3. Rodar os testes de segurança
+Os testes abrem o editor num Chromium real e reproduzem ataques conhecidos (XSS por colar, links, vídeo, preview, IA).
+```bash
+npm install --no-save playwright jquery@3.6.0
+npx playwright install chromium
+npm test
+```
+
+## 🔒 Segurança
+
+- **Sanitize também no servidor.** O sanitizador do editor protege quem está editando, mas o POST do formulário pode ser forjado. Antes de salvar ou exibir o HTML, passe-o por uma biblioteca de servidor como [HTML Purifier](http://htmlpurifier.org/) (PHP) ou [DOMPurify](https://github.com/cure53/DOMPurify) (Node).
+- **Tags nunca permitidas:** `script`, `style`, `svg`, `math`, `object`, `embed`, `form` e similares são removidas mesmo se incluídas em `allowedTags`.
+- **iframes:** apenas players do YouTube (`youtube-nocookie.com`) e do Vimeo, sempre com `sandbox`. Para liberar outros, passe `allowedIframeSources` (lista de RegExp) nas opções.
+- **CSS inline:** só propriedades de formatação (cor, fonte, margens, bordas, tamanhos, alinhamento). `position` e `url()` são removidos. Personalize com `allowedStyles`.
+- **Preview:** roda num iframe com `sandbox` e CSP sem scripts.
+- **`ai-api.php`:** aceita só `POST` da própria origem, exige sessão PHP quando há chave de API configurada, limita tamanho do prompt e número de chamadas, e sanitiza a resposta. Configuração por variáveis de ambiente, documentadas no topo do arquivo.
 
 ## 📂 Estrutura de Diretórios
 
