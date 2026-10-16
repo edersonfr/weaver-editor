@@ -26,7 +26,7 @@ O editor foi empacotado para ser distribuído em um único arquivo minificado. B
 <script src="dist/weaver-editor.min.js"></script>
 ```
 
-*Nota:* A estilização do editor insere automaticamente as regras via JavaScript e os ícones via Lucide.
+*Nota:* A estilização do editor insere automaticamente as regras via JavaScript (não é preciso ter Tailwind na página) e os ícones via Lucide.
 
 ## 💻 Como Usar
 
@@ -59,6 +59,8 @@ $(document).ready(function() {
 });
 ```
 
+Para remover o editor (por exemplo, ao trocar de tela numa SPA), use `$('#meu-editor').weaver('destroy')`. O textarea volta a aparecer com o conteúdo atual e todos os eventos são removidos.
+
 ## ⚙️ Configuração da Barra de Ferramentas (Aliases)
 
 O sistema de toolbar aceita a mesma sintaxe amigável do Summernote, permitindo agrupar botões em "blocos" divididos visualmente.
@@ -87,7 +89,7 @@ npx gulp
 ```
 
 ### 3. Rodar os testes de segurança
-Os testes abrem o editor num Chromium real e reproduzem ataques conhecidos (XSS por colar, links, vídeo, preview, IA).
+Os testes abrem o editor num Chromium real: `tests/security.test.js` reproduz ataques conhecidos (XSS por colar, links, vídeo, preview, IA) e `tests/functional.test.js` cobre formatação, listas, code view, histórico e o ciclo de vida do editor.
 ```bash
 npm install --no-save playwright jquery@3.6.0
 npx playwright install chromium

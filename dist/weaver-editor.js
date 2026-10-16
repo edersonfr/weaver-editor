@@ -409,93 +409,217 @@ HtmlSanitizer.escapeHtml = function (text) {
 
 window.HtmlSanitizer = HtmlSanitizer;
 
+/**
+ * Estilos base do Weaver Editor.
+ *
+ * A interface usa nomes de classe no padrão do Tailwind (hidden, absolute,
+ * z-50...). Sem Tailwind na página, os popovers apareciam todos abertos
+ * embaixo do editor. Este CSS cobre essas classes, com escopo em
+ * .wysiwyg-editor, então o editor funciona com ou sem Tailwind.
+ *
+ * Arquivo gerado a partir da lista de classes usadas em src/. Ao usar uma
+ * classe utilitária nova num plugin, acrescente-a aqui.
+ */
+var WeaverBaseStyles = [
+  "@keyframes weaver-spin{to{transform:rotate(360deg)}}",
+  ".wysiwyg-editor, .wysiwyg-editor *{box-sizing:border-box}",
+  ".wysiwyg-editor button{font:inherit;color:inherit;cursor:pointer}",
+  ".wysiwyg-editor .editor-content{line-height:1.6}",
+  ".wysiwyg-editor .relative{position:relative}",
+  ".wysiwyg-editor .absolute{position:absolute}",
+  ".wysiwyg-editor .inline-block{display:inline-block}",
+  ".wysiwyg-editor .flex{display:flex}",
+  ".wysiwyg-editor .flex-col{flex-direction:column}",
+  ".wysiwyg-editor .flex-row{flex-direction:row}",
+  ".wysiwyg-editor .flex-wrap{flex-wrap:wrap}",
+  ".wysiwyg-editor .flex-nowrap{flex-wrap:nowrap}",
+  ".wysiwyg-editor .items-center{align-items:center}",
+  ".wysiwyg-editor .justify-between{justify-content:space-between}",
+  ".wysiwyg-editor .justify-center{justify-content:center}",
+  ".wysiwyg-editor .gap-1{gap:.25rem}",
+  ".wysiwyg-editor .gap-2{gap:.5rem}",
+  ".wysiwyg-editor .gap-3{gap:.75rem}",
+  ".wysiwyg-editor .top-full{top:100%}",
+  ".wysiwyg-editor .left-0{left:0}",
+  ".wysiwyg-editor .right-0{right:0}",
+  ".wysiwyg-editor .w-4{width:1rem}",
+  ".wysiwyg-editor .h-4{height:1rem}",
+  ".wysiwyg-editor .w-8{width:2rem}",
+  ".wysiwyg-editor .h-8{height:2rem}",
+  ".wysiwyg-editor .w-72{width:18rem}",
+  ".wysiwyg-editor .w-80{width:20rem}",
+  ".wysiwyg-editor .w-full{width:100%}",
+  ".wysiwyg-editor .w-max{width:max-content}",
+  ".wysiwyg-editor .w-\\[150px\\]{width:150px}",
+  ".wysiwyg-editor .w-\\[15px\\]{width:15px}",
+  ".wysiwyg-editor .h-\\[15px\\]{height:15px}",
+  ".wysiwyg-editor .h-px{height:1px}",
+  ".wysiwyg-editor .min-w-\\[180px\\]{min-width:180px}",
+  ".wysiwyg-editor .min-w-\\[32px\\]{min-width:32px}",
+  ".wysiwyg-editor .min-w-\\[80px\\]{min-width:80px}",
+  ".wysiwyg-editor .max-h-60{max-height:15rem}",
+  ".wysiwyg-editor .max-w-none{max-width:none}",
+  ".wysiwyg-editor .\\!w-3{width:.75rem!important}",
+  ".wysiwyg-editor .\\!h-3{height:.75rem!important}",
+  ".wysiwyg-editor .m-0{margin:0}",
+  ".wysiwyg-editor .ml-0\\.5{margin-left:.125rem}",
+  ".wysiwyg-editor .ml-1{margin-left:.25rem}",
+  ".wysiwyg-editor .ml-auto{margin-left:auto}",
+  ".wysiwyg-editor .mr-1{margin-right:.25rem}",
+  ".wysiwyg-editor .mr-2{margin-right:.5rem}",
+  ".wysiwyg-editor .mt-1{margin-top:.25rem}",
+  ".wysiwyg-editor .mt-2{margin-top:.5rem}",
+  ".wysiwyg-editor .mx-1{margin-left:.25rem;margin-right:.25rem}",
+  ".wysiwyg-editor .my-1{margin-top:.25rem;margin-bottom:.25rem}",
+  ".wysiwyg-editor .-ml-px{margin-left:-1px}",
+  ".wysiwyg-editor .p-1\\.5{padding:.375rem}",
+  ".wysiwyg-editor .p-2{padding:.5rem}",
+  ".wysiwyg-editor .p-3{padding:.75rem}",
+  ".wysiwyg-editor .p-4{padding:1rem}",
+  ".wysiwyg-editor .pr-2{padding-right:.5rem}",
+  ".wysiwyg-editor .px-1{padding-left:.25rem;padding-right:.25rem}",
+  ".wysiwyg-editor .px-2{padding-left:.5rem;padding-right:.5rem}",
+  ".wysiwyg-editor .px-3{padding-left:.75rem;padding-right:.75rem}",
+  ".wysiwyg-editor .px-4{padding-left:1rem;padding-right:1rem}",
+  ".wysiwyg-editor .py-1{padding-top:.25rem;padding-bottom:.25rem}",
+  ".wysiwyg-editor .py-1\\.5{padding-top:.375rem;padding-bottom:.375rem}",
+  ".wysiwyg-editor .py-2{padding-top:.5rem;padding-bottom:.5rem}",
+  ".wysiwyg-editor .border{border:1px solid #e5e7eb}",
+  ".wysiwyg-editor .border-b{border-bottom:1px solid #e5e7eb}",
+  ".wysiwyg-editor .border-r{border-right:1px solid #e5e7eb}",
+  ".wysiwyg-editor .border-none{border:none}",
+  ".wysiwyg-editor .border-gray-50{border-color:#f9fafb}",
+  ".wysiwyg-editor .border-gray-100{border-color:#f3f4f6}",
+  ".wysiwyg-editor .border-gray-200{border-color:#e5e7eb}",
+  ".wysiwyg-editor .border-gray-300{border-color:#d1d5db}",
+  ".wysiwyg-editor .border-red-200{border-color:#fecaca}",
+  ".wysiwyg-editor .border-red-500{border-color:#ef4444}",
+  ".wysiwyg-editor .box-border{box-sizing:border-box}",
+  ".wysiwyg-editor .rounded{border-radius:.25rem}",
+  ".wysiwyg-editor .rounded-sm{border-radius:.125rem}",
+  ".wysiwyg-editor .rounded-md{border-radius:.375rem}",
+  ".wysiwyg-editor .rounded-none{border-radius:0}",
+  ".wysiwyg-editor .rounded-l{border-radius:.25rem 0 0 .25rem}",
+  ".wysiwyg-editor .rounded-r{border-radius:0 .25rem .25rem 0}",
+  ".wysiwyg-editor .rounded-t-md{border-radius:.375rem .375rem 0 0}",
+  ".wysiwyg-editor .rounded-b-md{border-radius:0 0 .375rem .375rem}",
+  ".wysiwyg-editor .bg-white{background-color:#fff}",
+  ".wysiwyg-editor .bg-gray-50{background-color:#f9fafb}",
+  ".wysiwyg-editor .bg-gray-200{background-color:#e5e7eb}",
+  ".wysiwyg-editor .bg-blue-600{background-color:#2563eb}",
+  ".wysiwyg-editor .bg-purple-600{background-color:#9333ea}",
+  ".wysiwyg-editor .text-sm{font-size:.875rem;line-height:1.25rem}",
+  ".wysiwyg-editor .text-xs{font-size:.75rem;line-height:1rem}",
+  ".wysiwyg-editor .text-center{text-align:center}",
+  ".wysiwyg-editor .text-left{text-align:left}",
+  ".wysiwyg-editor .text-gray-500{color:#6b7280}",
+  ".wysiwyg-editor .text-gray-700{color:#374151}",
+  ".wysiwyg-editor .text-gray-800{color:#1f2937}",
+  ".wysiwyg-editor .text-blue-600{color:#2563eb}",
+  ".wysiwyg-editor .text-purple-600{color:#9333ea}",
+  ".wysiwyg-editor .text-red-500{color:#ef4444}",
+  ".wysiwyg-editor .text-red-600{color:#dc2626}",
+  ".wysiwyg-editor .text-white{color:#fff}",
+  ".wysiwyg-editor .font-medium{font-weight:500}",
+  ".wysiwyg-editor .font-semibold{font-weight:600}",
+  ".wysiwyg-editor .font-sans{font-family:ui-sans-serif,system-ui,-apple-system,\"Segoe UI\",Roboto,Arial,sans-serif}",
+  ".wysiwyg-editor .leading-tight{line-height:1.25}",
+  ".wysiwyg-editor .shadow-sm{box-shadow:0 1px 2px rgba(0,0,0,.05)}",
+  ".wysiwyg-editor .shadow-md{box-shadow:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1)}",
+  ".wysiwyg-editor .shadow-lg{box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1)}",
+  ".wysiwyg-editor .shadow-inner{box-shadow:inset 0 2px 4px rgba(0,0,0,.06)}",
+  ".wysiwyg-editor .opacity-60{opacity:.6}",
+  ".wysiwyg-editor .opacity-70{opacity:.7}",
+  ".wysiwyg-editor .opacity-80{opacity:.8}",
+  ".wysiwyg-editor .transition-colors{transition:color .15s,background-color .15s,border-color .15s}",
+  ".wysiwyg-editor .cursor-pointer{cursor:pointer}",
+  ".wysiwyg-editor .select-none{user-select:none}",
+  ".wysiwyg-editor .outline-none{outline:none}",
+  ".wysiwyg-editor .overflow-hidden{overflow:hidden}",
+  ".wysiwyg-editor .overflow-y-auto{overflow-y:auto}",
+  ".wysiwyg-editor .resize-none{resize:none}",
+  ".wysiwyg-editor .z-10{z-index:10}",
+  ".wysiwyg-editor .z-50{z-index:50}",
+  ".wysiwyg-editor .z-\\[100\\]{z-index:100}",
+  ".wysiwyg-editor .animate-spin{animation:weaver-spin 1s linear infinite}",
+  ".wysiwyg-editor .hover\\:bg-gray-50:hover{background-color:#f9fafb}",
+  ".wysiwyg-editor .hover\\:bg-gray-100:hover{background-color:#f3f4f6}",
+  ".wysiwyg-editor .hover\\:bg-blue-700:hover{background-color:#1d4ed8}",
+  ".wysiwyg-editor .hover\\:bg-purple-700:hover{background-color:#7e22ce}",
+  ".wysiwyg-editor .hover\\:bg-red-50:hover{background-color:#fef2f2}",
+  ".wysiwyg-editor .hover\\:border-blue-500:hover{border-color:#3b82f6}",
+  ".wysiwyg-editor .hover\\:z-10:hover{z-index:10}",
+  ".wysiwyg-editor .focus\\:outline-none:focus{outline:none}",
+  ".wysiwyg-editor .focus\\:border-blue-500:focus{border-color:#3b82f6}",
+  ".wysiwyg-editor .focus\\:border-purple-500:focus{border-color:#a855f7}",
+  ".wysiwyg-editor .focus\\:ring-1:focus{box-shadow:0 0 0 1px #3b82f6}",
+  ".wysiwyg-editor .focus\\:ring-2:focus{box-shadow:inset 0 0 0 2px #3b82f6}",
+  ".wysiwyg-editor .focus\\:ring-purple-500:focus{box-shadow:0 0 0 1px #a855f7}",
+  ".wysiwyg-editor .disabled\\:opacity-50:disabled{opacity:.5}",
+  ".wysiwyg-editor .disabled\\:cursor-not-allowed:disabled{cursor:not-allowed}",
+  ".wysiwyg-editor .last\\:border-0:last-child{border-width:0}",
+  ".wysiwyg-editor .last\\:border-r-0:last-child{border-right-width:0}",
+  ".wysiwyg-editor .last\\:mr-0:last-child{margin-right:0}",
+  ".wysiwyg-editor .last\\:pr-0:last-child{padding-right:0}",
+  ".wysiwyg-editor .\\[\\&\\.active\\]\\:z-10.active{z-index:10}",
+  ".wysiwyg-editor .\\[\\&\\>svg\\]\\:w-4>svg{width:1rem;height:1rem}",
+  ".wysiwyg-editor .hidden{display:none}"
+].join('\n');
+
+window.WeaverBaseStyles = WeaverBaseStyles;
+
 function SelectionManager(editor) {
   this.editor = editor;
 }
+
+/**
+ * Tags consideradas equivalentes ao aplicar ou remover uma formatação.
+ * Ex.: o botão Negrito reconhece e remove tanto <b> quanto <strong>.
+ */
+SelectionManager.EQUIVALENT_TAGS = {
+  b: ['b', 'strong'],
+  i: ['i', 'em'],
+  u: ['u', 'ins'],
+  s: ['s', 'strike', 'del'],
+  sub: ['sub'],
+  sup: ['sup']
+};
+
+/** Elementos de bloco (usados para agrupar texto solto e achar o bloco atual). */
+SelectionManager.BLOCK_TAGS = [
+  'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE',
+  'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'HR', 'FIGURE', 'FIGCAPTION',
+  'IFRAME', 'VIDEO', 'AUDIO', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'ASIDE', 'NAV'
+];
+
+/** Contêineres cujo texto "solto" é só espaço entre tags (não deve ser formatado). */
+SelectionManager.STRUCTURAL_TAGS = ['UL', 'OL', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'COLGROUP'];
+
+SelectionManager.isBlock = function (node) {
+  return !!node && node.nodeType === 1 && SelectionManager.BLOCK_TAGS.indexOf(node.tagName) !== -1;
+};
+
+SelectionManager.prototype.root = function () {
+  return this.editor.$content[0];
+};
 
 SelectionManager.prototype.getSelection = function () {
   return window.getSelection();
 };
 
+/**
+ * Retorna uma CÓPIA do range atual. O range vivo de getRangeAt muda junto
+ * com o DOM; guardá-lo para restaurar depois desloca o ponto de inserção.
+ */
 SelectionManager.prototype.getRange = function () {
   var sel = this.getSelection();
   if (sel.rangeCount === 0) return null;
-  return sel.getRangeAt(0);
+  return sel.getRangeAt(0).cloneRange();
 };
 
-SelectionManager.prototype.wrap = function (tag) {
-  var range = this.getRange();
-  if (!range || range.collapsed) return;
-
-  var wrapper = document.createElement(tag);
-  wrapper.appendChild(range.extractContents());
-  range.insertNode(wrapper);
-
-  this.restoreSelection(wrapper);
-};
-
-SelectionManager.prototype.isWrapped = function (tag) {
-  var range = this.getRange();
-  if (!range) return false;
-
-  var node = range.commonAncestorContainer;
-
-  while (node && node !== this.editor.$content[0]) {
-    if (node.nodeType === 1 && node.tagName.toLowerCase() === tag) {
-      return true;
-    }
-    node = node.parentNode;
-  }
-
-  return false;
-};
-
-SelectionManager.prototype.unwrap = function (tag) {
-  var range = this.getRange();
+SelectionManager.prototype.setRange = function (range) {
   if (!range) return;
-
-  var node = range.commonAncestorContainer;
-
-  while (node && node !== this.editor.$content[0]) {
-    if (node.nodeType === 1 && node.tagName.toLowerCase() === tag) {
-
-      var parent = node.parentNode;
-
-      // salva referência do conteúdo
-      var firstChild = node.firstChild;
-      var lastChild = node.lastChild;
-
-      // move filhos pra fora
-      while (node.firstChild) {
-        parent.insertBefore(node.firstChild, node);
-      }
-
-      parent.removeChild(node);
-
-      // restaura seleção
-      var newRange = document.createRange();
-
-      if (firstChild && lastChild) {
-        newRange.setStartBefore(firstChild);
-        newRange.setEndAfter(lastChild);
-      }
-
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(newRange);
-
-      return;
-    }
-
-    node = node.parentNode;
-  }
-};
-
-SelectionManager.prototype.restoreSelection = function (node) {
-  var range = document.createRange();
-  range.selectNodeContents(node);
-
-  var sel = window.getSelection();
+  var sel = this.getSelection();
   sel.removeAllRanges();
   sel.addRange(range);
 };
@@ -504,7 +628,467 @@ SelectionManager.prototype.isInsideEditor = function () {
   var sel = this.getSelection();
   if (!sel.anchorNode) return false;
 
-  return this.editor.$content[0].contains(sel.anchorNode);
+  return this.root().contains(sel.anchorNode);
+};
+
+/**
+ * Como Element.closest, mas NUNCA sobe além do conteúdo do editor.
+ * Antes, .closest('div') encontrava a própria div do editor e a substituía.
+ */
+SelectionManager.prototype.closest = function (node, selector) {
+  var root = this.root();
+  var el = node && node.nodeType !== 1 ? node.parentNode : node;
+
+  while (el && el !== root && el.nodeType === 1) {
+    if (SelectionManager.matches(el, selector)) return el;
+    el = el.parentNode;
+  }
+
+  return null;
+};
+
+SelectionManager.matches = function (el, selector) {
+  var fn = el.matches || el.msMatchesSelector || el.webkitMatchesSelector;
+  return fn ? fn.call(el, selector) : false;
+};
+
+/**
+ * Garante que o cursor esteja dentro de um bloco. Texto solto direto na raiz
+ * do editor (comum na primeira linha digitada no Chrome) é envolvido num <p>.
+ * @returns {Element|null} o bloco de nível superior que contém o cursor
+ */
+SelectionManager.prototype.ensureBlock = function () {
+  var range = this.getRange();
+  var root = this.root();
+  if (!range || !root.contains(range.startContainer)) return null;
+
+  var node = range.startContainer;
+  if (node === root) {
+    node = root.childNodes[range.startOffset] || root.childNodes[range.startOffset - 1];
+  }
+  if (!node) return null;
+
+  while (node.parentNode && node.parentNode !== root) {
+    node = node.parentNode;
+  }
+  if (node.parentNode !== root) return null;
+  if (SelectionManager.isBlock(node)) return node;
+
+  // Agrupa a sequência de nós inline vizinhos num único parágrafo
+  var start = node;
+  var end = node;
+  while (start.previousSibling && !SelectionManager.isBlock(start.previousSibling)) start = start.previousSibling;
+  while (end.nextSibling && !SelectionManager.isBlock(end.nextSibling)) end = end.nextSibling;
+
+  var sc = range.startContainer, so = range.startOffset;
+  var ec = range.endContainer, eo = range.endOffset;
+
+  var p = document.createElement('p');
+  root.insertBefore(p, start);
+
+  var stop = end.nextSibling;
+  var current = start;
+  while (current && current !== stop) {
+    var next = current.nextSibling;
+    p.appendChild(current);
+    current = next;
+  }
+
+  // Mover nós reposiciona ranges; restaura a seleção original quando possível
+  var restored = document.createRange();
+  try {
+    if (sc === root || ec === root) throw new Error('raiz');
+    restored.setStart(sc, so);
+    restored.setEnd(ec, eo);
+  } catch (e) {
+    restored.selectNodeContents(p);
+    restored.collapse(false);
+  }
+  this.setRange(restored);
+
+  return p;
+};
+
+/**
+ * Blocos (que casam com o seletor) tocados pela seleção atual, só os mais
+ * internos. Com o cursor recolhido, devolve o bloco que contém o cursor.
+ * @param {string} selector
+ * @returns {Element[]}
+ */
+SelectionManager.prototype.getSelectedBlocks = function (selector) {
+  this.ensureBlock();
+
+  var range = this.getRange();
+  if (!range) return [];
+
+  var root = this.root();
+  var blocks = [];
+
+  if (range.collapsed || !range.intersectsNode) {
+    var single = this.closest(range.startContainer, selector);
+    return single ? [single] : [];
+  }
+
+  var candidates = root.querySelectorAll(selector);
+  for (var i = 0; i < candidates.length; i++) {
+    if (range.intersectsNode(candidates[i]) && this._hasSelectedContent(candidates[i], range)) {
+      blocks.push(candidates[i]);
+    }
+  }
+
+  // Mantém só os mais internos (um <div> que envolve vários <p> sai da lista)
+  var deepest = [];
+  for (var j = 0; j < blocks.length; j++) {
+    var containsOther = false;
+    for (var k = 0; k < blocks.length; k++) {
+      if (j !== k && blocks[j].contains(blocks[k])) {
+        containsOther = true;
+        break;
+      }
+    }
+    if (!containsOther) deepest.push(blocks[j]);
+  }
+
+  if (!deepest.length) {
+    var fallback = this.closest(range.startContainer, selector);
+    if (fallback) deepest.push(fallback);
+  }
+
+  return deepest;
+};
+
+/**
+ * Evita incluir um bloco só porque a seleção termina na posição 0 dele
+ * (ex.: selecionar um parágrafo inteiro com triplo clique).
+ * @private
+ */
+SelectionManager.prototype._hasSelectedContent = function (block, range) {
+  if (range.endContainer === block && range.endOffset === 0) return false;
+
+  var probe = document.createRange();
+  probe.selectNodeContents(block);
+
+  if (range.compareBoundaryPoints(Range.START_TO_END, probe) <= 0) return false; // seleção termina antes
+  if (range.compareBoundaryPoints(Range.END_TO_START, probe) >= 0) return false; // seleção começa depois
+
+  // Seleção termina no início do bloco
+  var startOfBlock = document.createRange();
+  startOfBlock.setStart(block, 0);
+  startOfBlock.collapse(true);
+  if (range.compareBoundaryPoints(Range.END_TO_END, startOfBlock) <= 0) return false;
+
+  var textNode = this._firstTextNode(block);
+  if (textNode && range.endContainer === textNode && range.endOffset === 0 && !block.contains(range.startContainer)) {
+    return false;
+  }
+
+  return true;
+};
+
+SelectionManager.prototype._firstTextNode = function (node) {
+  var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
+  return walker.nextNode();
+};
+
+/**
+ * Nós de texto (não vazios) dentro do range, já divididos nas bordas da seleção.
+ * @private
+ */
+SelectionManager.prototype._textNodesInRange = function (range) {
+  var root = this.root();
+  var container = range.commonAncestorContainer;
+  var nodes = [];
+
+  if (container.nodeType === 3) {
+    nodes.push(container);
+  } else {
+    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    var n;
+    while ((n = walker.nextNode())) {
+      if (range.intersectsNode(n)) nodes.push(n);
+    }
+  }
+
+  var result = [];
+  for (var i = 0; i < nodes.length; i++) {
+    var text = nodes[i];
+    if (!root.contains(text)) continue;
+
+    var startOffset = text === range.startContainer ? range.startOffset : 0;
+    var endOffset = text === range.endContainer ? range.endOffset : text.nodeValue.length;
+    if (endOffset <= startOffset) continue;
+
+    // Espaço entre tags estruturais (<tr>, <ul>...) não é conteúdo
+    var parent = text.parentNode;
+    if (!/\S/.test(text.nodeValue) && (parent === root || SelectionManager.STRUCTURAL_TAGS.indexOf(parent.tagName) !== -1)) {
+      continue;
+    }
+
+    if (endOffset < text.nodeValue.length) text.splitText(endOffset);
+    if (startOffset > 0) text = text.splitText(startOffset);
+
+    result.push(text);
+  }
+
+  return result;
+};
+
+/**
+ * Elemento ancestral (dentro do editor) com uma das tags equivalentes.
+ * @private
+ */
+SelectionManager.prototype._formatAncestor = function (node, tag) {
+  var tags = SelectionManager.EQUIVALENT_TAGS[tag] || [tag];
+  return this.closest(node, tags.join(','));
+};
+
+/**
+ * Aplica a tag inline em cada trecho de texto selecionado, sem quebrar blocos.
+ * Antes, um negrito entre dois parágrafos gerava <b><p>…</p><p>…</p></b>.
+ */
+SelectionManager.prototype.wrap = function (tag) {
+  var range = this.getRange();
+  if (!range || range.collapsed) return;
+
+  var texts = this._textNodesInRange(range);
+  if (!texts.length) return;
+
+  for (var i = 0; i < texts.length; i++) {
+    var text = texts[i];
+    if (this._formatAncestor(text, tag)) continue;
+
+    var wrapper = document.createElement(tag);
+    text.parentNode.insertBefore(wrapper, text);
+    wrapper.appendChild(text);
+  }
+
+  this._mergeAdjacent(tag);
+
+  // Os nós de texto sobrevivem às fusões: servem de âncora para a seleção
+  var first = texts[0];
+  var last = texts[texts.length - 1];
+  var newRange = document.createRange();
+  newRange.setStart(first, 0);
+  newRange.setEnd(last, last.nodeValue.length);
+  this.setRange(newRange);
+  this.root().normalize();
+};
+
+/**
+ * Indica se TODO o texto selecionado já tem a formatação (ou equivalente).
+ */
+SelectionManager.prototype.isWrapped = function (tag) {
+  var range = this.getRange();
+  if (!range) return false;
+
+  if (range.collapsed) {
+    return !!this._formatAncestor(range.startContainer, tag);
+  }
+
+  var probe = range.cloneRange();
+  var texts = this._textNodesWithoutSplitting(probe);
+  if (!texts.length) return !!this._formatAncestor(range.commonAncestorContainer, tag);
+
+  for (var i = 0; i < texts.length; i++) {
+    if (!this._formatAncestor(texts[i], tag)) return false;
+  }
+  return true;
+};
+
+/** @private Versão de leitura de _textNodesInRange, sem alterar o DOM. */
+SelectionManager.prototype._textNodesWithoutSplitting = function (range) {
+  var root = this.root();
+  var container = range.commonAncestorContainer;
+  var nodes = [];
+
+  if (container.nodeType === 3) return [container];
+
+  var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+  var n;
+  while ((n = walker.nextNode())) {
+    if (!range.intersectsNode(n) || !root.contains(n)) continue;
+    if (n === range.endContainer && range.endOffset === 0) continue;
+    if (n === range.startContainer && range.startOffset === n.nodeValue.length) continue;
+    if (!/\S/.test(n.nodeValue) && (n.parentNode === root || SelectionManager.STRUCTURAL_TAGS.indexOf(n.parentNode.tagName) !== -1)) continue;
+    nodes.push(n);
+  }
+  return nodes;
+};
+
+/**
+ * Remove a formatação SOMENTE do trecho selecionado. Se o negrito cobre a
+ * frase inteira e só uma palavra foi selecionada, o resto continua negrito.
+ */
+SelectionManager.prototype.unwrap = function (tag) {
+  var range = this.getRange();
+  if (!range) return;
+
+  var root = this.root();
+  var tags = SelectionManager.EQUIVALENT_TAGS[tag] || [tag];
+  var selector = tags.join(',');
+
+  // Cursor sem seleção: remove a formatação da palavra/elemento inteiro
+  if (range.collapsed) {
+    var whole = this._formatAncestor(range.startContainer, tag);
+    if (whole) this._unwrapElement(whole);
+    return;
+  }
+
+  // Marcadores preservam as bordas da seleção enquanto o DOM é reorganizado
+  // Elemento próprio (não <span>), para não ser confundido com a formatação
+  // que está sendo removida (ex.: Remover Formatação tira <span>)
+  var startMarker = document.createElement('weaver-marker');
+  var endMarker = document.createElement('weaver-marker');
+  startMarker.setAttribute('data-weaver-marker', 'start');
+  endMarker.setAttribute('data-weaver-marker', 'end');
+
+  var endRange = range.cloneRange();
+  endRange.collapse(false);
+  endRange.insertNode(endMarker);
+  var startRange = range.cloneRange();
+  startRange.collapse(true);
+  startRange.insertNode(startMarker);
+
+  var between = document.createRange();
+  between.setStartAfter(startMarker);
+  between.setEndBefore(endMarker);
+
+  // Elementos de formatação tocados pela seleção
+  var targets = [];
+  var addTarget = function (el) {
+    if (el && targets.indexOf(el) === -1) targets.push(el);
+  };
+  var self = this;
+  var collectAncestors = function (node) {
+    var el = self.closest(node, selector);
+    while (el) {
+      addTarget(el);
+      el = self.closest(el.parentNode, selector);
+    }
+  };
+  collectAncestors(startMarker);
+  collectAncestors(endMarker);
+
+  var inner = root.querySelectorAll(selector);
+  for (var i = 0; i < inner.length; i++) {
+    if (between.intersectsNode(inner[i])) addTarget(inner[i]);
+  }
+
+  for (var t = 0; t < targets.length; t++) {
+    var el = targets[t];
+    if (!el.parentNode) continue;
+
+    // Parte antes da seleção continua formatada
+    if (el.contains(startMarker)) {
+      var before = document.createRange();
+      before.setStart(el, 0);
+      before.setEndBefore(startMarker);
+      var beforeFragment = SelectionManager.pruneEmpty(before.extractContents());
+      if (/\S/.test(beforeFragment.textContent) || beforeFragment.querySelector && beforeFragment.querySelector('img,br')) {
+        var beforeShell = el.cloneNode(false);
+        beforeShell.appendChild(beforeFragment);
+        el.parentNode.insertBefore(beforeShell, el);
+      } else if (beforeFragment.childNodes.length) {
+        el.parentNode.insertBefore(beforeFragment, el);
+      }
+    }
+
+    // Parte depois da seleção continua formatada
+    if (el.contains(endMarker)) {
+      var after = document.createRange();
+      after.setStartAfter(endMarker);
+      after.setEnd(el, el.childNodes.length);
+      var afterFragment = SelectionManager.pruneEmpty(after.extractContents());
+      if (/\S/.test(afterFragment.textContent) || afterFragment.querySelector && afterFragment.querySelector('img,br')) {
+        var afterShell = el.cloneNode(false);
+        afterShell.appendChild(afterFragment);
+        el.parentNode.insertBefore(afterShell, el.nextSibling);
+      } else if (afterFragment.childNodes.length) {
+        el.parentNode.insertBefore(afterFragment, el.nextSibling);
+      }
+    }
+
+    this._unwrapElement(el);
+  }
+
+  // Restaura a seleção onde estavam os marcadores e remove-os
+  var startParent = startMarker.parentNode;
+  var endParent = endMarker.parentNode;
+  var startIndex = this._indexOf(startMarker);
+  var endIndex = this._indexOf(endMarker);
+
+  startParent.removeChild(startMarker);
+  if (startParent === endParent && startIndex < endIndex) endIndex--;
+  endParent.removeChild(endMarker);
+
+  var restored = document.createRange();
+  try {
+    restored.setStart(startParent, Math.min(startIndex, startParent.childNodes.length));
+    restored.setEnd(endParent, Math.min(endIndex, endParent.childNodes.length));
+  } catch (e) {
+    restored.selectNodeContents(startParent);
+  }
+  this.setRange(restored);
+
+  // O range da seleção é vivo: normalize() junta textos sem perder a posição
+  this._mergeAdjacent(tag);
+  this.root().normalize();
+};
+
+/**
+ * Remove elementos inline que ficaram vazios ao dividir a formatação
+ * (extractContents clona os ancestrais parcialmente selecionados).
+ */
+SelectionManager.pruneEmpty = function (fragment) {
+  var elements = fragment.querySelectorAll ? fragment.querySelectorAll('*') : [];
+  for (var i = elements.length - 1; i >= 0; i--) {
+    var el = elements[i];
+    if (!el.parentNode || el.tagName === 'BR' || el.tagName === 'IMG' || el.tagName === 'WEAVER-MARKER') continue;
+    // Sem texto (nem espaço) e sem imagem/quebra dentro: casca vazia
+    if (el.textContent === '' && !el.querySelector('img, br, weaver-marker')) {
+      el.parentNode.removeChild(el);
+    }
+  }
+  return fragment;
+};
+
+SelectionManager.prototype._indexOf = function (node) {
+  var index = 0;
+  while ((node = node.previousSibling)) index++;
+  return index;
+};
+
+SelectionManager.prototype._unwrapElement = function (el) {
+  var parent = el.parentNode;
+  if (!parent) return;
+  while (el.firstChild) {
+    parent.insertBefore(el.firstChild, el);
+  }
+  parent.removeChild(el);
+};
+
+/**
+ * Junta irmãos adjacentes com a mesma tag (<b>a</b><b>b</b> -> <b>ab</b>).
+ * @private
+ */
+SelectionManager.prototype._mergeAdjacent = function (tag) {
+  var root = this.root();
+  var elements = root.querySelectorAll(tag);
+
+  for (var i = elements.length - 1; i >= 0; i--) {
+    var el = elements[i];
+    var prev = el.previousSibling;
+    if (prev && prev.nodeType === 1 && prev.tagName === el.tagName && !prev.attributes.length && !el.attributes.length) {
+      while (el.firstChild) prev.appendChild(el.firstChild);
+      el.parentNode.removeChild(el);
+    }
+  }
+};
+
+SelectionManager.prototype.restoreSelection = function (node) {
+  var range = document.createRange();
+  range.selectNodeContents(node);
+  this.setRange(range);
 };
 
 SelectionManager.prototype.toggle = function (tag) {
@@ -517,15 +1101,25 @@ SelectionManager.prototype.toggle = function (tag) {
 
 SelectionManager.prototype.getActiveFormats = function () {
   var formats = {};
-  var node = this.getRange() ? this.getRange().commonAncestorContainer : null;
+  var range = this.getRange();
+  var node = range ? range.commonAncestorContainer : null;
+  var root = this.root();
 
-  while (node && node !== this.editor.$content[0]) {
+  if (!node || !root.contains(node)) return formats;
+
+  while (node && node !== root) {
     if (node.nodeType === 1) {
       var tag = node.tagName.toLowerCase();
 
       if (tag === 'b' || tag === 'strong') formats.bold = true;
       if (tag === 'i' || tag === 'em') formats.italic = true;
+      if (tag === 'u' || tag === 'ins') formats.underline = true;
+      if (tag === 's' || tag === 'strike' || tag === 'del') formats.strikethrough = true;
+      if (tag === 'sub') formats.subscript = true;
+      if (tag === 'sup') formats.superscript = true;
       if (tag === 'a') formats.link = true;
+      if (tag === 'ul') formats.ul = true;
+      if (tag === 'ol') formats.ol = true;
     }
     node = node.parentNode;
   }
@@ -533,14 +1127,82 @@ SelectionManager.prototype.getActiveFormats = function () {
   return formats;
 };
 
+/**
+ * Posição do cursor como caminho de índices a partir da raiz, para ser
+ * guardada no histórico e restaurada depois de desfazer/refazer.
+ * @returns {{start: number[], startOffset: number, end: number[], endOffset: number}|null}
+ */
+SelectionManager.prototype.serialize = function () {
+  var range = this.getRange();
+  var root = this.root();
+  if (!range || !root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+
+  return {
+    start: this._pathTo(range.startContainer),
+    startOffset: range.startOffset,
+    end: this._pathTo(range.endContainer),
+    endOffset: range.endOffset
+  };
+};
+
+SelectionManager.prototype.deserialize = function (saved) {
+  if (!saved) return false;
+
+  var start = this._nodeAt(saved.start);
+  var end = this._nodeAt(saved.end);
+  if (!start || !end) return false;
+
+  try {
+    var range = document.createRange();
+    range.setStart(start, Math.min(saved.startOffset, this._maxOffset(start)));
+    range.setEnd(end, Math.min(saved.endOffset, this._maxOffset(end)));
+    this.setRange(range);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+SelectionManager.prototype._pathTo = function (node) {
+  var root = this.root();
+  var path = [];
+  while (node && node !== root) {
+    var index = 0;
+    var sibling = node.previousSibling;
+    while (sibling) {
+      index++;
+      sibling = sibling.previousSibling;
+    }
+    path.unshift(index);
+    node = node.parentNode;
+  }
+  return path;
+};
+
+SelectionManager.prototype._nodeAt = function (path) {
+  var node = this.root();
+  for (var i = 0; i < path.length; i++) {
+    node = node.childNodes[path[i]];
+    if (!node) return null;
+  }
+  return node;
+};
+
+SelectionManager.prototype._maxOffset = function (node) {
+  return node.nodeType === 3 ? node.nodeValue.length : node.childNodes.length;
+};
+
 window.SelectionManager = SelectionManager;
+
 function HistoryManager(editor) {
   this.editor = editor;
 
+  // Cada entrada guarda o HTML e a posição do cursor: { html, caret }
   this.undoStack = [];
   this.redoStack = [];
 
   this.maxStack = 50;
+  this.timeout = null;
 }
 
 HistoryManager.prototype.init = function () {
@@ -550,25 +1212,35 @@ HistoryManager.prototype.init = function () {
 
 HistoryManager.prototype.bind = function () {
   var self = this;
-  var timeout;
 
-  this.editor.$content.on('input', function () {
-    clearTimeout(timeout);
+  this.editor.$content.on('input' + this.editor.ns, function () {
+    clearTimeout(self.timeout);
 
-    timeout = setTimeout(function () {
+    self.timeout = setTimeout(function () {
       self.save();
     }, 300);
   });
 };
 
-HistoryManager.prototype.save = function () {
-  var html = this.editor.$content.html();
+HistoryManager.prototype.current = function () {
+  return this.undoStack.length ? this.undoStack[this.undoStack.length - 1] : null;
+};
 
-  if (this.undoStack.length && this.undoStack[this.undoStack.length - 1] === html) {
+HistoryManager.prototype.save = function () {
+  // Uma digitação pendente no debounce entra agora, antes de outra ação
+  clearTimeout(this.timeout);
+
+  var html = this.editor.$content.html();
+  var caret = this.editor.selection ? this.editor.selection.serialize() : null;
+  var top = this.current();
+
+  if (top && top.html === html) {
+    // Mesmo conteúdo: só atualiza onde o cursor está
+    if (caret) top.caret = caret;
     return;
   }
 
-  this.undoStack.push(html);
+  this.undoStack.push({ html: html, caret: caret });
 
   if (this.undoStack.length > this.maxStack) {
     this.undoStack.shift();
@@ -583,9 +1255,7 @@ HistoryManager.prototype.undo = function () {
   var current = this.undoStack.pop();
   this.redoStack.push(current);
 
-  var previous = this.undoStack[this.undoStack.length - 1];
-
-  this.restore(previous);
+  this.restore(this.current());
 };
 
 HistoryManager.prototype.redo = function () {
@@ -597,12 +1267,26 @@ HistoryManager.prototype.redo = function () {
   this.restore(next);
 };
 
-HistoryManager.prototype.restore = function (html) {
+HistoryManager.prototype.restore = function (entry) {
+  if (typeof entry === 'string') entry = { html: entry, caret: null };
+  if (!entry) return;
+
   // Não usar jQuery .html(): ele avalia <script> a cada desfazer/refazer.
-  this.editor.setContent(html);
+  this.editor.setContent(entry.html);
+
+  // Devolve o cursor para onde estava, em vez de jogá-lo para o início
+  if (!entry.caret || !this.editor.selection.deserialize(entry.caret)) {
+    var range = document.createRange();
+    range.selectNodeContents(this.editor.$content[0]);
+    range.collapse(false);
+    this.editor.selection.setRange(range);
+  }
+
+  this.editor.trigger('change');
 };
 
 window.HistoryManager = HistoryManager;
+
 /**
  * RangeFormatter - Motor robusto de formatação usando Selection/Range APIs
  * Substitui document.execCommand por controle preciso do DOM
@@ -623,19 +1307,31 @@ RangeFormatter.prototype.insertHTML = function (htmlString, preserveCaret) {
   
   if (!sel.rangeCount) return false;
   
-  var range = sel.getRangeAt(0);
+  var range = sel.getRangeAt(0).cloneRange();
 
   // Nunca usar range.createContextualFragment: ele EXECUTA <script>.
   // O fragmento vem sanitizado de um documento inerte.
   var fragment = this._sanitizer().toFragment(htmlString);
+  if (!fragment.firstChild) return false;
+
   var lastNode = fragment.lastChild;
 
   // Remove a seleção atual
   range.deleteContents();
 
+  // Conteúdo de bloco (tabela, vídeo, listas) no meio de um parágrafo:
+  // divide o parágrafo no cursor em vez de gerar <p><table>, que o
+  // navegador quebraria ao recarregar o HTML.
+  var host = this._hasBlock(fragment) ? this._textBlockAt(range.startContainer) : null;
+
+  if (host) {
+    this._insertSplittingBlock(range, host, fragment, preserveCaret);
+    return true;
+  }
+  
   // Insere o novo conteúdo
   range.insertNode(fragment);
-
+  
   if (preserveCaret) {
     // Move o cursor para após o conteúdo inserido
     if (lastNode && lastNode.parentNode) {
@@ -650,6 +1346,87 @@ RangeFormatter.prototype.insertHTML = function (htmlString, preserveCaret) {
   sel.addRange(range);
   
   return true;
+};
+
+RangeFormatter.TEXT_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, pre';
+
+/** @private */
+RangeFormatter.prototype._hasBlock = function (fragment) {
+  for (var node = fragment.firstChild; node; node = node.nextSibling) {
+    if (SelectionManager.isBlock(node)) return true;
+  }
+  return false;
+};
+
+/**
+ * Parágrafo/título (dentro do editor) que contém o nó.
+ * @private
+ */
+RangeFormatter.prototype._textBlockAt = function (node) {
+  var root = this.editor && this.editor.$content ? this.editor.$content[0] : null;
+  var el = node && node.nodeType !== 1 ? node.parentNode : node;
+
+  while (el && el !== root && el.nodeType === 1) {
+    if (SelectionManager.matches(el, RangeFormatter.TEXT_BLOCK_SELECTOR)) return el;
+    if (SelectionManager.isBlock(el)) return null; // li, td, blockquote aceitam blocos
+    el = el.parentNode;
+  }
+  return null;
+};
+
+RangeFormatter.isEmptyBlock = function (el) {
+  return !/\S/.test(el.textContent) && !el.querySelector('img, iframe, video, audio, table, hr');
+};
+
+/** @private */
+RangeFormatter.prototype._insertSplittingBlock = function (range, host, fragment, preserveCaret) {
+  // Tudo do cursor até o fim do bloco vai para um novo bloco igual
+  var tailRange = document.createRange();
+  tailRange.setStart(range.startContainer, range.startOffset);
+  tailRange.setEnd(host, host.childNodes.length);
+
+  var tail = host.cloneNode(false);
+  tail.appendChild(tailRange.extractContents());
+
+  var parent = host.parentNode;
+  var lastInserted = fragment.lastChild;
+
+  parent.insertBefore(tail, host.nextSibling);
+  parent.insertBefore(fragment, tail);
+
+  if (RangeFormatter.isEmptyBlock(host)) parent.removeChild(host);
+
+  // O conteúdo inserido já traz um <p> no fim (tabela, vídeo)? Então o
+  // pedaço final vazio é descartado para não sobrar linha em branco.
+  var tailIsEmpty = RangeFormatter.isEmptyBlock(tail);
+  var insertedEndsWithParagraph = lastInserted && lastInserted.nodeType === 1 && lastInserted.tagName === 'P';
+  if (tailIsEmpty && insertedEndsWithParagraph) {
+    parent.removeChild(tail);
+  } else if (!tailIsEmpty && insertedEndsWithParagraph && RangeFormatter.isEmptyBlock(lastInserted) && lastInserted.parentNode) {
+    // Já existe texto depois: o <p> vazio que acompanha a tabela/vídeo sobra
+    parent.removeChild(lastInserted);
+    lastInserted = null;
+  } else if (tailIsEmpty) {
+    while (tail.firstChild) tail.removeChild(tail.firstChild);
+    tail.appendChild(document.createElement('br'));
+  }
+
+  if (!preserveCaret) return;
+
+  var caretHost = tail.parentNode ? tail : lastInserted;
+  if (!caretHost) return;
+  var caret = document.createRange();
+  if (caretHost && caretHost.nodeType === 1) {
+    caret.selectNodeContents(caretHost);
+    caret.collapse(caretHost === tail);
+  } else {
+    caret.setStartAfter(lastInserted);
+    caret.collapse(true);
+  }
+
+  var sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(caret);
 };
 
 /**
@@ -835,7 +1612,8 @@ RangeFormatter.prototype.saveSelection = function () {
   var sel = window.getSelection();
   if (sel.rangeCount === 0) return null;
   
-  return sel.getRangeAt(0);
+  // Cópia: o range vivo muda junto com o DOM
+  return sel.getRangeAt(0).cloneRange();
 };
 
 /**
@@ -901,7 +1679,9 @@ window.RangeFormatter = RangeFormatter;
 
   function Editor(element, options) {
     this.$el = $(element);
-    this.options = $.extend(true, {}, Editor.defaults, options);
+    this.options = Editor.mergeOptions(Editor.defaults, options || {});
+    this.id = ++Editor.instanceCount;
+    this.ns = '.weaver' + this.id; // namespace dos eventos desta instância
 
     this.plugins = [];
     this.commands = {};
@@ -909,6 +1689,53 @@ window.RangeFormatter = RangeFormatter;
 
     this.init();
   }
+
+  Editor.instanceCount = 0;
+
+  /**
+   * Opções que são listas ou mapas SUBSTITUEM o padrão em vez de serem fundidas.
+   * Com $.extend(true), arrays eram mesclados por posição: pedir só
+   * [['font', ['bold']]] gerava a toolbar padrão inteira com 'redo' no meio.
+   */
+  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources'];
+
+  Editor.mergeOptions = function (defaults, options) {
+    var merged = $.extend(true, {}, defaults);
+
+    for (var key in options) {
+      if (!options.hasOwnProperty(key)) continue;
+      var value = options[key];
+
+      if (Editor.REPLACE_OPTIONS.indexOf(key) !== -1 || $.isArray(value) || !$.isPlainObject(value)) {
+        merged[key] = $.isArray(value) ? value.slice() : value;
+      } else {
+        merged[key] = $.extend(true, {}, merged[key], value);
+      }
+    }
+
+    merged.toolbar = Editor.normalizeToolbar(merged.toolbar);
+    return merged;
+  };
+
+  /**
+   * Aceita grupos sem lista de botões (['color']) usando o nome do grupo
+   * como botão/alias, como no Summernote.
+   */
+  Editor.normalizeToolbar = function (toolbar) {
+    var normalized = [];
+    if (!$.isArray(toolbar)) return normalized;
+
+    for (var i = 0; i < toolbar.length; i++) {
+      var group = toolbar[i];
+      if (typeof group === 'string') {
+        normalized.push([group, [group]]);
+      } else if ($.isArray(group) && group.length) {
+        var buttons = $.isArray(group[1]) ? group[1].slice() : [group[0]];
+        normalized.push([group[0], buttons]);
+      }
+    }
+    return normalized;
+  };
 
   Editor.prototype.init = function () {
     this.injectStyles();
@@ -946,7 +1773,7 @@ window.RangeFormatter = RangeFormatter;
 
       // Garante a sincronização absoluta no momento do envio do formulário
       var self = this;
-      this.$el.closest('form').on('submit', function() {
+      this.$el.closest('form').on('submit' + this.ns, function() {
         self.$el.val(self.getContent());
       });
     } else {
@@ -1023,12 +1850,28 @@ window.RangeFormatter = RangeFormatter;
 
     for (var i = 0; i < plugins.length; i++) {
       var plugin = new plugins[i](this);
+      // Nome estável para getPlugin(), mesmo com o código minificado
+      if (!plugin.name) plugin.name = Editor.pluginNameOf(plugins[i]);
       this.plugins.push(plugin);
 
       if (plugin.init) {
         plugin.init();
       }
     }
+  };
+
+  Editor.PLUGIN_NAMES = [
+    'ToolbarPlugin', 'BasicCommandsPlugin', 'SanitizerPlugin', 'NormalizerPlugin', 'HistoryPlugin',
+    'LinkPlugin', 'TablePlugin', 'ImagePlugin', 'VideoPlugin', 'CodeViewPlugin', 'PreviewPlugin',
+    'FullscreenPlugin', 'AiPlugin'
+  ];
+
+  Editor.pluginNameOf = function (PluginClass) {
+    if (PluginClass.pluginName) return PluginClass.pluginName;
+    for (var i = 0; i < Editor.PLUGIN_NAMES.length; i++) {
+      if (window[Editor.PLUGIN_NAMES[i]] === PluginClass) return Editor.PLUGIN_NAMES[i];
+    }
+    return PluginClass.name || '';
   };
 
   Editor.prototype.registerCommand = function (name, fn) {
@@ -1050,13 +1893,53 @@ window.RangeFormatter = RangeFormatter;
   Editor.prototype.bindEvents = function () {
     var self = this;
 
-    this.$content.on('input', function () {
+    // Enter cria <p> em vez de <div> (Chrome/Edge); ajuda a manter o HTML limpo
+    try {
+      document.execCommand('defaultParagraphSeparator', false, 'p');
+    } catch (e) { /* navegador sem suporte */ }
+
+    this.$content.on('input' + this.ns, function (e) {
+      // A primeira linha digitada no Chrome fica como texto solto na raiz;
+      // envolve num <p> (fora de composição de IME, para não atrapalhar acentos)
+      var oe = e.originalEvent;
+      var root = self.$content[0];
+      if (!(oe && oe.isComposing) && root.firstChild && root.firstChild.nodeType === 3 && /\S/.test(root.firstChild.nodeValue)) {
+        self.selection.ensureBlock();
+      }
+
       self.trigger('change');
     });
 
-    this.$content.on('keyup mouseup', function () {
+    this.$content.on('keyup' + this.ns + ' mouseup' + this.ns, function () {
       self.updateToolbar();
     });
+  };
+
+  /**
+   * Remove o editor da página: desfaz todos os eventos (inclusive os de
+   * document), devolve o textarea com o conteúdo atual e libera a instância.
+   */
+  Editor.prototype.destroy = function () {
+    for (var i = 0; i < this.plugins.length; i++) {
+      if (this.plugins[i].destroy) this.plugins[i].destroy();
+    }
+
+    if (this.history) clearTimeout(this.history.timeout);
+
+    var content = this.getContent();
+
+    $(document).off(this.ns);
+    $(window).off(this.ns);
+    this.$el.closest('form').off(this.ns);
+    this.$content.off(this.ns);
+
+    if (this.isTextarea) {
+      this.$el.val(content).show();
+    }
+
+    this.$container.remove();
+    this.$el.removeData('weaver');
+    this.plugins = [];
   };
 
   Editor.prototype.trigger = function (event) {
@@ -1074,6 +1957,13 @@ window.RangeFormatter = RangeFormatter;
     // O conteúdo já entrou sanitizado (setContent, insertHTML, colar, IA, code view).
     // Importante: sanitize também no servidor. Sanitização no navegador não é
     // uma barreira de segurança, pois o POST pode ser forjado.
+
+    // Com o code view aberto, o conteúdo vigente é o que está no código
+    // (antes, enviar o formulário nesse modo descartava as edições)
+    if (this.codeView && this.codeView.active) {
+      return this.sanitize(this.codeView.$textarea.val());
+    }
+
     return this.$content.html();
   };
 
@@ -1088,8 +1978,8 @@ window.RangeFormatter = RangeFormatter;
 
   Editor.prototype.getPlugin = function (name) {
     for (var i = 0; i < this.plugins.length; i++) {
-      // Evita falhas caso o código seja minificado, buscando a propriedade `name`
-      if (this.plugins[i].name === name || this.plugins[i].constructor.name === name) {
+      // `name` é definido em initPlugins (constructor.name muda ao minificar)
+      if (this.plugins[i].name === name) {
         return this.plugins[i];
       }
     }
@@ -1255,9 +2145,15 @@ window.RangeFormatter = RangeFormatter;
       '  color: #f9eb26;\n' +
       '}\n';
 
+    // Estilos base (equivalentes às classes Tailwind usadas): o editor
+    // funciona mesmo em páginas sem Tailwind
+    if (window.WeaverBaseStyles) {
+      css = window.WeaverBaseStyles + '\n' + css;
+    }
+
     var style = document.createElement('style');
     style.id = 'wysiwyg-editor-styles';
-    style.innerHTML = css;
+    style.textContent = css;
 
     document.head.appendChild(style);
   };
@@ -1288,6 +2184,17 @@ window.RangeFormatter = RangeFormatter;
   // =========================
   $.fn.weaver = function (options) {
     return this.each(function () {
+      var existing = $(this).data('weaver');
+
+      // $('#x').weaver('destroy') remove o editor
+      if (options === 'destroy') {
+        if (existing) existing.destroy();
+        return;
+      }
+
+      // Inicializar duas vezes o mesmo elemento criava dois editores
+      if (existing) return;
+
       var editor = new Editor(this, options);
       $(this).data('weaver', editor);
     });
@@ -1429,8 +2336,8 @@ ToolbarPlugin.prototype.render = function () {
         $btn.on('mousedown', function(e) { e.preventDefault(); });
         $btn.on('click', function(e) {
           var isVisible = $menu.is(':visible');
-          $('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
-          $('.editor-dropdown-btn').attr('aria-expanded', 'false');
+          editor.$toolbar.find('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
+          editor.$toolbar.find('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
             $menu.removeClass('right-0').addClass('left-0').show();
             $btn.attr('aria-expanded', 'true');
@@ -1442,7 +2349,7 @@ ToolbarPlugin.prototype.render = function () {
           }
         });
 
-        $(document).on('mousedown', function(e) {
+        $(document).on('mousedown' + editor.ns, function(e) {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
@@ -1503,8 +2410,8 @@ ToolbarPlugin.prototype.render = function () {
         $btn.on('mousedown', function(e) { e.preventDefault(); });
         $btn.on('click', function(e) {
           var isVisible = $menu.is(':visible');
-          $('.editor-dropdown-menu').hide(); 
-          $('.editor-dropdown-btn').attr('aria-expanded', 'false');
+          editor.$toolbar.find('.editor-dropdown-menu').hide(); 
+          editor.$toolbar.find('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
             $menu.removeClass('right-0').addClass('left-0').css('display', 'flex');
             $btn.attr('aria-expanded', 'true');
@@ -1516,7 +2423,7 @@ ToolbarPlugin.prototype.render = function () {
           }
         });
 
-        $(document).on('mousedown', function(e) {
+        $(document).on('mousedown' + editor.ns, function(e) {
           if (!$wrapper.is(e.target) && $wrapper.has(e.target).length === 0) {
             $menu.hide();
             $btn.attr('aria-expanded', 'false');
@@ -1668,39 +2575,27 @@ ToolbarPlugin.prototype.updateState = function () {
   var formats = this.editor.selection.getActiveFormats();
 
   for (var key in this.buttons) {
-    this.buttons[key].removeClass('bg-gray-200 shadow-inner active').addClass('bg-white');
+    this.buttons[key].removeClass('bg-gray-200 shadow-inner active').addClass('bg-white').removeAttr('aria-pressed');
   }
 
-  if (formats.bold && this.buttons.bold) {
-    this.buttons.bold.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
-  }
-
-  if (formats.italic && this.buttons.italic) {
-    this.buttons.italic.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
-  }
-
-  if (formats.link && this.buttons.link) {
-    this.buttons.link.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
-  }
-
-  // Verifica o estado nativo dos comandos executados via execCommand
-  var nativeCommands = {
-    'underline': 'underline',
-    'strikethrough': 'strikeThrough',
-    'subscript': 'subscript',
-    'superscript': 'superscript',
-    'ul': 'insertUnorderedList',
-    'ol': 'insertOrderedList',
-    'alignLeft': 'justifyLeft',
-    'alignCenter': 'justifyCenter',
-    'alignRight': 'justifyRight',
-    'justifyFull': 'justifyFull'
-  };
-
-  for (var btnName in nativeCommands) {
-    if (this.buttons[btnName] && document.queryCommandState(nativeCommands[btnName])) {
-      this.buttons[btnName].removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
+  // Estado lido do DOM (o editor não usa execCommand, então queryCommandState
+  // não refletia <strong>, <del> etc.)
+  var formatButtons = ['bold', 'italic', 'underline', 'strikethrough', 'subscript', 'superscript', 'link', 'ul', 'ol'];
+  for (var f = 0; f < formatButtons.length; f++) {
+    var name = formatButtons[f];
+    if (formats[name] && this.buttons[name]) {
+      this.buttons[name].removeClass('bg-white').addClass('bg-gray-200 shadow-inner active').attr('aria-pressed', 'true');
     }
+  }
+
+  // Alinhamento: lê o text-align calculado do bloco atual
+  var range = this.editor.selection.getRange();
+  var block = range ? this.editor.selection.closest(range.startContainer, 'p, div, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre') : null;
+  if (block) {
+    var align = (window.getComputedStyle(block).textAlign || '').toLowerCase();
+    var alignButtons = { left: 'alignLeft', start: 'alignLeft', center: 'alignCenter', right: 'alignRight', end: 'alignRight', justify: 'justifyFull' };
+    var alignBtn = this.buttons[alignButtons[align]];
+    if (alignBtn) alignBtn.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active').attr('aria-pressed', 'true');
   }
 
   if (this.editor.$content.hasClass('editor-show-blocks') && this.buttons.showBlocks) {
@@ -1718,130 +2613,215 @@ BasicCommandsPlugin.prototype.init = function () {
 
   // --- Funções Auxiliares baseadas em Selection e Range ---
 
+  /**
+   * Aplica um estilo (cor, fonte, tamanho) a cada trecho de texto selecionado.
+   * Trabalha nó a nó, então nunca coloca parágrafos dentro de <span>, e
+   * reaproveita o <span> quando ele envolve exatamente o trecho (evita
+   * <span><span><span> ao trocar a cor várias vezes).
+   */
   function applySpanStyle(styleProp, value) {
-    // Força o foco no editor para recuperar corretamente a seleção após usar o color picker
+    // Força o foco no editor para recuperar a seleção após usar o color picker
     editor.$content.focus();
-    
-    var sel = window.getSelection();
-    if (!sel.rangeCount) return;
 
-    var range = sel.getRangeAt(0);
-    if (range.collapsed) return;
+    var range = editor.selection.getRange();
+    if (!range || range.collapsed || !editor.selection.isInsideEditor()) return;
 
-    var fragment = range.extractContents();
+    var texts = editor.selection._textNodesInRange(range);
+    if (!texts.length) return;
 
-    // Caminha inteligentemente pelos nós para não quebrar blocos HTML com Spans
-    function styleNodes(node) {
-      if (node.nodeType === 3) {
-        if (node.nodeValue.length > 0) {
-          var span = document.createElement('span');
-          span.style[styleProp] = value;
-          node.parentNode.insertBefore(span, node);
-          span.appendChild(node);
-        }
-      } else if (node.nodeType === 1) {
-        var blockTags = ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'LI', 'UL', 'OL', 'TD', 'TH', 'TR', 'TBODY', 'THEAD', 'TABLE'];
-        if (blockTags.indexOf(node.tagName.toUpperCase()) !== -1) {
-          var children = Array.prototype.slice.call(node.childNodes);
-          for (var i = 0; i < children.length; i++) {
-            styleNodes(children[i]);
-          }
-        } else {
-          node.style[styleProp] = value;
-          var childrenElements = node.querySelectorAll('*');
-          for (var j = 0; j < childrenElements.length; j++) {
-            childrenElements[j].style[styleProp] = '';
-          }
-        }
+    for (var i = 0; i < texts.length; i++) {
+      var text = texts[i];
+      var parent = text.parentNode;
+
+      if (parent.tagName === 'SPAN' && parent.childNodes.length === 1) {
+        parent.style[styleProp] = value;
+        continue;
       }
+
+      var span = document.createElement('span');
+      span.style[styleProp] = value;
+      parent.insertBefore(span, text);
+      span.appendChild(text);
     }
 
-    var tempDiv = document.createElement('div');
-    tempDiv.appendChild(fragment);
+    var first = texts[0];
+    var last = texts[texts.length - 1];
+    var newRange = document.createRange();
+    newRange.setStart(first, 0);
+    newRange.setEnd(last, last.nodeValue.length);
+    editor.selection.setRange(newRange);
 
-    var children = Array.prototype.slice.call(tempDiv.childNodes);
-    for (var i = 0; i < children.length; i++) {
-      styleNodes(children[i]);
+    editor.trigger('change');
+    editor.updateToolbar();
+  }
+
+  // Blocos que recebem alinhamento, recuo e troca de formato.
+  // A busca é limitada ao conteúdo do editor (SelectionManager.closest):
+  // antes, .closest('div') encontrava a própria div do editor e a substituía.
+  var ALIGNABLE_BLOCKS = 'p, div, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre';
+  var TEXT_BLOCKS = 'p, div, h1, h2, h3, h4, h5, h6, blockquote, pre';
+
+  /**
+   * Troca a tag de um elemento movendo os filhos (sem reinterpretar HTML)
+   * e preservando alinhamento, classes e direção.
+   */
+  function replaceTag(el, newTag) {
+    var replacement = document.createElement(newTag);
+    var keep = ['style', 'class', 'dir', 'lang'];
+    for (var i = 0; i < keep.length; i++) {
+      if (el.hasAttribute(keep[i])) replacement.setAttribute(keep[i], el.getAttribute(keep[i]));
     }
+    while (el.firstChild) replacement.appendChild(el.firstChild);
+    el.parentNode.replaceChild(replacement, el);
+    return replacement;
+  }
 
-    range.insertNode(tempDiv);
+  function selectAcross(first, last) {
+    var range = document.createRange();
+    range.selectNodeContents(first);
+    var end = document.createRange();
+    end.selectNodeContents(last);
+    range.setEnd(end.endContainer, end.endOffset);
+    editor.selection.setRange(range);
+  }
 
-    var lastNode = null;
-    var firstNode = tempDiv.firstChild;
+  function emptyParagraph() {
+    var p = document.createElement('p');
+    p.appendChild(document.createElement('br'));
+    return p;
+  }
 
-    while (tempDiv.firstChild) {
-      lastNode = tempDiv.firstChild;
-      tempDiv.parentNode.insertBefore(lastNode, tempDiv);
+  /** Garante um bloco para formatar mesmo com o editor vazio. */
+  function blocksOrNew(selector) {
+    var blocks = editor.selection.getSelectedBlocks(selector);
+    if (blocks.length) return blocks;
+
+    var root = editor.$content[0];
+    if (!root.firstChild || !/\S/.test(root.textContent) && !root.querySelector('img,iframe,video,table,hr')) {
+      var p = emptyParagraph();
+      root.innerHTML = '';
+      root.appendChild(p);
+      editor.selection.restoreSelection(p);
+      return [p];
     }
-    tempDiv.parentNode.removeChild(tempDiv);
+    return [];
+  }
 
-    if (firstNode && lastNode) {
-      var newRange = document.createRange();
-      newRange.setStartBefore(firstNode);
-      newRange.setEndAfter(lastNode);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
+  function applyAlignment(align) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
+
+    var blocks = blocksOrNew(ALIGNABLE_BLOCKS);
+    for (var i = 0; i < blocks.length; i++) {
+      blocks[i].style.textAlign = align === 'left' ? '' : align;
+      if (!blocks[i].getAttribute('style')) blocks[i].removeAttribute('style');
     }
 
     editor.trigger('change');
     editor.updateToolbar();
   }
 
-  function applyAlignment(align) {
+  function changeIndent(delta) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    var range = editor.selection.getRange();
-    if (!range) return;
-    
-    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, li, td');
-    if (block.length) {
-        block.css('text-align', align);
-    } else {
-        var wrapper = $('<p>').css('text-align', align);
-        if (!range.collapsed) {
-            wrapper.append(range.extractContents());
-            range.insertNode(wrapper[0]);
-        } else {
-            wrapper.html('<br>');
-            range.insertNode(wrapper[0]);
-        }
+
+    var blocks = editor.selection.getSelectedBlocks(ALIGNABLE_BLOCKS);
+    var changed = false;
+
+    for (var i = 0; i < blocks.length; i++) {
+      var current = parseInt(blocks[i].style.marginLeft, 10) || 0;
+      var next = Math.max(0, current + delta);
+      if (next === current) continue;
+      blocks[i].style.marginLeft = next ? next + 'px' : '';
+      if (!blocks[i].getAttribute('style')) blocks[i].removeAttribute('style');
+      changed = true;
     }
 
+    if (changed) editor.trigger('change');
+  }
+
+  function formatBlock(value) {
+    if (!editor.selection || !editor.selection.isInsideEditor()) return;
+
+    var tagName = String(value || '').toLowerCase();
+    if (!/^(p|h[1-6]|blockquote|pre)$/.test(tagName)) return;
+
+    var blocks = blocksOrNew(TEXT_BLOCKS);
+    if (!blocks.length) return;
+
+    var replaced = [];
+    for (var i = 0; i < blocks.length; i++) {
+      replaced.push(blocks[i].tagName.toLowerCase() === tagName ? blocks[i] : replaceTag(blocks[i], tagName));
+    }
+
+    selectAcross(replaced[0], replaced[replaced.length - 1]);
     editor.trigger('change');
     editor.updateToolbar();
   }
 
   function toggleList(listTag) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
+
+    editor.selection.ensureBlock();
     var range = editor.selection.getRange();
     if (!range) return;
 
-    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6');
-    var currentList = $(range.commonAncestorContainer).closest('ul, ol');
+    var currentList = editor.selection.closest(range.startContainer, 'ul, ol');
 
-    if (currentList.length) {
-        if (currentList[0].tagName.toLowerCase() !== listTag) {
-            var newList = $('<' + listTag + '>').html(currentList.html());
-            currentList.replaceWith(newList);
-        } else {
-            // Remove a lista (unwrap)
-            var items = currentList.find('li');
-            var fragment = document.createDocumentFragment();
-            items.each(function() {
-                var p = $('<p>').html($(this).html() || '<br>');
-                fragment.appendChild(p[0]);
-            });
-            currentList.replaceWith(fragment);
+    if (currentList) {
+      if (currentList.tagName.toLowerCase() !== listTag) {
+        // Troca ul <-> ol mantendo itens e sublistas
+        var swapped = replaceTag(currentList, listTag);
+        selectAcross(swapped, swapped);
+      } else {
+        // Desfaz a lista: cada item DIRETO vira um parágrafo; sublistas
+        // ficam logo depois do parágrafo do item (antes eram duplicadas)
+        var fragment = document.createDocumentFragment();
+        var items = Array.prototype.slice.call(currentList.children);
+        var firstP = null;
+        var lastP = null;
+
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          if (item.tagName !== 'LI') {
+            fragment.appendChild(item);
+            continue;
+          }
+          var p = document.createElement('p');
+          var nested = [];
+          while (item.firstChild) {
+            var child = item.firstChild;
+            if (child.nodeType === 1 && (child.tagName === 'UL' || child.tagName === 'OL')) {
+              nested.push(child);
+              item.removeChild(child);
+            } else {
+              p.appendChild(child);
+            }
+          }
+          if (!p.firstChild) p.appendChild(document.createElement('br'));
+          fragment.appendChild(p);
+          for (var n = 0; n < nested.length; n++) fragment.appendChild(nested[n]);
+          if (!firstP) firstP = p;
+          lastP = p;
         }
-    } else if (block.length) {
-        var list = $('<' + listTag + '>');
-        var li = $('<li>').html(block.html());
-        list.append(li);
-        block.replaceWith(list);
-    } else if (!range.collapsed) {
-        var list = $('<' + listTag + '>');
-        var li = $('<li>').append(range.extractContents());
-        list.append(li);
-        range.insertNode(list[0]);
+
+        currentList.parentNode.replaceChild(fragment, currentList);
+        if (firstP) selectAcross(firstP, lastP);
+      }
+    } else {
+      var blocks = blocksOrNew(TEXT_BLOCKS);
+      if (!blocks.length) return;
+
+      var list = document.createElement(listTag);
+      blocks[0].parentNode.insertBefore(list, blocks[0]);
+
+      for (var b = 0; b < blocks.length; b++) {
+        var li = document.createElement('li');
+        while (blocks[b].firstChild) li.appendChild(blocks[b].firstChild);
+        if (!li.firstChild) li.appendChild(document.createElement('br'));
+        list.appendChild(li);
+        blocks[b].parentNode.removeChild(blocks[b]);
+      }
+
+      selectAcross(list.firstChild, list.lastChild);
     }
 
     editor.trigger('change');
@@ -1894,18 +2874,9 @@ BasicCommandsPlugin.prototype.init = function () {
 
   editor.registerCommand('hr', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    var range = editor.selection.getRange();
-    if (!range) return;
-    
-    var hr = document.createElement('hr');
-    range.deleteContents();
-    range.insertNode(hr);
-    
-    var p = document.createElement('p');
-    p.innerHTML = '<br>';
-    $(hr).after(p);
-    
-    editor.selection.restoreSelection(p);
+
+    // Inserção ciente de blocos: divide o parágrafo em vez de pôr <hr> dentro dele
+    new RangeFormatter(editor).insertHTML('<hr><p><br></p>');
 
     editor.trigger('change');
     editor.updateToolbar();
@@ -1919,79 +2890,26 @@ BasicCommandsPlugin.prototype.init = function () {
   editor.registerCommand('alignRight', function (editor) { applyAlignment('right'); });
   editor.registerCommand('justifyFull', function (editor) { applyAlignment('justify'); });
 
-  editor.registerCommand('indent', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    var range = editor.selection.getRange();
-    if (!range) return;
-    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, li');
-    if (block.length) {
-        var currentMargin = parseInt(block.css('margin-left')) || 0;
-        block.css('margin-left', (currentMargin + 20) + 'px');
-        
-        editor.trigger('change');
-    }
-  });
-
-  editor.registerCommand('outdent', function (editor) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    var range = editor.selection.getRange();
-    if (!range) return;
-    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, li');
-    if (block.length) {
-        var currentMargin = parseInt(block.css('margin-left')) || 0;
-        if (currentMargin > 0) {
-            block.css('margin-left', Math.max(0, currentMargin - 20) + 'px');
-            
-            editor.trigger('change');
-        }
-    }
-  });
+  editor.registerCommand('indent', function () { changeIndent(20); });
+  editor.registerCommand('outdent', function () { changeIndent(-20); });
 
   editor.registerCommand('removeFormat', function (editor) {
     if (!editor.selection || !editor.selection.isInsideEditor()) return;
     var range = editor.selection.getRange();
     if (!range || range.collapsed) return;
 
-    var fragment = range.extractContents();
-    var tempDiv = document.createElement('div');
-    tempDiv.appendChild(fragment);
-
-    var inlineTags = ['b', 'i', 'u', 's', 'strike', 'em', 'strong', 'span', 'font', 'sub', 'sup', 'a'];
-    $(tempDiv).find(inlineTags.join(',')).each(function() {
-        $(this).contents().unwrap();
-    });
-
-    $(tempDiv).find('*').removeAttr('style').removeAttr('class').removeAttr('color').removeAttr('face').removeAttr('size');
-
-    range.insertNode(tempDiv);
-    $(tempDiv).contents().unwrap();
+    // Remove só do trecho selecionado, dividindo a formatação nas bordas.
+    // Links são mantidos (remover formatação não deveria apagar links).
+    var tags = ['b', 'i', 'u', 's', 'sub', 'sup', 'span', 'font', 'mark', 'code'];
+    for (var i = 0; i < tags.length; i++) {
+      editor.selection.unwrap(tags[i]);
+    }
 
     editor.trigger('change');
     editor.updateToolbar();
   });
 
-  editor.registerCommand('formatBlock', function (editor, value) {
-    if (!editor.selection || !editor.selection.isInsideEditor()) return;
-    var range = editor.selection.getRange();
-    if (!range) return;
-    
-    var tagName = value.toLowerCase();
-    var block = $(range.commonAncestorContainer).closest('p, div, h1, h2, h3, h4, h5, h6, blockquote, pre');
-    
-    if (block.length) {
-        var newBlock = $('<' + tagName + '>').html(block.html());
-        block.replaceWith(newBlock);
-        
-        editor.trigger('change');
-        editor.updateToolbar();
-    } else if (!range.collapsed) {
-        var newBlock = $('<' + tagName + '>').append(range.extractContents());
-        range.insertNode(newBlock[0]);
-        
-        editor.trigger('change');
-        editor.updateToolbar();
-    }
-  });
+  editor.registerCommand('formatBlock', function (editor, value) { formatBlock(value); });
 
   editor.registerCommand('foreColor', function (editor, value) {
     applySpanStyle('color', value);
@@ -2015,7 +2933,7 @@ BasicCommandsPlugin.prototype.init = function () {
   });
 
   // Atalhos de teclado
-  editor.$content.on('keydown', function (e) {
+  editor.$content.on('keydown' + editor.ns, function (e) {
     // Atalhos que usam Ctrl (Windows/Linux) ou Cmd (Mac)
     if (e.ctrlKey || e.metaKey) {
       var key = e.key.toLowerCase();
@@ -2077,7 +2995,7 @@ SanitizerPlugin.prototype.init = function () {
 SanitizerPlugin.prototype.bind = function () {
   var self = this;
 
-  this.editor.$content.on('paste', function (e) {
+  this.editor.$content.on('paste' + this.editor.ns, function (e) {
     var clipboard = (e.originalEvent || e).clipboardData;
 
     e.preventDefault();
@@ -2272,6 +3190,19 @@ function NormalizerPlugin(editor) {
   this.editor = editor;
 }
 
+/**
+ * Elementos que existem vazios por natureza e NUNCA devem ser removidos.
+ * Antes faltavam source, track, col e wbr: <video><source></video> perdia o
+ * <source> sempre que o editor perdia o foco.
+ */
+NormalizerPlugin.KEEP_EMPTY = [
+  'AREA', 'BASE', 'BR', 'COL', 'COLGROUP', 'EMBED', 'HR', 'IMG', 'INPUT', 'LINK', 'META', 'SOURCE', 'TRACK', 'WBR',
+  'IFRAME', 'VIDEO', 'AUDIO', 'TD', 'TH', 'TR', 'TBODY', 'THEAD', 'TFOOT', 'TABLE', 'LI'
+];
+
+/** Pares de tags equivalentes aninhadas que podem ser achatadas. */
+NormalizerPlugin.FLATTEN = ['b', 'strong', 'i', 'em', 'u', 's'];
+
 NormalizerPlugin.prototype.init = function () {
   this.bind();
 };
@@ -2279,45 +3210,65 @@ NormalizerPlugin.prototype.init = function () {
 NormalizerPlugin.prototype.bind = function () {
   var self = this;
 
-  this.editor.$content.on('blur', function () {
+  this.editor.$content.on('blur' + this.editor.ns, function () {
     self.normalize();
   });
 };
 
 NormalizerPlugin.prototype.normalize = function () {
   var root = this.editor.$content[0];
+  var before = root.innerHTML;
 
-  this.flatten(root, 'b');
-  this.flatten(root, 'i');
+  for (var i = 0; i < NormalizerPlugin.FLATTEN.length; i++) {
+    this.flatten(root, NormalizerPlugin.FLATTEN[i]);
+  }
+  this.flattenEquivalent(root, 'b', 'strong');
+  this.flattenEquivalent(root, 'i', 'em');
   this.removeEmpty(root);
+
+  // Mudanças do normalizador também entram no histórico e no textarea
+  if (root.innerHTML !== before) {
+    this.editor.history.save();
+    this.editor.trigger('change');
+  }
+};
+
+NormalizerPlugin.prototype.unwrap = function (el) {
+  var parent = el.parentNode;
+  while (el.firstChild) {
+    parent.insertBefore(el.firstChild, el);
+  }
+  parent.removeChild(el);
 };
 
 NormalizerPlugin.prototype.flatten = function (root, tag) {
   var nodes = root.querySelectorAll(tag + ' ' + tag);
 
   for (var i = 0; i < nodes.length; i++) {
-    var inner = nodes[i];
-    var parent = inner.parentNode;
+    if (nodes[i].parentNode && !nodes[i].attributes.length) this.unwrap(nodes[i]);
+  }
+};
 
-    while (inner.firstChild) {
-      parent.insertBefore(inner.firstChild, inner);
-    }
+/** <strong><b>x</b></strong> e variações viram uma única tag. */
+NormalizerPlugin.prototype.flattenEquivalent = function (root, a, b) {
+  var nodes = root.querySelectorAll(a + ' ' + b + ', ' + b + ' ' + a);
 
-    parent.removeChild(inner);
+  for (var i = 0; i < nodes.length; i++) {
+    if (nodes[i].parentNode && !nodes[i].attributes.length) this.unwrap(nodes[i]);
   }
 };
 
 NormalizerPlugin.prototype.removeEmpty = function (root) {
   var nodes = root.querySelectorAll('*');
-  var keepTags = ['BR', 'IMG', 'IFRAME', 'HR', 'VIDEO', 'AUDIO', 'TD', 'TH', 'SCRIPT', 'STYLE'];
 
   for (var i = nodes.length - 1; i >= 0; i--) {
     var el = nodes[i];
 
     if (
+      el.parentNode &&
       el.childNodes.length === 0 &&
-      keepTags.indexOf(el.tagName) === -1 &&
-      el.textContent.trim() === ''
+      NormalizerPlugin.KEEP_EMPTY.indexOf(el.tagName) === -1 &&
+      !el.hasAttribute('id') // âncoras de link interno (<a id="...">)
     ) {
       el.parentNode.removeChild(el);
     }
@@ -2325,6 +3276,7 @@ NormalizerPlugin.prototype.removeEmpty = function (root) {
 };
 
 window.NormalizerPlugin = NormalizerPlugin;
+
 function LinkPlugin(editor) {
   this.editor = editor;
   this.$popover = null;
@@ -2410,7 +3362,7 @@ LinkPlugin.prototype.buildPopover = function () {
   });
 
   // Esconde o popover se clicar fora
-  $(document).on('mousedown', function (e) {
+  $(document).on('mousedown' + this.editor.ns, function (e) {
     var $btn = self.editor.$toolbar.find('[data-name="link"]');
     if (!self.$popover.is(e.target) && self.$popover.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
       self.togglePopover(false);
@@ -2664,7 +3616,7 @@ TablePlugin.prototype.buildGrid = function () {
   });
 
   // Esconde o menu de grade se clicar em outro lugar da tela
-  $(document).on('click', function (e) {
+  $(document).on('click' + this.editor.ns, function (e) {
     var $btn = self.editor.$toolbar.find('[data-name="table"]');
     if (!self.$grid.is(e.target) && self.$grid.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
       self.toggleGrid(false);
@@ -2726,13 +3678,11 @@ TablePlugin.prototype.insertTable = function (rows, cols) {
   }
   html += '</tbody></table><p><br></p>'; // Adiciona um parágrafo no final para poder continuar digitando
 
-  // Usa RangeFormatter para inserir HTML de forma robusta
-  if (this.rangeFormatter) {
-    this.rangeFormatter.insertHTML(html);
-  } else {
-    // Fallback para execCommand se RangeFormatter não estiver disponível
-    document.execCommand('insertHTML', false, html);
-  }
+  // A grade insere fora do editor.exec(): grava histórico e sincroniza aqui
+  this.editor.history.save();
+  this.rangeFormatter.insertHTML(html);
+  this.editor.history.save();
+  this.editor.trigger('change');
 };
 
 TablePlugin.prototype.buildContextMenu = function () {
@@ -2772,14 +3722,14 @@ TablePlugin.prototype.buildContextMenu = function () {
   this.editor.$container.append(this.$contextMenu);
 
   // Fecha o menu ao clicar fora
-  $(document).on('mousedown', function (e) {
+  $(document).on('mousedown' + this.editor.ns, function (e) {
     if (!self.$contextMenu.is(e.target) && self.$contextMenu.has(e.target).length === 0) {
       self.hideContextMenu();
     }
   });
 
   // Esconde ao fazer scroll no editor
-  this.editor.$content.on('scroll', function () {
+  this.editor.$content.on('scroll' + this.editor.ns, function () {
     self.hideContextMenu();
   });
 };
@@ -2787,7 +3737,9 @@ TablePlugin.prototype.buildContextMenu = function () {
 TablePlugin.prototype.bindEvents = function () {
   var self = this;
 
-  this.editor.$content.on('contextmenu', 'td, th', function (e) {
+  this.editor.$content.on('contextmenu' + this.editor.ns, 'td, th', function (e) {
+    // Shift + clique direito abre o menu do navegador (correção ortográfica, colar...)
+    if (e.shiftKey) return;
     e.preventDefault();
     self.activeCell = this;
     self.showContextMenu(e);
@@ -2971,13 +3923,13 @@ ImagePlugin.prototype.bindContentEvents = function () {
   var self = this;
 
   // Mostra a barra de ferramentas ao clicar na imagem
-  this.editor.$content.on('click', 'img', function (e) {
+  this.editor.$content.on('click' + this.editor.ns, 'img', function (e) {
     e.stopPropagation();
     self.showToolbar(this);
   });
 
   // Esconde a barra de ferramentas ao clicar fora
-  $(document).on('click', function (e) {
+  $(document).on('click' + this.editor.ns, function (e) {
     if (self.activeImage && !$(e.target).is(self.activeImage) && !self.$toolbar.is(e.target) && self.$toolbar.has(e.target).length === 0) {
       self.hideToolbar();
     }
@@ -3111,44 +4063,103 @@ ImagePlugin.prototype.openFileDialog = function () {
 ImagePlugin.prototype.bindDragAndDrop = function () {
   var self = this;
   var $content = this.editor.$content;
+  var ns = this.editor.ns;
+  var internalDrag = false;
+  var dragDepth = 0;
 
-  $content.on('dragover', function (e) { e.preventDefault(); e.stopPropagation(); $content.addClass('drag-over'); });
-  $content.on('dragleave', function (e) { e.preventDefault(); e.stopPropagation(); $content.removeClass('drag-over'); });
+  function hasFiles(e) {
+    var dt = e.originalEvent && e.originalEvent.dataTransfer;
+    if (!dt || !dt.types) return false;
+    for (var i = 0; i < dt.types.length; i++) {
+      if (dt.types[i] === 'Files') return true;
+    }
+    return false;
+  }
 
-  $content.on('drop', function (e) {
+  function placeCaretAt(oe) {
+    var range = null;
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(oe.clientX, oe.clientY);
+    } else if (document.caretPositionFromPoint) {
+      var pos = document.caretPositionFromPoint(oe.clientX, oe.clientY);
+      if (pos) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+      }
+    } else if (oe.rangeParent) { // Firefox antigo
+      range = document.createRange();
+      range.setStart(oe.rangeParent, oe.rangeOffset);
+    }
+    if (range) {
+      range.collapse(true);
+      self.editor.selection.setRange(range);
+    }
+  }
+
+  // Arrastar texto DENTRO do editor continua nativo (o conteúdo já é seguro)
+  $content.on('dragstart' + ns, function () { internalDrag = true; });
+  $content.on('dragend' + ns, function () { internalDrag = false; });
+
+  $content.on('dragenter' + ns, function (e) {
+    if (!hasFiles(e)) return;
+    dragDepth++;
+    $content.addClass('drag-over');
+  });
+
+  $content.on('dragover' + ns, function (e) {
+    if (!hasFiles(e)) return;
     e.preventDefault();
-    e.stopPropagation();
+  });
+
+  // dragenter/dragleave disparam ao passar por cada filho; o contador evita
+  // que o destaque fique piscando
+  $content.on('dragleave' + ns, function (e) {
+    if (!hasFiles(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) $content.removeClass('drag-over');
+  });
+
+  $content.on('drop' + ns, function (e) {
+    var oe = e.originalEvent;
+    dragDepth = 0;
     $content.removeClass('drag-over');
 
-    var oe = e.originalEvent;
+    if (internalDrag) {
+      internalDrag = false;
+      setTimeout(function () {
+        self.editor.history.save();
+        self.editor.trigger('change');
+      }, 0);
+      return; // movimentação nativa de texto
+    }
+
+    var dt = oe.dataTransfer;
+    if (!dt) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
     self.editor.$content.focus();
+    placeCaretAt(oe);
 
-    // Tenta posicionar o cursor no local exato onde a imagem foi solta
-    if (document.caretRangeFromPoint) {
-      var range = document.caretRangeFromPoint(oe.clientX, oe.clientY);
-      if (range) {
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
+    if (hasFiles(e)) {
+      self.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
+      var files = dt.files;
+      if (files && files.length > 0 && /^image\//.test(files[0].type)) {
+        self.insertImage(files[0]);
       }
-    } else if (oe.rangeParent) { // fallback Firefox
-      var range = document.createRange();
-      range.setStart(oe.rangeParent, oe.rangeOffset);
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
+      return;
     }
 
-    if (self.editor.selection && self.editor.selection.isInsideEditor()) {
-      self.savedRange = self.editor.selection.getRange();
-    } else {
-      self.savedRange = null;
-    }
+    // Texto ou HTML vindo de fora (outra aba, outro app): passa pelo sanitizador
+    var html = dt.getData('text/html');
+    var text = dt.getData('text/plain');
+    if (!html && !text) return;
 
-    var files = oe.dataTransfer.files;
-    if (files && files.length > 0 && files[0].type.match(/^image\//)) {
-      self.insertImage(files[0]);
-    }
+    self.editor.history.save();
+    self.rangeFormatter.insertHTML(html || self.editor.sanitizer.textToHtml(text));
+    self.editor.history.save();
+    self.editor.trigger('change');
   });
 };
 
@@ -3175,13 +4186,9 @@ ImagePlugin.prototype.insertImage = function (file) {
     var img = document.createElement('img');
     img.src = url;
     
-    // Usa RangeFormatter para inserir de forma robusta
-    if (self.rangeFormatter) {
-      self.rangeFormatter.insertNode(img, false);
-    } else {
-      // Fallback para execCommand se RangeFormatter não estiver disponível
-      document.execCommand('insertImage', false, url);
-    }
+    self.editor.history.save();
+    self.rangeFormatter.insertNode(img, false);
+    self.editor.history.save();
     
     self.editor.trigger('change');
   };
@@ -3270,7 +4277,7 @@ VideoPlugin.prototype.buildPopover = function () {
   });
 
   // Esconde o popover se clicar fora
-  $(document).on('mousedown', function (e) {
+  $(document).on('mousedown' + this.editor.ns, function (e) {
     var $btn = self.editor.$toolbar.find('[data-name="video"]');
     if (!self.$popover.is(e.target) && self.$popover.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
       self.togglePopover(false);
@@ -3386,7 +4393,7 @@ FullscreenPlugin.prototype.init = function () {
     if (self.active) self.toggle();
   });
 
-  $(document).on('keydown', function(e) {
+  $(document).on('keydown' + this.editor.ns, function(e) {
     if (e.key === 'Escape' && self.active) {
       self.toggle();
     }
@@ -3455,6 +4462,21 @@ CodeViewPlugin.prototype.init = function () {
     self.updateView();
   });
 
+  // Tab indenta em vez de tirar o foco do código
+  this.$textarea.on('keydown', function (e) {
+    if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    var el = this;
+    var start = el.selectionStart;
+    var end = el.selectionEnd;
+    el.value = el.value.substring(0, start) + '  ' + el.value.substring(end);
+    el.selectionStart = el.selectionEnd = start + 2;
+    self.updateView();
+  });
+
+  // O editor lê daqui enquanto o code view estiver aberto (ex.: envio do formulário)
+  this.editor.codeView = this;
+
   this.$textarea.on('scroll', function () {
     self.$highlight.scrollTop($(this).scrollTop());
     self.$highlight.scrollLeft($(this).scrollLeft());
@@ -3500,8 +4522,9 @@ CodeViewPlugin.prototype.beautifyHtml = function (html) {
     return '<pre-placeholder id="' + (preBlocks.length - 1) + '"/>';
   });
 
-  // Remove quebras de linha pré-existentes para padronizar do zero
-  html = html.replace(/[\r\n]/g, '');
+  // Padroniza do zero: quebras de linha viram UM espaço. Antes elas eram
+  // apagadas e "palavra\noutra" virava "palavraoutra".
+  html = html.replace(/[ \t]*[\r\n]+[ \t]*/g, ' ');
 
   var tags = html.split(/(<[^>]+>)/g);
   var inlineTags = ['a', 'span', 'b', 'i', 'u', 'strong', 'em', 'strike', 's', 'sub', 'sup', 'code', 'font'];
@@ -3512,6 +4535,12 @@ CodeViewPlugin.prototype.beautifyHtml = function (html) {
 
     // Se não for uma tag (for apenas um nó de texto solto)
     if (tag.charAt(0) !== '<') {
+      // Logo após uma tag de bloco, o texto começa na linha indentada
+      if (result.length && result.charAt(result.length - 1) === '\n') {
+        tag = tag.replace(/^\s+/, '');
+        if (!tag) continue;
+        result += indent;
+      }
       result += tag;
       continue;
     }
@@ -3563,7 +4592,8 @@ CodeViewPlugin.prototype.toggle = function () {
   var $codeViewBtn = this.editor.$toolbar.find('[data-name="codeview"]');
 
   if (this.active) {
-    var html = this.editor.getContent();
+    // Lê direto do conteúdo: getContent() já considera o code view ativo
+    var html = this.editor.$content.html();
     
     // Aplica a formatação em cascata inteligente no HTML
     html = this.beautifyHtml(html);
@@ -3578,7 +4608,10 @@ CodeViewPlugin.prototype.toggle = function () {
     $codeViewBtn.addClass('active');
   } else {
     var val = this.$textarea.val();
-    this.editor.setContent(val);
+    this.editor.history.save();
+    this.editor.setContent(val); // setContent sanitiza
+    this.editor.history.save();
+    this.editor.trigger('change');
     this.$wrapper.hide();
     this.editor.$content.show();
     
@@ -3645,7 +4678,7 @@ AiPlugin.prototype.buildPopover = function () {
     self.generateDescription();
   });
 
-  $(document).on('mousedown', function (e) {
+  $(document).on('mousedown' + this.editor.ns, function (e) {
     var $btn = self.editor.$toolbar.find('[data-name="ai"]');
     if (!self.$popover.is(e.target) && self.$popover.has(e.target).length === 0 && !$btn.is(e.target) && $btn.has(e.target).length === 0) {
       self.togglePopover(false);

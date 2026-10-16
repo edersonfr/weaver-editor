@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "gulp",
-    "test": "node tests/security.test.js"
+    "test": "node tests/security.test.js && node tests/functional.test.js"
   },
   "repository": {
     "type": "git",
