@@ -9,7 +9,12 @@ PreviewPlugin.prototype.init = function () {
 };
 
 PreviewPlugin.prototype.build = function () {
-  this.$preview = $('<iframe class="editor-preview-frame"/>').hide();
+  // sandbox sem allow-scripts e sem allow-same-origin: o conteúdo é exibido,
+  // mas nada nele executa nem acessa a página do editor (cookies, DOM, parent).
+  this.$preview = $('<iframe class="editor-preview-frame" title="Pré-visualização"/>')
+    .attr('sandbox', 'allow-popups allow-popups-to-escape-sandbox')
+    .attr('referrerpolicy', 'no-referrer')
+    .hide();
 
   this.editor.$container.append(this.$preview);
 };
@@ -43,17 +48,23 @@ PreviewPlugin.prototype.toggle = function () {
 };
 
 PreviewPlugin.prototype.enable = function () {
-  var html = this.editor.getContent();
-  var doc = this.$preview[0].contentWindow.document;
+  // Sanitiza de novo: o preview nunca deve confiar no DOM editável
+  var html = this.editor.sanitize(this.editor.getContent());
 
   var cssLinks = this.buildCssLinks();
   var googleFonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato&family=Montserrat&family=Open+Sans&family=Oswald&family=Poppins&family=Roboto&display=swap">';
 
-  doc.open();
-  doc.write(
+  // Segunda camada além do sandbox: CSP que proíbe qualquer script
+  var csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
+
+  // srcdoc em vez de document.write: com o sandbox sem allow-same-origin,
+  // a página do editor não tem (nem precisa ter) acesso ao documento do iframe
+  this.$preview.attr('srcdoc',
     '<!DOCTYPE html>' +
     '<html>' +
     '<head>' +
+    '<meta charset="utf-8">' +
+    csp +
     googleFonts +
     cssLinks +
     '<style>body{padding:20px;font-family:Arial}</style>' +
@@ -63,7 +74,6 @@ PreviewPlugin.prototype.enable = function () {
     '</body>' +
     '</html>'
   );
-  doc.close();
 
   this.editor.$content.hide();
   this.$preview.show();
@@ -107,7 +117,7 @@ PreviewPlugin.prototype.buildCssLinks = function () {
   var links = '';
 
   for (var i = 0; i < css.length; i++) {
-    links += '<link rel="stylesheet" href="' + css[i] + '">';
+    links += '<link rel="stylesheet" href="' + HtmlSanitizer.escapeHtml(css[i]) + '">';
   }
 
   return links;

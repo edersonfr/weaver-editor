@@ -42,12 +42,9 @@
       this.$el.hide();
       this.$container.insertAfter(this.$el);
       
-      // Carrega o valor inicial que já estava no HTML do textarea
-      var initialContent = this.$el.val();
-      if (initialContent) {
-        this.$content[0].innerHTML = initialContent;
-      }
-      
+      // Guarda o valor inicial do textarea; ele é carregado (sanitizado) em initCore
+      this.initialContent = this.$el.val();
+
       // Garante a sincronização absoluta no momento do envio do formulário
       var self = this;
       this.$el.closest('form').on('submit', function() {
@@ -62,8 +59,15 @@
   // CORE INIT
   // =========================
   Editor.prototype.initCore = function () {
+    this.sanitizer = new HtmlSanitizer(this.options);
     this.commandRegistry = new CommandRegistry(this);
     this.selection = new SelectionManager(this);
+
+    // Conteúdo inicial vindo do textarea: nunca entra sem sanitização
+    if (this.initialContent) {
+      this.setContent(this.initialContent);
+    }
+
     this.history = new HistoryManager(this);
 
     this.history.init();
@@ -168,10 +172,19 @@
   };
 
   Editor.prototype.getContent = function () {
-    // Retorna o HTML já sanitizado que está no content
-    // Não re-sanitiza porque degradaria o HTML (especialmente <style> e <script>)
-    // A sanitização acontece uma única vez quando o conteúdo entra (paste ou setContent)
+    // O conteúdo já entrou sanitizado (setContent, insertHTML, colar, IA, code view).
+    // Importante: sanitize também no servidor. Sanitização no navegador não é
+    // uma barreira de segurança, pois o POST pode ser forjado.
     return this.$content.html();
+  };
+
+  /**
+   * Sanitiza um HTML com as regras deste editor.
+   * @param {string} html
+   * @returns {string}
+   */
+  Editor.prototype.sanitize = function (html) {
+    return this.sanitizer.sanitize(html);
   };
 
   Editor.prototype.getPlugin = function (name) {
@@ -185,8 +198,15 @@
   };
 
   Editor.prototype.setContent = function (html) {
-    // Usa innerHTML nativo no lugar de jQuery .html() para impedir que os scripts sejam executados no modo edição
-    this.$content[0].innerHTML = html;
+    // Sempre sanitiza e insere nós vindos de um documento inerte: nenhum
+    // <script> ou handler (onerror, onload...) chega a executar.
+    var content = this.$content[0];
+
+    while (content.firstChild) {
+      content.removeChild(content.firstChild);
+    }
+
+    content.appendChild(this.sanitizer.toFragment(html));
   };
 
   Editor.prototype.updateToolbar = function () {

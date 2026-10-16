@@ -33,7 +33,10 @@ LinkPlugin.prototype.buildPopover = function () {
   this.$urlInput = $('<input type="text" placeholder="https://" class="px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full">');
   $urlGroup.append(this.$urlInput);
 
-  var $targetGroup = $('<label class="flex items-center gap-2 cursor-pointer text-gray-700 m-0"><input type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" checked> Abrir em nova aba</label>');
+  this.$urlError = $('<div class="editor-link-error text-xs text-red-600 hidden" role="alert">URL inválida. Use http://, https://, mailto: ou tel:.</div>');
+  $urlGroup.append(this.$urlError);
+
+  var $targetGroup =$('<label class="flex items-center gap-2 cursor-pointer text-gray-700 m-0"><input type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" checked> Abrir em nova aba</label>');
   this.$targetInput = $targetGroup.find('input');
 
   var $btnGroup = $('<div class="flex mt-1"></div>');
@@ -69,8 +72,14 @@ LinkPlugin.prototype.buildPopover = function () {
   });
 
   $btnSave.on('click', function () {
-    self.insertLink();
-    self.togglePopover(false);
+    // Mantém o popover aberto quando a URL é recusada, para o usuário corrigir
+    if (self.insertLink() !== false) {
+      self.togglePopover(false);
+    }
+  });
+
+  this.$urlInput.on('input', function () {
+    self.$urlError.addClass('hidden').hide();
   });
 
   // Esconde o popover se clicar fora
@@ -121,6 +130,7 @@ LinkPlugin.prototype.togglePopover = function (forceState) {
 
     this.$textInput.val(text);
     this.$urlInput.val(url);
+    this.$urlError.addClass('hidden').hide();
     this.$targetInput.prop('checked', isBlank);
     
     if (isLinked) {
@@ -165,15 +175,28 @@ LinkPlugin.prototype.insertLink = function () {
     return;
   }
 
-  var url = this.$urlInput.val().trim();
+  var url = this.normalizeUrl(this.$urlInput.val());
   var text = this.$textInput.val().trim() || url;
   var isBlank = this.$targetInput.prop('checked');
 
-  if (!url || url === 'https://') return;
+  if (!url || url === 'https://') return false;
+
+  // Bloqueia javascript:, data:, vbscript: e variações ofuscadas
+  if (!this.editor.sanitizer.isSafeUrl(url, 'a', 'href')) {
+    this.$urlError.removeClass('hidden').show();
+    this.$urlInput.focus();
+    return false;
+  }
+
+  this.editor.history.save();
 
   if (this.activeLinkNode) {
-    this.activeLinkNode.href = url;
-    this.activeLinkNode.innerText = text;
+    this.activeLinkNode.setAttribute('href', url);
+    // textContent nunca interpreta HTML; só troca o texto se ele mudou,
+    // preservando negrito/itálico dentro do link
+    if (this.activeLinkNode.textContent !== text) {
+      this.activeLinkNode.textContent = text;
+    }
     if (isBlank) {
       this.activeLinkNode.setAttribute('target', '_blank');
       this.activeLinkNode.setAttribute('rel', 'noopener noreferrer');
@@ -182,19 +205,35 @@ LinkPlugin.prototype.insertLink = function () {
       this.activeLinkNode.removeAttribute('rel');
     }
   } else {
-    var linkHtml = '<a href="' + url + '"' + (isBlank ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + text + '</a>';
-    
-    // Usa RangeFormatter para inserir HTML de forma robusta
-    if (this.rangeFormatter) {
-      this.rangeFormatter.insertHTML(linkHtml);
-    } else {
-      // Fallback para execCommand se RangeFormatter não estiver disponível
-      document.execCommand('insertHTML', false, linkHtml);
+    // Monta o link via DOM: URL e texto nunca são interpretados como HTML
+    var link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.textContent = text;
+    if (isBlank) {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
     }
+
+    this.rangeFormatter.insertNode(link, false);
   }
-  
+
+  this.editor.history.save();
   this.editor.trigger('change');
   this.editor.updateToolbar();
+  return true;
+};
+
+/**
+ * Completa endereços digitados sem protocolo ("www.site.com" -> "https://www.site.com")
+ * @param {string} raw
+ * @returns {string}
+ */
+LinkPlugin.prototype.normalizeUrl = function (raw) {
+  var url = $.trim(raw || '');
+  if (/^www\./i.test(url)) {
+    url = 'https://' + url;
+  }
+  return url;
 };
 
 LinkPlugin.prototype.removeLink = function () {
@@ -205,8 +244,13 @@ LinkPlugin.prototype.removeLink = function () {
   }
   
   if (this.activeLinkNode) {
+    // Move os filhos para fora do <a> sem reinterpretar o HTML como string
     var $node = $(this.activeLinkNode);
-    $node.replaceWith($node.html());
+    if ($node.contents().length) {
+      $node.contents().unwrap();
+    } else {
+      $node.remove();
+    }
   } else {
     // Usa RangeFormatter para remover link de forma robusta
     if (this.rangeFormatter) {

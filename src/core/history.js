@@ -62,7 +62,8 @@ HistoryManager.prototype.redo = function () {
 };
 
 HistoryManager.prototype.restore = function (html) {
-  this.editor.$content.html(html);
+  // Não usar jQuery .html(): ele avalia <script> a cada desfazer/refazer.
+  this.editor.setContent(html);
 };
 
 window.HistoryManager = HistoryManager;

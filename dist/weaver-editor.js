@@ -17,6 +17,398 @@ function Plugin(editor) {
 }
 
 Plugin.prototype.init = function () {};
+/**
+ * HtmlSanitizer - Sanitizador central do Weaver Editor (allowlist).
+ *
+ * Todo HTML que entra no editor (conteúdo inicial, setContent, colar, IA,
+ * code view, desfazer/refazer e plugins) passa por aqui.
+ *
+ * Princípios:
+ * - O HTML é interpretado num documento inerte (createHTMLDocument), onde
+ *   scripts não rodam e imagens não carregam, então `onerror` nunca dispara.
+ * - Somente tags e atributos da allowlist sobrevivem. Tags perigosas são
+ *   removidas junto com o conteúdo, mesmo que o integrador as libere.
+ * - URLs são normalizadas como o navegador faz (removendo espaços e
+ *   caracteres de controle) antes de validar o protocolo.
+ * - CSS inline passa por uma allowlist de propriedades e não aceita url().
+ * - iframes só são aceitos para players do YouTube e do Vimeo.
+ */
+function HtmlSanitizer(options) {
+  options = options || {};
+
+  this.allowedTags = options.allowedTags || HtmlSanitizer.defaults.allowedTags;
+  this.allowedAttributes = options.allowedAttributes || HtmlSanitizer.defaults.allowedAttributes;
+  this.allowedStyles = options.allowedStyles || HtmlSanitizer.defaults.allowedStyles;
+  this.allowedIframeSources = options.allowedIframeSources || HtmlSanitizer.defaults.allowedIframeSources;
+}
+
+HtmlSanitizer.HTML_NS = 'http://www.w3.org/1999/xhtml';
+
+/**
+ * Tags removidas SEMPRE, com todo o conteúdo, mesmo se constarem em allowedTags.
+ * Inclui as que executam código, carregam recursos ou causam confusão de
+ * namespace no parser (svg/math), base de ataques de mXSS.
+ */
+HtmlSanitizer.FORBIDDEN_TAGS = [
+  'script', 'style', 'noscript', 'template', 'object', 'embed', 'applet',
+  'frame', 'frameset', 'base', 'link', 'meta', 'title', 'head', 'svg', 'math',
+  'xmp', 'plaintext', 'noembed', 'noframes', 'textarea', 'select', 'option',
+  'button', 'input', 'form', 'portal'
+];
+
+/** Atributos que contêm URLs e precisam de validação de protocolo. */
+HtmlSanitizer.URL_ATTRIBUTES = ['href', 'src', 'poster', 'cite'];
+
+/** Padrões CSS que podem carregar recursos ou executar código. */
+HtmlSanitizer.UNSAFE_CSS_VALUE = /url\s*\(|expression\s*\(|javascript\s*:|vbscript\s*:|@import|behavior\s*:|-moz-binding|[<>\\]/i;
+
+HtmlSanitizer.defaults = {
+  allowedTags: [
+    'p', 'b', 'i', 'u', 'strong', 'em',
+    'ul', 'ol', 'li',
+    'a', 'img',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'div', 'span', 'br',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
+    'blockquote', 'pre', 'code', 's', 'strike', 'del', 'sub', 'sup', 'hr', 'mark',
+    'iframe', 'video', 'audio', 'source', 'figure', 'figcaption'
+  ],
+
+  allowedAttributes: {
+    '*': ['class', 'id', 'style', 'title', 'dir', 'lang'],
+    a: ['href', 'target', 'rel'],
+    img: ['src', 'alt', 'width', 'height'],
+    iframe: ['src', 'width', 'height', 'allow', 'allowfullscreen', 'frameborder', 'title'],
+    table: ['border', 'cellpadding', 'cellspacing', 'width'],
+    td: ['colspan', 'rowspan', 'scope', 'width', 'height', 'valign'],
+    th: ['colspan', 'rowspan', 'scope', 'width', 'height', 'valign'],
+    col: ['span', 'width'],
+    colgroup: ['span', 'width'],
+    ol: ['start', 'type', 'reversed'],
+    blockquote: ['cite'],
+    video: ['src', 'controls', 'width', 'height', 'poster', 'loop', 'muted', 'playsinline', 'preload'],
+    audio: ['src', 'controls', 'loop', 'muted', 'preload'],
+    source: ['src', 'type']
+  },
+
+  allowedStyles: [
+    'color', 'background-color', 'background',
+    'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant',
+    'text-decoration', 'text-decoration-line', 'text-align', 'text-indent', 'text-transform',
+    'line-height', 'letter-spacing', 'word-spacing', 'white-space', 'vertical-align',
+    'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+    'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+    'border', 'border-top', 'border-right', 'border-bottom', 'border-left',
+    'border-width', 'border-style', 'border-color', 'border-radius', 'border-collapse', 'border-spacing',
+    'width', 'height', 'max-width', 'min-width', 'max-height', 'min-height',
+    'float', 'clear', 'display', 'list-style-type', 'list-style-position'
+  ],
+
+  // Somente players de vídeo conhecidos podem ser incorporados.
+  allowedIframeSources: [
+    /^https:\/\/(?:www\.)?youtube(?:-nocookie)?\.com\/embed\/[A-Za-z0-9_-]{11}(?:\?[^"'<>\s]*)?$/,
+    /^https:\/\/player\.vimeo\.com\/video\/\d+(?:\?[^"'<>\s]*)?$/
+  ]
+};
+
+/**
+ * Valores de `display` aceitos. Bloqueia, por exemplo, `contents` e `fixed`
+ * em combinações usadas para sobrepor a interface.
+ */
+HtmlSanitizer.ALLOWED_DISPLAY = ['block', 'inline', 'inline-block', 'none', 'table', 'table-cell', 'table-row', 'list-item', 'flex', 'inline-flex'];
+
+/**
+ * Sanitiza e devolve uma string HTML.
+ * @param {string} html
+ * @returns {string}
+ */
+HtmlSanitizer.prototype.sanitize = function (html) {
+  return this._parse(html).innerHTML;
+};
+
+/**
+ * Sanitiza e devolve um DocumentFragment pronto para inserir no documento.
+ * Os nós são importados de um documento inerte, então nada executa.
+ * @param {string} html
+ * @returns {DocumentFragment}
+ */
+HtmlSanitizer.prototype.toFragment = function (html) {
+  var body = this._parse(html);
+  var fragment = document.createDocumentFragment();
+
+  while (body.firstChild) {
+    fragment.appendChild(document.importNode(body.firstChild, true));
+    body.removeChild(body.firstChild);
+  }
+
+  return fragment;
+};
+
+/**
+ * Converte texto puro em HTML seguro, preservando quebras de linha.
+ * @param {string} text
+ * @returns {string}
+ */
+HtmlSanitizer.prototype.textToHtml = function (text) {
+  var escaped = HtmlSanitizer.escapeHtml(String(text || '').replace(/\r\n?/g, '\n'));
+  var paragraphs = escaped.split(/\n{2,}/);
+  var out = [];
+
+  for (var i = 0; i < paragraphs.length; i++) {
+    out.push('<p>' + (paragraphs[i].replace(/\n/g, '<br>') || '<br>') + '</p>');
+  }
+
+  return paragraphs.length === 1 ? paragraphs[0].replace(/\n/g, '<br>') : out.join('');
+};
+
+/**
+ * Valida uma URL para um atributo.
+ * @param {string} url
+ * @param {string} [tag] - tag do elemento (ex.: 'a', 'img')
+ * @param {string} [attr] - atributo (ex.: 'href', 'src')
+ * @returns {boolean}
+ */
+HtmlSanitizer.prototype.isSafeUrl = function (url, tag, attr) {
+  if (url === null || url === undefined) return false;
+
+  // O navegador ignora espaços e caracteres de controle antes de interpretar
+  // o protocolo (" javascript:" e "java\tscript:" executam). Normalizamos igual.
+  var normalized = String(url).replace(/[\u0000-\u0020\u007F-\u00A0\u1680\u180E\u2000-\u200F\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, '');
+
+  var match = /^([a-z][a-z0-9+.\-]*):/i.exec(normalized);
+
+  // Sem protocolo: caminho relativo, âncora ou URL relativa ao protocolo ("//...").
+  if (!match) return true;
+
+  var scheme = match[1].toLowerCase();
+
+  if (scheme === 'http' || scheme === 'https') return true;
+
+  if ((scheme === 'mailto' || scheme === 'tel') && (!attr || attr === 'href')) return true;
+
+  if (scheme === 'data' && tag === 'img' && attr === 'src') {
+    return /^data:image\/(?:png|jpe?g|gif|webp|avif);/i.test(normalized);
+  }
+
+  return false;
+};
+
+/**
+ * Indica se a URL pode ser usada como src de iframe.
+ * @param {string} src
+ * @returns {boolean}
+ */
+HtmlSanitizer.prototype.isAllowedIframeSource = function (src) {
+  if (!src) return false;
+  for (var i = 0; i < this.allowedIframeSources.length; i++) {
+    if (this.allowedIframeSources[i].test(src)) return true;
+  }
+  return false;
+};
+
+/**
+ * Filtra uma declaração CSS inline pela allowlist de propriedades.
+ * @param {string} cssText
+ * @returns {string} CSS limpo (pode ser vazio)
+ */
+HtmlSanitizer.prototype.cleanStyle = function (cssText) {
+  var declarations = HtmlSanitizer.splitDeclarations(cssText || '');
+  var kept = [];
+
+  for (var i = 0; i < declarations.length; i++) {
+    var decl = declarations[i];
+    var colon = decl.indexOf(':');
+    if (colon === -1) continue;
+
+    var prop = decl.substring(0, colon).trim().toLowerCase();
+    var value = decl.substring(colon + 1).trim();
+
+    if (!prop || !value) continue;
+    if (this.allowedStyles.indexOf(prop) === -1) continue;
+    if (HtmlSanitizer.UNSAFE_CSS_VALUE.test(value)) continue;
+
+    if (prop === 'display') {
+      var displayValue = value.replace(/\s*!important\s*$/i, '').toLowerCase();
+      if (HtmlSanitizer.ALLOWED_DISPLAY.indexOf(displayValue) === -1) continue;
+    }
+
+    kept.push(prop + ': ' + value);
+  }
+
+  return kept.join('; ');
+};
+
+// =========================
+// INTERNOS
+// =========================
+
+HtmlSanitizer.prototype._parse = function (html) {
+  var doc = document.implementation.createHTMLDocument('');
+  var body = doc.body;
+
+  body.innerHTML = html === null || html === undefined ? '' : String(html);
+
+  this._walk(body);
+
+  return body;
+};
+
+HtmlSanitizer.prototype._walk = function (parent) {
+  var children = Array.prototype.slice.call(parent.childNodes);
+
+  for (var i = 0; i < children.length; i++) {
+    var node = children[i];
+
+    // Comentários e instruções de processamento são descartados.
+    if (node.nodeType === 8 || node.nodeType === 7) {
+      parent.removeChild(node);
+      continue;
+    }
+
+    if (node.nodeType !== 1) continue;
+
+    var tag = (node.localName || node.nodeName).toLowerCase();
+
+    // Elementos fora do namespace HTML (svg, math e filhos) são removidos inteiros.
+    if (node.namespaceURI && node.namespaceURI !== HtmlSanitizer.HTML_NS) {
+      parent.removeChild(node);
+      continue;
+    }
+
+    if (HtmlSanitizer.FORBIDDEN_TAGS.indexOf(tag) !== -1) {
+      parent.removeChild(node);
+      continue;
+    }
+
+    // Limpa os filhos antes de decidir sobre o pai (bottom-up).
+    this._walk(node);
+
+    if (this.allowedTags.indexOf(tag) === -1) {
+      // Tag desconhecida: mantém o conteúdo, descarta a tag.
+      while (node.firstChild) {
+        parent.insertBefore(node.firstChild, node);
+      }
+      parent.removeChild(node);
+      continue;
+    }
+
+    if (!this._cleanAttributes(node, tag)) {
+      parent.removeChild(node);
+    }
+  }
+};
+
+/**
+ * @returns {boolean} false quando o elemento inteiro deve ser removido.
+ */
+HtmlSanitizer.prototype._cleanAttributes = function (el, tag) {
+  var allowedForTag = this.allowedAttributes[tag] || [];
+  var allowedGlobal = this.allowedAttributes['*'] || [];
+  var attrs = Array.prototype.slice.call(el.attributes);
+
+  for (var i = 0; i < attrs.length; i++) {
+    var originalName = attrs[i].name;
+    var name = originalName.toLowerCase();
+    var value = attrs[i].value;
+
+    // Handlers de evento nunca passam, mesmo se liberados por engano.
+    if (name.indexOf('on') === 0 || name === 'srcdoc' || name === 'formaction' || name === 'xmlns' || name.indexOf(':') !== -1) {
+      el.removeAttribute(originalName);
+      continue;
+    }
+
+    if (allowedForTag.indexOf(name) === -1 && allowedGlobal.indexOf(name) === -1) {
+      el.removeAttribute(originalName);
+      continue;
+    }
+
+    if (HtmlSanitizer.URL_ATTRIBUTES.indexOf(name) !== -1 && !this.isSafeUrl(value, tag, name)) {
+      el.removeAttribute(originalName);
+      continue;
+    }
+
+    if (name === 'style') {
+      var cleanCss = this.cleanStyle(value);
+      if (cleanCss) {
+        el.setAttribute('style', cleanCss);
+      } else {
+        el.removeAttribute(originalName);
+      }
+      continue;
+    }
+
+    if (name === 'target' && ['_blank', '_self', '_parent', '_top'].indexOf(value) === -1) {
+      el.removeAttribute(originalName);
+    }
+  }
+
+  if (tag === 'a') {
+    if (el.getAttribute('target') === '_blank') {
+      el.setAttribute('rel', 'noopener noreferrer');
+    } else {
+      el.removeAttribute('rel');
+    }
+  }
+
+  if (tag === 'iframe') {
+    if (!this.isAllowedIframeSource(el.getAttribute('src'))) {
+      return false;
+    }
+    el.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+    el.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    el.setAttribute('loading', 'lazy');
+  }
+
+  return true;
+};
+
+/**
+ * Divide um cssText em declarações respeitando aspas e parênteses.
+ * @param {string} cssText
+ * @returns {string[]}
+ */
+HtmlSanitizer.splitDeclarations = function (cssText) {
+  var parts = [];
+  var current = '';
+  var quote = null;
+  var depth = 0;
+
+  for (var i = 0; i < cssText.length; i++) {
+    var ch = cssText.charAt(i);
+
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '(') {
+      depth++;
+    } else if (ch === ')') {
+      depth = Math.max(0, depth - 1);
+    } else if (ch === ';' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current.trim()) parts.push(current);
+
+  return parts;
+};
+
+HtmlSanitizer.escapeHtml = function (text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+window.HtmlSanitizer = HtmlSanitizer;
+
 function SelectionManager(editor) {
   this.editor = editor;
 }
@@ -206,7 +598,8 @@ HistoryManager.prototype.redo = function () {
 };
 
 HistoryManager.prototype.restore = function (html) {
-  this.editor.$content.html(html);
+  // Não usar jQuery .html(): ele avalia <script> a cada desfazer/refazer.
+  this.editor.setContent(html);
 };
 
 window.HistoryManager = HistoryManager;
@@ -231,23 +624,42 @@ RangeFormatter.prototype.insertHTML = function (htmlString, preserveCaret) {
   if (!sel.rangeCount) return false;
   
   var range = sel.getRangeAt(0);
-  var fragment = range.createContextualFragment(htmlString);
-  
+
+  // Nunca usar range.createContextualFragment: ele EXECUTA <script>.
+  // O fragmento vem sanitizado de um documento inerte.
+  var fragment = this._sanitizer().toFragment(htmlString);
+  var lastNode = fragment.lastChild;
+
   // Remove a seleção atual
   range.deleteContents();
-  
+
   // Insere o novo conteúdo
   range.insertNode(fragment);
-  
+
   if (preserveCaret) {
     // Move o cursor para após o conteúdo inserido
-    range.collapse(false);
+    if (lastNode && lastNode.parentNode) {
+      range.setStartAfter(lastNode);
+      range.collapse(true);
+    } else {
+      range.collapse(false);
+    }
   }
   
   sel.removeAllRanges();
   sel.addRange(range);
   
   return true;
+};
+
+/**
+ * Sanitizador do editor (ou um padrão, se o RangeFormatter for usado sozinho)
+ * @private
+ */
+RangeFormatter.prototype._sanitizer = function () {
+  if (this.editor && this.editor.sanitizer) return this.editor.sanitizer;
+  if (!this._fallbackSanitizer) this._fallbackSanitizer = new HtmlSanitizer();
+  return this._fallbackSanitizer;
 };
 
 /**
@@ -529,12 +941,9 @@ window.RangeFormatter = RangeFormatter;
       this.$el.hide();
       this.$container.insertAfter(this.$el);
       
-      // Carrega o valor inicial que já estava no HTML do textarea
-      var initialContent = this.$el.val();
-      if (initialContent) {
-        this.$content[0].innerHTML = initialContent;
-      }
-      
+      // Guarda o valor inicial do textarea; ele é carregado (sanitizado) em initCore
+      this.initialContent = this.$el.val();
+
       // Garante a sincronização absoluta no momento do envio do formulário
       var self = this;
       this.$el.closest('form').on('submit', function() {
@@ -549,8 +958,15 @@ window.RangeFormatter = RangeFormatter;
   // CORE INIT
   // =========================
   Editor.prototype.initCore = function () {
+    this.sanitizer = new HtmlSanitizer(this.options);
     this.commandRegistry = new CommandRegistry(this);
     this.selection = new SelectionManager(this);
+
+    // Conteúdo inicial vindo do textarea: nunca entra sem sanitização
+    if (this.initialContent) {
+      this.setContent(this.initialContent);
+    }
+
     this.history = new HistoryManager(this);
 
     this.history.init();
@@ -655,10 +1071,19 @@ window.RangeFormatter = RangeFormatter;
   };
 
   Editor.prototype.getContent = function () {
-    // Retorna o HTML já sanitizado que está no content
-    // Não re-sanitiza porque degradaria o HTML (especialmente <style> e <script>)
-    // A sanitização acontece uma única vez quando o conteúdo entra (paste ou setContent)
+    // O conteúdo já entrou sanitizado (setContent, insertHTML, colar, IA, code view).
+    // Importante: sanitize também no servidor. Sanitização no navegador não é
+    // uma barreira de segurança, pois o POST pode ser forjado.
     return this.$content.html();
+  };
+
+  /**
+   * Sanitiza um HTML com as regras deste editor.
+   * @param {string} html
+   * @returns {string}
+   */
+  Editor.prototype.sanitize = function (html) {
+    return this.sanitizer.sanitize(html);
   };
 
   Editor.prototype.getPlugin = function (name) {
@@ -672,8 +1097,15 @@ window.RangeFormatter = RangeFormatter;
   };
 
   Editor.prototype.setContent = function (html) {
-    // Usa innerHTML nativo no lugar de jQuery .html() para impedir que os scripts sejam executados no modo edição
-    this.$content[0].innerHTML = html;
+    // Sempre sanitiza e insere nós vindos de um documento inerte: nenhum
+    // <script> ou handler (onerror, onload...) chega a executar.
+    var content = this.$content[0];
+
+    while (content.firstChild) {
+      content.removeChild(content.firstChild);
+    }
+
+    content.appendChild(this.sanitizer.toFragment(html));
   };
 
   Editor.prototype.updateToolbar = function () {
@@ -1618,40 +2050,25 @@ BasicCommandsPlugin.prototype.init = function () {
     }
   });
 };
+/**
+ * SanitizerPlugin - limpa o conteúdo colado (paste).
+ *
+ * A sanitização em si fica no núcleo (HtmlSanitizer, em editor.sanitizer),
+ * para que TODA entrada passe pelas mesmas regras, não só o colar.
+ * Este plugin mantém a API antiga (clean, isSafeUrl, allowedTags) por
+ * compatibilidade.
+ */
 function SanitizerPlugin(editor) {
   this.editor = editor;
 }
 
 SanitizerPlugin.prototype.init = function () {
-  this.allowedTags = this.editor.options.allowedTags || [
-    'p', 'b', 'i', 'u', 'strong', 'em',
-    'ul', 'ol', 'li',
-    'a', 'img',
-    'h1', 'h2', 'h3','h4', 'h5', 'h6',
-    'div', 'span', 'br',
-    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
-    'blockquote', 'pre', 'code', 's', 'strike', 'del', 'sub', 'sup', 'hr', 'mark',
-    'iframe', 'video', 'audio', 'source',
-    'style', 'script'
-  ];
+  var sanitizer = this.editor.sanitizer;
 
-  this.allowedAttributes = this.editor.options.allowedAttributes || {
-    '*': ['class', 'id', 'style', 'title', 'dir'],
-    a: ['href', 'target', 'rel'],
-    img: ['src', 'alt', 'width', 'height'],
-    iframe: ['src', 'width', 'height', 'allow', 'allowfullscreen', 'frameborder', 'scrolling'],
-    table: ['border', 'cellpadding', 'cellspacing', 'width'],
-    td: ['colspan', 'rowspan', 'scope', 'width', 'height', 'valign'],
-    th: ['colspan', 'rowspan', 'scope', 'width', 'height', 'valign'],
-    ol: ['start', 'type', 'reversed'],
-    video: ['src', 'controls', 'width', 'height', 'poster', 'autoplay', 'loop', 'muted'],
-    audio: ['src', 'controls', 'autoplay', 'loop', 'muted'],
-    source: ['src', 'type'],
-    style: ['type', 'media'],
-    script: ['src', 'type', 'async', 'defer', 'charset']
-  };
+  // Mantidos para compatibilidade com código que lia estas propriedades
+  this.allowedTags = sanitizer.allowedTags;
+  this.allowedAttributes = sanitizer.allowedAttributes;
 
-  // Inicializa o RangeFormatter para operações robustas no DOM
   this.rangeFormatter = new RangeFormatter(this.editor);
 
   this.bind();
@@ -1661,129 +2078,46 @@ SanitizerPlugin.prototype.bind = function () {
   var self = this;
 
   this.editor.$content.on('paste', function (e) {
+    var clipboard = (e.originalEvent || e).clipboardData;
+
     e.preventDefault();
 
-    var html = (e.originalEvent || e).clipboardData.getData('text/html');
-    var text = (e.originalEvent || e).clipboardData.getData('text/plain');
+    var html = '';
+    var text = '';
 
-    var content = html || text;
-
-    var clean = self.clean(content);
-
-    // Usa RangeFormatter para inserir HTML de forma robusta
-    if (self.rangeFormatter) {
-      self.rangeFormatter.insertHTML(clean);
-    } else {
-      // Fallback para execCommand se RangeFormatter não estiver disponível
-      document.execCommand('insertHTML', false, clean);
+    if (clipboard) {
+      html = clipboard.getData('text/html');
+      text = clipboard.getData('text/plain');
+    } else if (window.clipboardData) {
+      // IE11: só oferece texto puro
+      text = window.clipboardData.getData('Text');
     }
+
+    // Texto puro é escapado: "<b>" colado como texto continua sendo texto.
+    var content = html ? html : self.editor.sanitizer.textToHtml(text);
+
+    self.editor.history.save();
+    self.rangeFormatter.insertHTML(content); // insertHTML sanitiza
+    self.editor.history.save();
+    self.editor.trigger('change');
   });
 };
 
+/**
+ * Sanitiza um HTML com as regras do editor.
+ * @param {string} html
+ * @returns {string}
+ */
 SanitizerPlugin.prototype.clean = function (html) {
-  // Extrai e preserva os blocos <style> e <script> antes de processar
-  var styleScriptBlocks = [];
-  var preservedHtml = html.replace(/(<(style|script)[^>]*>[\s\S]*?<\/\2>)/gi, function(match) {
-    styleScriptBlocks.push(match);
-    // Usa uma div com id como placeholder (div é tag permitida, id é atributo permitido)
-    return '<div id="weaver-temp-preserve-' + (styleScriptBlocks.length - 1) + '"></div>';
-  });
-
-  var div = document.createElement('div');
-  div.innerHTML = preservedHtml;
-
-  this.walk(div);
-
-  var cleanedHtml = div.innerHTML;
-
-  // Restaura os blocos <style> e <script> de forma exata
-  for (var i = 0; i < styleScriptBlocks.length; i++) {
-    cleanedHtml = cleanedHtml.replace(
-      '<div id="weaver-temp-preserve-' + i + '"></div>',
-      styleScriptBlocks[i]
-    );
-  }
-
-  return this.normalize(cleanedHtml);
+  return this.editor.sanitizer.sanitize(html);
 };
 
-SanitizerPlugin.prototype.walk = function (node) {
-  var children = node.children;
-
-  for (var i = children.length - 1; i >= 0; i--) {
-    var child = children[i];
-
-    // Caminha para os filhos primeiro (bottom-up) para garantir que
-    // os filhos não sejam perdidos caso o pai seja desempacotado
-    this.walk(child);
-
-    var tag = child.tagName.toLowerCase();
-
-    if (this.allowedTags.indexOf(tag) === -1) {
-      // Desempacota a tag (mantém o conteúdo interno) em vez de apagar tudo
-      while (child.firstChild) {
-        child.parentNode.insertBefore(child.firstChild, child);
-      }
-      child.parentNode.removeChild(child);
-      continue;
-    }
-
-    this.cleanAttributes(child, tag);
-  }
-};
-
-SanitizerPlugin.prototype.cleanAttributes = function (el, tag) {
-  var allowedForTag = this.allowedAttributes[tag] || [];
-  var allowedGlobal = this.allowedAttributes['*'] || [];
-  var attrs = el.attributes;
-
-  for (var i = attrs.length - 1; i >= 0; i--) {
-    var originalName = attrs[i].name;
-    var name = originalName.toLowerCase();
-    var value = attrs[i].value;
-
-    // remove eventos (proteção contra XSS)
-    if (name.indexOf('on') === 0) {
-      el.removeAttribute(originalName);
-      continue;
-    }
-
-    // remove atributos não permitidos
-    if (allowedForTag.indexOf(name) === -1 && allowedGlobal.indexOf(name) === -1) {
-      el.removeAttribute(originalName);
-      continue;
-    }
-
-    // proteção genérica contra XSS em URLs (links, imagens, iframes, videos)
-    if ((name === 'href' || name === 'src') && !this.isSafeUrl(value)) {
-      el.removeAttribute(originalName);
-    }
-  }
-
-  // segurança adicional para links
-  if (tag === 'a') {
-    if (el.getAttribute('target') === '_blank') {
-      el.setAttribute('rel', 'noopener noreferrer');
-    } else {
-      el.removeAttribute('rel');
-    }
-  }
-};
-
-SanitizerPlugin.prototype.isSafeUrl = function (url) {
-  // Se a URL possui um protocolo explícito (ex: http:, javascript:, mailto:), valida-o
-  if (/^([a-z0-9\+\-\.]+):/i.test(url)) {
-    return /^(https?|data:image\/)/i.test(url);
-  }
-  // Caminhos relativos puros (como "uploads/img_xxx.jpg" ou "../imagem.png") são sempre seguros
-  return true;
-};
-
-SanitizerPlugin.prototype.normalize = function (html) {
-  return html;
+SanitizerPlugin.prototype.isSafeUrl = function (url, tag, attr) {
+  return this.editor.sanitizer.isSafeUrl(url, tag, attr);
 };
 
 window.SanitizerPlugin = SanitizerPlugin;
+
 function PreviewPlugin(editor) {
   this.editor = editor;
   this.active = false;
@@ -1795,7 +2129,12 @@ PreviewPlugin.prototype.init = function () {
 };
 
 PreviewPlugin.prototype.build = function () {
-  this.$preview = $('<iframe class="editor-preview-frame"/>').hide();
+  // sandbox sem allow-scripts e sem allow-same-origin: o conteúdo é exibido,
+  // mas nada nele executa nem acessa a página do editor (cookies, DOM, parent).
+  this.$preview = $('<iframe class="editor-preview-frame" title="Pré-visualização"/>')
+    .attr('sandbox', 'allow-popups allow-popups-to-escape-sandbox')
+    .attr('referrerpolicy', 'no-referrer')
+    .hide();
 
   this.editor.$container.append(this.$preview);
 };
@@ -1829,17 +2168,23 @@ PreviewPlugin.prototype.toggle = function () {
 };
 
 PreviewPlugin.prototype.enable = function () {
-  var html = this.editor.getContent();
-  var doc = this.$preview[0].contentWindow.document;
+  // Sanitiza de novo: o preview nunca deve confiar no DOM editável
+  var html = this.editor.sanitize(this.editor.getContent());
 
   var cssLinks = this.buildCssLinks();
   var googleFonts = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato&family=Montserrat&family=Open+Sans&family=Oswald&family=Poppins&family=Roboto&display=swap">';
 
-  doc.open();
-  doc.write(
+  // Segunda camada além do sandbox: CSP que proíbe qualquer script
+  var csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
+
+  // srcdoc em vez de document.write: com o sandbox sem allow-same-origin,
+  // a página do editor não tem (nem precisa ter) acesso ao documento do iframe
+  this.$preview.attr('srcdoc',
     '<!DOCTYPE html>' +
     '<html>' +
     '<head>' +
+    '<meta charset="utf-8">' +
+    csp +
     googleFonts +
     cssLinks +
     '<style>body{padding:20px;font-family:Arial}</style>' +
@@ -1849,7 +2194,6 @@ PreviewPlugin.prototype.enable = function () {
     '</body>' +
     '</html>'
   );
-  doc.close();
 
   this.editor.$content.hide();
   this.$preview.show();
@@ -1893,7 +2237,7 @@ PreviewPlugin.prototype.buildCssLinks = function () {
   var links = '';
 
   for (var i = 0; i < css.length; i++) {
-    links += '<link rel="stylesheet" href="' + css[i] + '">';
+    links += '<link rel="stylesheet" href="' + HtmlSanitizer.escapeHtml(css[i]) + '">';
   }
 
   return links;
@@ -2016,7 +2360,10 @@ LinkPlugin.prototype.buildPopover = function () {
   this.$urlInput = $('<input type="text" placeholder="https://" class="px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full">');
   $urlGroup.append(this.$urlInput);
 
-  var $targetGroup = $('<label class="flex items-center gap-2 cursor-pointer text-gray-700 m-0"><input type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" checked> Abrir em nova aba</label>');
+  this.$urlError = $('<div class="editor-link-error text-xs text-red-600 hidden" role="alert">URL inválida. Use http://, https://, mailto: ou tel:.</div>');
+  $urlGroup.append(this.$urlError);
+
+  var $targetGroup =$('<label class="flex items-center gap-2 cursor-pointer text-gray-700 m-0"><input type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" checked> Abrir em nova aba</label>');
   this.$targetInput = $targetGroup.find('input');
 
   var $btnGroup = $('<div class="flex mt-1"></div>');
@@ -2052,8 +2399,14 @@ LinkPlugin.prototype.buildPopover = function () {
   });
 
   $btnSave.on('click', function () {
-    self.insertLink();
-    self.togglePopover(false);
+    // Mantém o popover aberto quando a URL é recusada, para o usuário corrigir
+    if (self.insertLink() !== false) {
+      self.togglePopover(false);
+    }
+  });
+
+  this.$urlInput.on('input', function () {
+    self.$urlError.addClass('hidden').hide();
   });
 
   // Esconde o popover se clicar fora
@@ -2104,6 +2457,7 @@ LinkPlugin.prototype.togglePopover = function (forceState) {
 
     this.$textInput.val(text);
     this.$urlInput.val(url);
+    this.$urlError.addClass('hidden').hide();
     this.$targetInput.prop('checked', isBlank);
     
     if (isLinked) {
@@ -2148,15 +2502,28 @@ LinkPlugin.prototype.insertLink = function () {
     return;
   }
 
-  var url = this.$urlInput.val().trim();
+  var url = this.normalizeUrl(this.$urlInput.val());
   var text = this.$textInput.val().trim() || url;
   var isBlank = this.$targetInput.prop('checked');
 
-  if (!url || url === 'https://') return;
+  if (!url || url === 'https://') return false;
+
+  // Bloqueia javascript:, data:, vbscript: e variações ofuscadas
+  if (!this.editor.sanitizer.isSafeUrl(url, 'a', 'href')) {
+    this.$urlError.removeClass('hidden').show();
+    this.$urlInput.focus();
+    return false;
+  }
+
+  this.editor.history.save();
 
   if (this.activeLinkNode) {
-    this.activeLinkNode.href = url;
-    this.activeLinkNode.innerText = text;
+    this.activeLinkNode.setAttribute('href', url);
+    // textContent nunca interpreta HTML; só troca o texto se ele mudou,
+    // preservando negrito/itálico dentro do link
+    if (this.activeLinkNode.textContent !== text) {
+      this.activeLinkNode.textContent = text;
+    }
     if (isBlank) {
       this.activeLinkNode.setAttribute('target', '_blank');
       this.activeLinkNode.setAttribute('rel', 'noopener noreferrer');
@@ -2165,19 +2532,35 @@ LinkPlugin.prototype.insertLink = function () {
       this.activeLinkNode.removeAttribute('rel');
     }
   } else {
-    var linkHtml = '<a href="' + url + '"' + (isBlank ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + text + '</a>';
-    
-    // Usa RangeFormatter para inserir HTML de forma robusta
-    if (this.rangeFormatter) {
-      this.rangeFormatter.insertHTML(linkHtml);
-    } else {
-      // Fallback para execCommand se RangeFormatter não estiver disponível
-      document.execCommand('insertHTML', false, linkHtml);
+    // Monta o link via DOM: URL e texto nunca são interpretados como HTML
+    var link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.textContent = text;
+    if (isBlank) {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
     }
+
+    this.rangeFormatter.insertNode(link, false);
   }
-  
+
+  this.editor.history.save();
   this.editor.trigger('change');
   this.editor.updateToolbar();
+  return true;
+};
+
+/**
+ * Completa endereços digitados sem protocolo ("www.site.com" -> "https://www.site.com")
+ * @param {string} raw
+ * @returns {string}
+ */
+LinkPlugin.prototype.normalizeUrl = function (raw) {
+  var url = $.trim(raw || '');
+  if (/^www\./i.test(url)) {
+    url = 'https://' + url;
+  }
+  return url;
 };
 
 LinkPlugin.prototype.removeLink = function () {
@@ -2188,8 +2571,13 @@ LinkPlugin.prototype.removeLink = function () {
   }
   
   if (this.activeLinkNode) {
+    // Move os filhos para fora do <a> sem reinterpretar o HTML como string
     var $node = $(this.activeLinkNode);
-    $node.replaceWith($node.html());
+    if ($node.contents().length) {
+      $node.contents().unwrap();
+    } else {
+      $node.remove();
+    }
   } else {
     // Usa RangeFormatter para remover link de forma robusta
     if (this.rangeFormatter) {
@@ -2769,6 +3157,13 @@ ImagePlugin.prototype.insertImage = function (file) {
   var uploadFn = this.editor.options.uploadImage;
 
   var doInsert = function (url) {
+    // A URL pode vir do callback de upload do integrador: valida o protocolo.
+    // data: só para formatos raster (SVG pode carregar script).
+    if (!self.editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
+      if (window.console && console.warn) console.warn('Weaver: URL de imagem recusada', url);
+      return;
+    }
+
     self.editor.$content.focus();
     if (self.savedRange) {
       var sel = window.getSelection();
@@ -2835,6 +3230,9 @@ VideoPlugin.prototype.buildPopover = function () {
   this.$urlInput = $('<input type="text" placeholder="https://" class="px-2 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full">');
   $urlGroup.append(this.$urlInput);
 
+  this.$urlError = $('<div class="editor-video-error text-xs text-red-600 hidden" role="alert">Use um link do YouTube ou do Vimeo.</div>');
+  $urlGroup.append(this.$urlError);
+
   var $btnGroup = $('<div class="flex mt-1"></div>');
   
   var $rightBtns = $('<div class="flex gap-2 ml-auto"></div>');
@@ -2861,8 +3259,14 @@ VideoPlugin.prototype.buildPopover = function () {
   });
 
   $btnSave.on('click', function () {
-    self.insertVideo();
-    self.togglePopover(false);
+    // Mantém o popover aberto quando a URL é recusada
+    if (self.insertVideo() !== false) {
+      self.togglePopover(false);
+    }
+  });
+
+  this.$urlInput.on('input', function () {
+    self.$urlError.addClass('hidden').hide();
   });
 
   // Esconde o popover se clicar fora
@@ -2888,6 +3292,7 @@ VideoPlugin.prototype.togglePopover = function (forceState) {
     }
 
     this.$urlInput.val('');
+    this.$urlError.addClass('hidden').hide();
 
     var btnOffset = $btn.position();
     this.$popover.css({
@@ -2921,29 +3326,49 @@ VideoPlugin.prototype.insertVideo = function () {
   }
 
   var url = this.$urlInput.val().trim();
-  if (!url || url === 'https://') return;
+  if (!url || url === 'https://') return false;
 
-  var iframeUrl = url;
-  
-  // Tenta converter links normais em links de Embed embedados
-  var ytMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-  if (ytMatch) iframeUrl = 'https://www.youtube.com/embed/' + ytMatch[1];
+  // Somente YouTube e Vimeo. Qualquer outra URL é recusada: antes ela virava
+  // o src do iframe e permitia javascript: e injeção de atributos.
+  var iframeUrl = VideoPlugin.toEmbedUrl(url);
 
-  var vimeoMatch = url.match(/vimeo\.com\/(\d+)/i);
-  if (vimeoMatch) iframeUrl = 'https://player.vimeo.com/video/' + vimeoMatch[1];
-
-  var html = '<iframe width="560" height="315" style="max-width: 100%;" src="' + iframeUrl + '" frameborder="0" allowfullscreen></iframe><p><br></p>';
-  
-  // Usa RangeFormatter para inserir HTML de forma robusta
-  if (this.rangeFormatter) {
-    this.rangeFormatter.insertHTML(html);
-  } else {
-    // Fallback para execCommand se RangeFormatter não estiver disponível
-    document.execCommand('insertHTML', false, html);
+  if (!iframeUrl) {
+    this.$urlError.removeClass('hidden').show();
+    this.$urlInput.focus();
+    return false;
   }
-  
+
+  var html = '<iframe width="560" height="315" style="max-width: 100%;" src="' + iframeUrl + '" frameborder="0" ' +
+    'allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen title="Vídeo incorporado"></iframe><p><br></p>';
+
+  this.editor.history.save();
+  // insertHTML sanitiza e confere o src contra a allowlist de players
+  this.rangeFormatter.insertHTML(html);
+  this.editor.history.save();
+
   this.editor.trigger('change');
   this.editor.updateToolbar();
+  return true;
+};
+
+/**
+ * Converte um link do YouTube ou Vimeo na URL do player.
+ * Só aceita IDs nos formatos oficiais, então o resultado é sempre seguro.
+ * @param {string} url
+ * @returns {string|null}
+ */
+VideoPlugin.toEmbedUrl = function (url) {
+  var ytMatch = /^(?:https?:)?\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[?&#\/].*)?$/i.exec(url);
+  if (ytMatch) {
+    return 'https://www.youtube-nocookie.com/embed/' + ytMatch[1];
+  }
+
+  var vimeoMatch = /^(?:https?:)?\/\/(?:www\.|player\.)?vimeo\.com\/(?:video\/)?(\d+)(?:[?#\/].*)?$/i.exec(url);
+  if (vimeoMatch) {
+    return 'https://player.vimeo.com/video/' + vimeoMatch[1];
+  }
+
+  return null;
 };
 
 window.VideoPlugin = VideoPlugin;
@@ -3321,7 +3746,9 @@ AiPlugin.prototype.generateDescription = function () {
       }
     },
     error: function(xhr, status, error) {
-      handleError(error || 'Erro na requisição AJAX para ' + endpoint);
+      // O backend devolve { error: "mensagem" } com o status HTTP adequado
+      var message = xhr && xhr.responseJSON && xhr.responseJSON.error;
+      handleError(message || error || 'Erro na requisição AJAX para ' + endpoint);
     }
   });
 };
@@ -3335,12 +3762,12 @@ AiPlugin.prototype.insertHtml = function (html) {
     return;
   }
 
-  if (this.rangeFormatter) {
-    this.rangeFormatter.insertHTML(html);
-  } else {
-    document.execCommand('insertHTML', false, html);
-  }
-  
+  // A resposta da IA é conteúdo não confiável (pode ser induzida via prompt
+  // a devolver <script> ou onerror); insertHTML sempre sanitiza.
+  this.editor.history.save();
+  this.rangeFormatter.insertHTML(String(html || ''));
+  this.editor.history.save();
+
   this.editor.trigger('change');
   this.editor.updateToolbar();
 };
