@@ -12,7 +12,7 @@ FullscreenPlugin.prototype.init = function () {
     if (self.active) self.toggle();
   });
 
-  $(document).on('keydown', function(e) {
+  $(document).on('keydown' + this.editor.ns, function(e) {
     if (e.key === 'Escape' && self.active) {
       self.toggle();
     }

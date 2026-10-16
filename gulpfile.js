@@ -7,6 +7,7 @@ const jsFiles = [
   'src/core/commands.js',
   'src/core/plugin.js',
   'src/core/sanitizer.js',
+  'src/core/base-styles.js',
   'src/core/selection.js',
   'src/core/history.js',
   'src/core/range-formatter.js',
@@ -33,7 +34,7 @@ gulp.task('build', function() {
     .pipe(uglify()) // Esmaga o código (remove espaços e encurta variáveis)
     .pipe(rename('weaver-editor.min.js')) // Renomeia o arquivo
     .pipe(gulp.dest('dist')) // Salva a versão Minificada na pasta /dist
-    .pipe(gulp.dest('docs')); // Salva a versão Legível e Minificada na pasta /docs
+    .pipe(gulp.dest('docs')); // Copia a versão minificada para a página de documentação (/docs)
 });
 
 gulp.task('default', gulp.series('build'));
