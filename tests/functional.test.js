@@ -166,8 +166,21 @@ test('B3: code view não junta palavras e é estável em idas e voltas', async f
   await exec(page, 'codeview');
   assert.ok(/palavra outra/.test(first), first);
   assert.strictEqual(second, first);
-  var text = await page.evaluate(function () { return window.$('#t').data('weaver').$content.text().replace(/\s+/g, ' ').trim(); });
-  assert.strictEqual(text, 'palavra outra item');
+  var text = await page.evaluate(function () { return window.$('#t').data('weaver').$content.find('p').text().replace(/\s+/g, ' ').trim(); });
+  assert.strictEqual(text, 'palavra outra');
+  // Code view aberto e fechado sem alterar o código não muda o conteúdo
+  assert.strictEqual(await content(page), '<p>palavra\noutra</p><ul><li>item</li></ul>');
+});
+
+test('B3: alterar o código no code view aplica a mudança', async function () {
+  var page = await setup('<p>a</p>');
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.exec('codeview');
+    ed.getPlugin('CodeViewPlugin').$textarea.val('<p>b</p>');
+    ed.exec('codeview');
+  });
+  assert.strictEqual(await content(page), '<p>b</p>');
 });
 
 test('B3: enviar o formulário com o code view aberto salva as edições', async function () {
@@ -817,6 +830,152 @@ test('A11y: botões ativos expõem aria-pressed', async function () {
   await page.evaluate(function () { window.$('#t').data('weaver').updateToolbar(); });
   assert.strictEqual(await page.getAttribute('[data-name="bold"]', 'aria-pressed'), 'true');
   assert.strictEqual(await page.getAttribute('[data-name="italic"]', 'aria-pressed'), null);
+});
+
+// =========================
+// APS: HTML original e modo confiável
+// =========================
+
+function getContent(page) {
+  return page.evaluate(function () { return window.$('#t').data('weaver').getContent(); });
+}
+
+/** Opções do modo confiável usadas no APS. */
+var TRUSTED = {
+  forbiddenTags: [],
+  allowedTags: '*',
+  allowedAttributes: { '*': '*' },
+  allowedStyles: '*',
+  allowCssUrls: true,
+  keepComments: true,
+  iframeAttributes: false,
+  allowedIframeSources: '*'
+};
+
+var APS_HTML = '<!-- banner -->\n' +
+  '<section data-id="1" style="background-image:url(https://img.irroba.com.br/a.jpg);display:grid;gap:8px">\n' +
+  '  <style>.x{color:red}</style>\n' +
+  '  <font face="Arial">texto</font>\n' +
+  '  <iframe src="https://www.google.com/maps/embed?pb=1"></iframe>\n' +
+  '  <script>window.__ran = 1<\/script>\n' +
+  '</section>';
+
+test('APS: modo confiável devolve o HTML idêntico sem edição', async function () {
+  var page = await setup(APS_HTML, TRUSTED);
+  assert.strictEqual(await getContent(page), APS_HTML);
+  assert.strictEqual(await page.evaluate(function () { return window.__ran || 0; }), 0);
+});
+
+test('APS: modo confiável preserva tudo também depois de editar', async function () {
+  var page = await setup(APS_HTML, TRUSTED);
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.find('font').append(' mais');
+    ed.trigger('change');
+  });
+  var html = await getContent(page);
+  ['<!-- banner -->', 'data-id="1"', 'style="background-image:url(https://img.irroba.com.br/a.jpg);display:grid;gap:8px"',
+    '<style>.x{color:red}</style>', '<font face="Arial">texto mais</font>', 'src="https://www.google.com/maps/embed?pb=1"', '<script>window.__ran = 1</script>'
+  ].forEach(function (piece) {
+    assert.ok(html.indexOf(piece) !== -1, 'faltou ' + piece + ' em ' + html);
+  });
+  assert.ok(html.indexOf('sandbox') === -1, html);
+  assert.ok(html.indexOf('weaver') === -1, html);
+});
+
+test('APS: <script> e <style> viram marcador inerte no editor', async function () {
+  var page = await setup(APS_HTML, TRUSTED);
+  var live = await page.evaluate(function () {
+    var c = window.$('#t').data('weaver').$content;
+    return { script: c.find('script').length, style: c.find('style').length, raw: c.find('weaver-raw').length };
+  });
+  assert.deepStrictEqual(live, { script: 0, style: 0, raw: 2 });
+});
+
+test('APS: modo padrão devolve o HTML original quando nada foi removido', async function () {
+  var original = '<p style="color:red;text-align:center">Olá &amp; <b>mundo</b></p>\n<p class=\'x\'>dois</p>';
+  var page = await setup(original);
+  assert.strictEqual(await getContent(page), original);
+  // E é isso que vai no submit do formulário
+  var submitted = await page.evaluate(function () {
+    window.$('form').on('submit', function (e) { e.preventDefault(); });
+    window.$('form').trigger('submit');
+    return window.$('#t').val();
+  });
+  assert.strictEqual(submitted, original);
+});
+
+test('APS: modo padrão não devolve o original se a sanitização removeu algo', async function () {
+  var page = await setup('<p onclick="x()">a</p><section>b</section>');
+  assert.strictEqual(await getContent(page), '<p>a</p>b');
+});
+
+test('APS: depois de editar vale o conteúdo novo; desfazer volta ao original', async function () {
+  var original = '<p style="color:red">a</p>';
+  var page = await setup(original);
+  await state(page, '<p style="color:red">a</p>', { from: ['a', 1] });
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.history.save();
+    ed.$content.find('p').append('b');
+    ed.history.save();
+  });
+  assert.strictEqual(await getContent(page), '<p style="color:red">ab</p>');
+  await exec(page, 'undo');
+  assert.strictEqual(await getContent(page), original);
+});
+
+test('APS: focar e sair sem editar não normaliza o conteúdo', async function () {
+  var original = '<div class="clearfix"></div><p><b><b>x</b></b></p><p></p>';
+  var page = await setup(original);
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.focus();
+    ed.$content.blur();
+  });
+  assert.strictEqual(await getContent(page), original);
+});
+
+test('APS: normalizador mantém elementos vazios com atributos', async function () {
+  var page = await setup('<div class="clearfix"></div><p>a<b></b></p>');
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.find('p').append('b');
+    ed.$content.focus();
+    ed.$content.blur();
+  });
+  assert.strictEqual(await getContent(page), '<div class="clearfix"></div><p>ab</p>');
+});
+
+test('APS: rel="nofollow" é mantido em links com target _blank', async function () {
+  var page = await setup('<p><a href="https://x.com" target="_blank" rel="nofollow">x</a> <a href="/y" rel="sponsored">y</a></p>');
+  var html = await page.evaluate(function () { return window.$('#t').data('weaver').$content.html(); });
+  assert.ok(html.indexOf('rel="nofollow noopener noreferrer"') !== -1, html);
+  assert.ok(html.indexOf('rel="sponsored"') !== -1, html);
+});
+
+test('APS: data-* e aria-* liberados por RegExp', async function () {
+  var page = await setup('<p data-a="1" aria-label="r" data-x-y="2" foo="3">a</p>', {
+    allowedAttributes: { '*': ['class', /^data-[\w-]+$/, /^aria-[\w-]+$/] }
+  });
+  assert.strictEqual(await getContent(page), '<p data-a="1" aria-label="r" data-x-y="2">a</p>');
+});
+
+test('APS: allowedTags "*" mantém tags HTML desconhecidas pela lista padrão', async function () {
+  var html = '<section><article><header>h</header><details><summary>s</summary>d</details><dl><dt>t</dt><dd>d</dd></dl></article></section>';
+  var page = await setup(html, { allowedTags: '*' });
+  assert.strictEqual(await getContent(page), html);
+});
+
+test('APS: code view mostra o código protegido restaurado', async function () {
+  var page = await setup('<p>a</p><style>.x{}</style>', TRUSTED);
+  var code = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.exec('codeview');
+    return ed.getPlugin('CodeViewPlugin').$textarea.val();
+  });
+  assert.ok(code.indexOf('<style>.x{}</style>') !== -1, code);
+  assert.ok(code.indexOf('weaver-raw') === -1, code);
 });
 
 // =========================

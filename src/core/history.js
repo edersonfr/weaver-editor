@@ -77,7 +77,7 @@ HistoryManager.prototype.restore = function (entry) {
   if (!entry) return;
 
   // Não usar jQuery .html(): ele avalia <script> a cada desfazer/refazer.
-  this.editor.setContent(entry.html);
+  this.editor._loadContent(entry.html);
 
   // Devolve o cursor para onde estava, em vez de jogá-lo para o início
   if (!entry.caret || !this.editor.selection.deserialize(entry.caret)) {

@@ -20,7 +20,7 @@
    * Com $.extend(true), arrays eram mesclados por posição: pedir só
    * [['font', ['bold']]] gerava a toolbar padrão inteira com 'redo' no meio.
    */
-  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources'];
+  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources', 'forbiddenTags'];
 
   Editor.mergeOptions = function (defaults, options) {
     var merged = $.extend(true, {}, defaults);
@@ -454,23 +454,44 @@
     // uma barreira de segurança, pois o POST pode ser forjado.
 
     // Com o code view aberto, o conteúdo vigente é o que está no código
-    // (antes, enviar o formulário nesse modo descartava as edições)
-    if (this.codeView && this.codeView.active) {
+    // (antes, enviar o formulário nesse modo descartava as edições).
+    // Código não alterado: vale o conteúdo do editor (e o HTML original).
+    if (this.codeView && this.codeView.active && this.codeView.isModified()) {
       return this.sanitize(this.codeView.$textarea.val());
     }
 
-    return Editor.cleanOutput(this.$content.html());
+    var html = Editor.cleanOutput(this.$content.html());
+
+    // Nada foi editado desde o carregamento: devolve o HTML original byte a
+    // byte (aspas, entidades, ordem de atributos e formatação do CSS)
+    if (this._source && html === this._source.dom) {
+      return this._source.html;
+    }
+
+    return html;
+  };
+
+  /**
+   * Indica se o conteúdo continua igual ao último carregado por setContent
+   * (ou pelo textarea), ou seja, se o usuário ainda não editou nada.
+   * @returns {boolean}
+   */
+  Editor.prototype.isPristine = function () {
+    return !!this._source && Editor.cleanOutput(this.$content.html()) === this._source.dom;
   };
 
   /**
    * Remove do HTML final os estados visuais do editor (imagem selecionada,
-   * marcadores), que não devem ser salvos no conteúdo.
+   * marcadores) e devolve o código protegido (<weaver-raw>, atributos
+   * renomeados) ao original.
    */
   Editor.cleanOutput = function (html) {
     if (html.indexOf('weaver-') === -1) return html;
 
-    var holder = document.createElement('div');
-    holder.innerHTML = html;
+    // Documento inerte: o código restaurado (onerror, <script>) não executa
+    var holder = HtmlSanitizer.parseInert(html);
+
+    HtmlSanitizer.unprotect(holder);
 
     var states = holder.querySelectorAll('.weaver-selected');
     for (var i = 0; i < states.length; i++) {
@@ -536,7 +557,26 @@
     return null;
   };
 
+  /**
+   * Troca todo o conteúdo do editor. O HTML é guardado: enquanto nada for
+   * editado, getContent() devolve exatamente esta string (desde que a
+   * sanitização não tenha removido nada dela).
+   * @param {string} html
+   */
   Editor.prototype.setContent = function (html) {
+    html = HtmlSanitizer.toStr(html);
+    this._loadContent(html);
+
+    var dom = Editor.cleanOutput(this.$content.html());
+    this._source = HtmlSanitizer.serialize(html) === dom ? { html: html, dom: dom } : null;
+  };
+
+  /**
+   * Carrega HTML no editor sem mudar o HTML de referência (usado pelo
+   * desfazer/refazer e pelo code view).
+   * @private
+   */
+  Editor.prototype._loadContent = function (html) {
     // Sempre sanitiza e insere nós vindos de um documento inerte: nenhum
     // <script> ou handler (onerror, onload...) chega a executar.
     var content = this.$content[0];
@@ -678,6 +718,7 @@
       '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
       '.wysiwyg-editor .editor-image-alt { display: flex; gap: 4px; align-items: center; }\n' +
       '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor weaver-raw { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px dashed #9ca3af; border-radius: 3px; background: #f3f4f6; color: #4b5563; font: 12px/1.6 Menlo, Monaco, Consolas, monospace; cursor: default; user-select: none; vertical-align: middle; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
       '.editor-show-blocks p, .editor-show-blocks div, .editor-show-blocks ul, .editor-show-blocks ol, .editor-show-blocks blockquote, .editor-show-blocks table {\n' +

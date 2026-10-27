@@ -137,10 +137,17 @@ Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização,
 | `onAiGenerate` | — | Função própria para gerar o conteúdo da IA |
 | `iconsUrl` | Lucide 0.525.0 (unpkg) | Arquivo de ícones; `false` usa o Lucide já carregado na página |
 | `iconsIntegrity` | — | Hash SRI do arquivo de ícones |
-| `allowedTags` | lista segura | Tags aceitas no conteúdo |
-| `allowedAttributes` | lista segura | Atributos aceitos, por tag (`'*'` vale para todas) |
-| `allowedStyles` | lista segura | Propriedades CSS aceitas no atributo `style` |
-| `allowedIframeSources` | YouTube e Vimeo | Lista de RegExp com os endereços de iframe aceitos |
+| `allowedTags` | lista segura | Tags aceitas no conteúdo; `'*'` aceita qualquer tag HTML |
+| `allowedAttributes` | lista segura | Atributos aceitos, por tag (`'*'` vale para todas). Aceita RegExp (`/^data-[\w-]+$/`) e `'*'` como lista |
+| `allowedStyles` | lista segura | Propriedades CSS aceitas no atributo `style`; `'*'` aceita todas |
+| `allowedIframeSources` | YouTube e Vimeo | Lista de RegExp com os endereços de iframe aceitos; `'*'` aceita qualquer http(s) |
+| `forbiddenTags` | `script`, `style`, `svg`... | Tags removidas com todo o conteúdo, mesmo se liberadas em `allowedTags` |
+| `allowCssUrls` | `false` | Aceita `url()` no CSS inline, com endereço http(s), relativo ou imagem `data:` |
+| `keepComments` | `false` | Mantém os comentários HTML |
+| `iframeAttributes` | `true` | Acrescenta `sandbox`, `referrerpolicy` e `loading` aos iframes |
+| `sanitize` | `true` | `false` desliga a sanitização (veja [Modo confiável](#modo-confiável)) |
+| `sanitizer` | — | Função `(html) => html` que substitui a sanitização |
+| `normalize` | `true` | Limpa tags repetidas e vazias ao sair do editor; `false` desliga |
 | `plugins` | automático | Lista de plugins, para montar o editor à mão |
 
 ## API e eventos
@@ -152,6 +159,7 @@ var editor = $('#artigo').data('weaver');
 
 editor.getContent();                    // HTML atual (já sanitizado)
 editor.setContent('<p>Novo texto</p>'); // substitui o conteúdo (sanitiza antes)
+editor.isPristine();                    // true se nada foi editado desde o carregamento
 editor.exec('bold');                    // executa um comando da barra
 editor.sanitize(html);                  // sanitiza um HTML com as regras do editor
 editor.notify('Salvo!');                // mostra um aviso dentro do editor
@@ -168,6 +176,8 @@ $('#artigo').on('change', function (event, html) {
 ```
 
 Use `destroy` ao trocar de tela numa SPA: ele remove todos os eventos e devolve o `textarea` com o conteúdo atual.
+
+**HTML original preservado.** Enquanto nada for editado, `getContent()` (e o envio do formulário) devolve exatamente o HTML carregado, sem mudar aspas, entidades, ordem de atributos ou a formatação do CSS. Isso vale quando a sanitização não removeu nada do conteúdo; se removeu, o editor devolve a versão sanitizada.
 
 ## Imagens
 
@@ -248,7 +258,7 @@ O editor sanitiza todo HTML que entra: conteúdo inicial, colar, arrastar, códi
 
 > **Sanitize também no servidor.** O editor protege quem está editando, mas o envio do formulário pode ser forjado. Antes de salvar ou exibir o HTML, passe-o por uma biblioteca de servidor, como o [HTML Purifier](http://htmlpurifier.org/) (PHP) ou o [DOMPurify](https://github.com/cure53/DOMPurify) (Node).
 
-- **Tags bloqueadas sempre:** `script`, `style`, `svg`, `math`, `object`, `embed`, `form` e similares saem mesmo se estiverem em `allowedTags`.
+- **Tags bloqueadas:** `script`, `style`, `svg`, `math`, `object`, `embed`, `form` e similares saem mesmo se estiverem em `allowedTags`. A lista pode ser trocada em `forbiddenTags` (veja [Modo confiável](#modo-confiável)).
 - **iframes:** só players do YouTube (`youtube-nocookie.com`) e do Vimeo, sempre com `sandbox`. Para liberar outros, use `allowedIframeSources`.
 - **CSS inline:** só propriedades de formatação. `position` e `url()` são removidos.
 - **Pré-visualização:** roda num iframe com `sandbox` e sem scripts.
@@ -260,6 +270,33 @@ O editor sanitiza todo HTML que entra: conteúdo inicial, colar, arrastar, códi
 
   Para não depender de CDN, sirva o arquivo do seu domínio com `iconsUrl: '/js/lucide.min.js'`. Se os ícones não carregarem, os botões mostram o nome.
 - **Google Fonts e LGPD:** as fontes do menu vêm do Google, que recebe o IP do visitante. Use `googleFonts: false` para desligar.
+
+### Modo confiável
+
+Quando quem edita é o dono do conteúdo (por exemplo, o lojista editando a própria loja), a sanitização pode ser afrouxada para não alterar o HTML existente:
+
+```javascript
+$('#descricao').weaver({
+  forbiddenTags: [],                 // ou ['script'] para manter só scripts de fora
+  allowedTags: '*',
+  allowedAttributes: { '*': '*' },   // ou ['class', 'style', /^data-[\w-]+$/, /^aria-[\w-]+$/]
+  allowedStyles: '*',
+  allowCssUrls: true,
+  keepComments: true,
+  iframeAttributes: false,
+  allowedIframeSources: '*'
+});
+```
+
+Para desligar tudo, use `sanitize: false`, ou passe a sua própria função em `sanitizer`.
+
+Mesmo nesses modos, nada executa dentro do editor:
+
+- `<script>`, `<style>`, `<link>`, `<meta>`, `<form>`, `<input>` e afins aparecem como um marcador cinza não editável. O CSS não vaza para a página, e os campos não vão junto no envio do formulário. No `getContent()` e no código-fonte, eles voltam como eram.
+- Atributos que executam código (`onclick`, `onerror`, `srcdoc`, `href="javascript:..."`) ficam desativados no editor e voltam na saída.
+- `expression()`, `behavior` e escapes CSS fora de aspas continuam bloqueados com `allowedStyles: '*'`, e `url()` só passa com `allowCssUrls`.
+
+> **Com o modo confiável, a validação do HTML passa a ser responsabilidade do servidor.** O editor deixa de remover o que o servidor precisa barrar antes de exibir o conteúdo.
 
 ## Desenvolvimento
 
