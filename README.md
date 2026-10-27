@@ -149,6 +149,8 @@ Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização,
 | `sanitizer` | — | Função `(html) => html` que substitui a sanitização |
 | `normalize` | `true` | Limpa tags repetidas e vazias ao sair do editor; `false` desliga |
 | `buttons` | — | Botões próprios da barra (veja [Botões próprios](#botões-próprios)) |
+| `imageToolbar` | — | Botões extras (ou removidos) na barra da imagem selecionada (veja [Imagens](#imagens)) |
+| `uploadPastedImages` | `false` | Envia pelo `uploadImage` as imagens em base64 de HTML colado ou solto |
 | `imageDefaults` | — | Atributos aplicados a toda imagem inserida, como `{ style: 'width:100%;height:auto' }` |
 | `extraPlugins` | — | Plugins somados aos automáticos, sem desligar link, tabela, imagem etc. |
 | `plugins` | automático | Lista de plugins, para montar o editor à mão (substitui os automáticos) |
@@ -168,6 +170,8 @@ editor.insertHTML('<p>Oi</p>');         // insere (sanitizado) no cursor salvo, 
 editor.insertImage(url, { alt: 'Foto' }); // valida a URL e insere a imagem no cursor salvo
 editor.restoreSelection();              // foca o editor e volta o cursor salvo
 editor.focus();                         // foca a área de edição
+editor.getSelectedImage();              // <img> selecionada no editor, ou null
+editor.replaceImage(img, url, attrs);   // troca o src mantendo estilo e alinhamento
 editor.exec('bold');                    // executa um comando da barra
 editor.sanitize(html);                  // sanitiza um HTML com as regras do editor
 editor.notify('Salvo!');                // mostra um aviso dentro do editor
@@ -215,7 +219,7 @@ $('#descricao').weaver({
 });
 ```
 
-Para registrar um botão para todos os editores da página, use `WysiwygEditor.registerButton('imageManager', { ... })`. Um nome na `toolbar` que não existe gera um aviso no console.
+Para registrar um botão para todos os editores da página, use `WysiwygEditor.registerButton(nome, definicao)`. Um nome na `toolbar` que não existe gera um aviso no console.
 
 ## Imagens
 
@@ -237,6 +241,29 @@ $('#artigo').weaver({
 ```
 
 Formatos aceitos: PNG, JPG, GIF, WebP e AVIF. No servidor, confira o tipo e o tamanho de novo antes de salvar.
+
+O `done` aceita atributos para a imagem: `done(url, { alt: 'Foto', width: 600 })`.
+
+**Colar e arrastar:** um print colado com `Ctrl+V` ou uma imagem arrastada passa pelo mesmo caminho (com `uploadImage`, sobe para o servidor). Ao colar do Word ou do Excel, que mandam um PNG junto com o HTML, vale o HTML. Com `uploadPastedImages: true`, as imagens em base64 dentro de um HTML colado ou solto também sobem pelo `uploadImage`, e o `src` delas é trocado pela URL devolvida.
+
+Com `uploadImage` ou `imageToolbar` configurados, os recursos de imagem (colar, redimensionar, alinhar) ficam ativos mesmo sem o botão `image` na barra.
+
+**Barra da imagem:** clique numa imagem para redimensionar, alinhar, editar o texto alternativo ou remover. Para acrescentar botões ou tirar os padrões (`w100`, `w50`, `w25`, `original`, `floatLeft`, `center`, `floatRight`, `noFloat`, `alt`, `remove`):
+
+```javascript
+$('#descricao').weaver({
+  imageToolbar: {
+    add: [{
+      icon: 'replace',
+      title: 'Trocar imagem',
+      action: function (editor, img) {
+        abrirGerenciador(function (url) { editor.replaceImage(img, url); });
+      }
+    }],
+    remove: ['w25']
+  }
+});
+```
 
 ## Assistente de IA
 

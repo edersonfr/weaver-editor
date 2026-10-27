@@ -1138,6 +1138,127 @@ test('APS: insertHTML sanitiza o conteúdo', async function () {
 });
 
 // =========================
+// APS: colar imagens e barra da imagem
+// =========================
+
+var PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+/** Editor com uploadImage que conta as chamadas e devolve URLs previsíveis. */
+function uploadingEditor(extra) {
+  return function () {
+    var opts = {
+      uploadPastedImages: true,
+      toolbar: [['font', ['bold']]],
+      uploadImage: function (file, done) {
+        window.__uploads = (window.__uploads || []).concat([file.name + '|' + file.type]);
+        done('https://cdn.example/' + window.__uploads.length + '.png', { alt: 'up' });
+      }
+    };
+    return opts;
+  };
+}
+
+async function pasteData(page, spec) {
+  await page.evaluate(function (spec) {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.focus();
+    var r = document.createRange();
+    r.selectNodeContents(ed.$content[0]);
+    r.collapse(false);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+    var dt = new DataTransfer();
+    if (spec.html) dt.setData('text/html', spec.html);
+    if (spec.text) dt.setData('text/plain', spec.text);
+    for (var i = 0; i < (spec.files || 0); i++) {
+      var bin = atob(spec.png.split(',')[1]);
+      var bytes = new Uint8Array(bin.length);
+      for (var b = 0; b < bin.length; b++) bytes[b] = bin.charCodeAt(b);
+      dt.items.add(new File([bytes], 'print' + i + '.png', { type: 'image/png' }));
+    }
+    ed.$content[0].dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, spec);
+  await page.waitForTimeout(150);
+}
+
+test('APS: colar um print chama uploadImage uma vez e insere a URL', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', uploadingEditor());
+  await pasteData(page, { files: 1, png: PNG_1PX });
+  assert.deepStrictEqual(await page.evaluate(function () { return window.__uploads; }), ['print0.png|image/png']);
+  var html = await content(page);
+  assert.ok(html.indexOf('<img alt="up" src="https://cdn.example/1.png">') !== -1, html);
+});
+
+test('APS: colar HTML com duas imagens base64 envia as duas e tira o data:', async function () {
+  var page = await setup();
+  await setupWith(page, '', uploadingEditor());
+  var png2 = PNG_1PX.replace('YII=', 'YIA=');
+  await pasteData(page, { html: '<p>texto <img src="' + PNG_1PX + '"> e <img src="' + png2 + '"></p>' });
+  await page.waitForTimeout(150);
+  assert.strictEqual((await page.evaluate(function () { return window.__uploads; })).length, 2);
+  var html = await page.evaluate(function () { return window.$('#t').data('weaver').getContent(); });
+  assert.ok(html.indexOf('data:') === -1, html);
+  assert.ok(html.indexOf('https://cdn.example/1.png') !== -1 && html.indexOf('https://cdn.example/2.png') !== -1, html);
+});
+
+test('APS: colar do Excel (HTML com tabela + PNG) cola a tabela, não o print', async function () {
+  var page = await setup();
+  await setupWith(page, '', uploadingEditor());
+  await pasteData(page, { html: '<table><tr><td>1</td></tr></table>', text: '1', files: 1, png: PNG_1PX });
+  assert.strictEqual(await page.evaluate(function () { return window.__uploads; }), undefined);
+  assert.ok((await content(page)).indexOf('<td>1</td>') !== -1);
+});
+
+test('APS: sem uploadPastedImages, data: colado fica como está', async function () {
+  var page = await setup();
+  await pasteData(page, { html: '<p><img src="' + PNG_1PX + '"></p>' });
+  assert.ok((await content(page)).indexOf('data:image/png') !== -1);
+});
+
+test('APS: botão extra na barra da imagem troca o src com replaceImage', async function () {
+  var page = await setup();
+  await setupWith(page, '<p><img src="https://a.com/1.jpg" alt="Foto" style="width: 50%; float: left"></p>', function () {
+    return {
+      toolbar: [['insert', ['image']]],
+      imageToolbar: { add: [{ name: 'trocar', icon: 'replace', title: 'Trocar imagem', action: function (editor, img) {
+        window.__same = img === editor.getSelectedImage();
+        editor.replaceImage(img, 'https://a.com/2.jpg', { 'data-x': null });
+      } }], remove: ['w25'] }
+    };
+  });
+  var info = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var img = ed.$content.find('img')[0];
+    window.$(img).trigger('click');
+    var $tb = ed.getPlugin('ImagePlugin').$toolbar;
+    var hasW25 = $tb.find('[title="Largura 25%"]').length;
+    $tb.find('[title="Trocar imagem"]').trigger('click');
+    return { same: window.__same, hasW25: hasW25, html: ed.getContent() };
+  });
+  assert.strictEqual(info.same, true);
+  assert.strictEqual(info.hasW25, 0);
+  assert.strictEqual(info.html, '<p><img src="https://a.com/2.jpg" alt="Foto" style="width: 50%; float: left"></p>');
+  await exec(page, 'undo');
+  assert.ok((await page.evaluate(function () { return window.$('#t').data('weaver').getContent(); })).indexOf('https://a.com/1.jpg') !== -1);
+});
+
+test('APS: replaceImage recusa URL insegura', async function () {
+  var page = await setup('<p><img src="https://a.com/1.jpg"></p>');
+  var ok = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    return ed.replaceImage(ed.$content.find('img')[0], 'javascript:alert(1)');
+  });
+  assert.strictEqual(ok, false);
+});
+
+test('APS: uploadImage carrega o plugin de imagem sem o botão image', async function () {
+  var page = await setup();
+  await setupWith(page, '', function () { return { toolbar: [['font', ['bold']]], uploadImage: function () {} }; });
+  assert.strictEqual(await page.evaluate(function () { return !!window.$('#t').data('weaver').getPlugin('ImagePlugin'); }), true);
+});
+
+// =========================
 // RUNNER
 // =========================
 

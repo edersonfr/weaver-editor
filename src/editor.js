@@ -228,6 +228,44 @@
     return img ? this.insertHTML(img.outerHTML) : false;
   };
 
+  /**
+   * Imagem selecionada (clicada) no editor, ou null.
+   * @returns {HTMLImageElement|null}
+   */
+  Editor.prototype.getSelectedImage = function () {
+    var plugin = this.getPlugin('ImagePlugin');
+    return plugin && plugin.activeImage && this.$content[0].contains(plugin.activeImage) ? plugin.activeImage : null;
+  };
+
+  /**
+   * Troca o src de uma imagem do editor, mantendo estilo, alt e
+   * alinhamento. Um passo de desfazer.
+   * @param {HTMLImageElement} img
+   * @param {string} url
+   * @param {Object} [attrs] - atributos a aplicar (null remove o atributo)
+   * @returns {boolean} false se a URL for recusada ou a imagem não estiver no editor
+   */
+  Editor.prototype.replaceImage = function (img, url, attrs) {
+    if (!img || !this.$content[0].contains(img) || !url || !this.sanitizer.isSafeUrl(url, 'img', 'src')) return false;
+
+    this.history.save();
+    img.setAttribute('src', url);
+    for (var name in attrs || {}) {
+      if (!attrs.hasOwnProperty(name) || name === 'src' || /^on/i.test(name)) continue;
+      if (attrs[name] === null) {
+        img.removeAttribute(name);
+      } else {
+        img.setAttribute(name, attrs[name]);
+      }
+    }
+    this.history.save();
+
+    var plugin = this.getPlugin('ImagePlugin');
+    if (plugin && plugin.activeImage === img) plugin.positionToolbar();
+    this.trigger('change');
+    return true;
+  };
+
   /** @private Cria o <img> num documento inerte; null se a URL for recusada. */
   Editor.prototype._buildImage = function (url, attrs) {
     if (!url || !this.sanitizer.isSafeUrl(url, 'img', 'src')) return null;
@@ -287,6 +325,12 @@
             activeOptionalPlugins.push(PluginClass);
           }
         }
+      }
+
+      // Sem o botão `image` (ex.: gerenciador de imagens próprio), o plugin
+      // ainda é preciso para colar prints, redimensionar e trocar imagens
+      if ((this.options.uploadImage || this.options.imageToolbar) && activeOptionalPlugins.indexOf(window.ImagePlugin) === -1) {
+        activeOptionalPlugins.push(window.ImagePlugin);
       }
 
       plugins = corePlugins.concat(activeOptionalPlugins).filter(Boolean);
@@ -972,6 +1016,11 @@
     buttons: {},
     // Atributos aplicados a toda imagem inserida (ex.: { style: 'width:100%;height:auto' })
     imageDefaults: null,
+    // Botões extras na barra da imagem: [ { icon|html|text, title, action(editor, img) } ]
+    // ou { add: [...], remove: ['w25', 'original'] }
+    imageToolbar: null,
+    // Imagens em data: dentro do HTML colado/solto sobem pelo uploadImage
+    uploadPastedImages: false,
     toolbar: [
       ['history', ['undo', 'redo']],
       ['style', ['formatBlock', 'fontName', 'fontSize']],

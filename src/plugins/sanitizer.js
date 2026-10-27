@@ -45,6 +45,16 @@ SanitizerPlugin.prototype.bind = function () {
     var plain = self.editor._plainPaste;
     self.editor._plainPaste = false;
 
+    // Print ou imagem copiada: vai pelo mesmo caminho do upload/arrastar.
+    // Word e Excel mandam um PNG junto com o HTML; aí vale o HTML.
+    var imagePlugin = self.editor.getPlugin('ImagePlugin');
+    var files = imagePlugin && !plain ? ImagePlugin.imageFiles(clipboard) : [];
+    if (files.length && ImagePlugin.isOnlyImage(html) && (html || !$.trim(text))) {
+      imagePlugin.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
+      for (var f = 0; f < files.length; f++) imagePlugin.insertImage(files[f]);
+      return;
+    }
+
     // Texto puro é escapado: "<b>" colado como texto continua sendo texto.
     var content = html && !plain
       ? SanitizerPlugin.cleanOfficeHtml(html)
@@ -54,6 +64,8 @@ SanitizerPlugin.prototype.bind = function () {
     self.rangeFormatter.insertHTML(content); // insertHTML sanitiza
     self.editor.history.save();
     self.editor.trigger('change');
+
+    if (imagePlugin && html && !plain) imagePlugin.uploadEmbeddedImages(content);
   });
 };
 
