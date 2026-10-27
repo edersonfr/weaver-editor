@@ -89,6 +89,16 @@ ToolbarPlugin.prototype.render = function () {
     ai: { name: 'ai', label: '<i data-lucide="sparkles"></i>', title: 'Assistente IA' }
   };
 
+  // Botões do integrador: os registrados globalmente (registerButton) e os
+  // da opção `buttons`, que podem até substituir um botão padrão
+  var customButtons = $.extend({}, WysiwygEditor.buttons, editor.options.buttons);
+  for (var customName in customButtons) {
+    if (customButtons.hasOwnProperty(customName) && customButtons[customName]) {
+      defaultButtonLibrary[customName] = ToolbarPlugin.normalizeButton(customName, customButtons[customName]);
+    }
+  }
+  this.customButtons = customButtons;
+
   var self = this;
 
   function createButtonElement(btn) {
@@ -118,7 +128,9 @@ ToolbarPlugin.prototype.render = function () {
           $item.on('click', function(e) {
             var val = $(this).attr('data-value');
             var fromKeyboard = $menu[0].contains(document.activeElement);
-            if (val) {
+            if (val && btn.action) {
+              btn.action(editor, val, $btn);
+            } else if (val) {
               editor.exec(btn.name, val);
             }
             $menu.hide();
@@ -132,6 +144,7 @@ ToolbarPlugin.prototype.render = function () {
         $btn.on('mousedown', function(e) { e.preventDefault(); });
         $btn.on('click', function(e) {
           var isVisible = $menu.is(':visible');
+          if (btn.action) editor.saveSelection();
           editor.$toolbar.find('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
           editor.$toolbar.find('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
@@ -334,7 +347,13 @@ ToolbarPlugin.prototype.render = function () {
           .html(btn.label)
           .on('mousedown', function(e) { e.preventDefault(); })
           .on('click', function () {
-          editor.exec(btn.name);
+          if (btn.action) {
+            // O action costuma abrir um modal: guarda o cursor antes
+            editor.saveSelection();
+            btn.action(editor, $element);
+          } else {
+            editor.exec(btn.name);
+          }
 
           self.updateState();
         });
@@ -388,7 +407,11 @@ ToolbarPlugin.prototype.render = function () {
 
     for (var k = 0; k < groupButtons.length; k++) {
       var btnData = defaultButtonLibrary[groupButtons[k]];
-      if (btnData) $groupWrapper.append(createButtonElement(btnData));
+      if (btnData) {
+        $groupWrapper.append(createButtonElement(btnData));
+      } else if (window.console && console.warn) {
+        console.warn('Weaver: botão "' + groupButtons[k] + '" não existe. Defina-o na opção `buttons` ou com WysiwygEditor.registerButton().');
+      }
     }
 
     if (groupButtons.length > 0) editor.$toolbar.append($groupWrapper);
@@ -445,4 +468,42 @@ ToolbarPlugin.prototype.updateState = function () {
   if (this.editor.$content.hasClass('editor-show-blocks') && this.buttons.showBlocks) {
     this.buttons.showBlocks.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
   }
+
+  // Botões do integrador com isActive(editor)
+  for (var name in this.customButtons) {
+    var def = this.customButtons[name];
+    if (!def || typeof def.isActive !== 'function' || !this.buttons[name]) continue;
+    var active = false;
+    try { active = !!def.isActive(this.editor); } catch (e) { /* erro do integrador */ }
+    if (active) this.buttons[name].removeClass('bg-white').addClass('bg-gray-200 shadow-inner active').attr('aria-pressed', 'true');
+  }
+};
+
+/**
+ * Converte a definição de um botão do integrador para o formato interno.
+ * @param {string} name
+ * @param {{icon?: string, html?: string, text?: string, title?: string,
+ *   type?: 'button'|'dropdown', options?: Array, action?: function,
+ *   isActive?: function}} def
+ */
+ToolbarPlugin.normalizeButton = function (name, def) {
+  var btn = $.extend({}, def, { name: name });
+  var title = def.title || name;
+
+  if (def.html) {
+    btn.label = def.html;
+  } else if (def.icon) {
+    btn.label = '<i data-lucide="' + HtmlSanitizer.escapeHtml(def.icon) + '"></i>';
+  } else if (!def.label) {
+    btn.label = '<span class="px-1 text-xs">' + HtmlSanitizer.escapeHtml(def.text || title) + '</span>';
+  }
+  btn.title = title;
+
+  if (btn.type === 'dropdown') {
+    btn.options = $.map(def.options || [], function (opt) {
+      return typeof opt === 'string' ? { label: HtmlSanitizer.escapeHtml(opt), value: opt } : opt;
+    });
+  }
+
+  return btn;
 };

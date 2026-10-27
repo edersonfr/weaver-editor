@@ -15,12 +15,25 @@
 
   Editor.instanceCount = 0;
 
+  /** Botões registrados para todos os editores da página (registerButton). */
+  Editor.buttons = {};
+
+  /**
+   * Registra um botão de toolbar para todos os editores. Use o nome dele
+   * na opção `toolbar`. Formato igual ao da opção `buttons`.
+   * @param {string} name
+   * @param {Object} def - { icon|html|text, title, action(editor, $button), isActive(editor) }
+   */
+  Editor.registerButton = function (name, def) {
+    Editor.buttons[name] = def;
+  };
+
   /**
    * Opções que são listas ou mapas SUBSTITUEM o padrão em vez de serem fundidas.
    * Com $.extend(true), arrays eram mesclados por posição: pedir só
    * [['font', ['bold']]] gerava a toolbar padrão inteira com 'redo' no meio.
    */
-  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources', 'forbiddenTags'];
+  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'extraPlugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources', 'forbiddenTags'];
 
   Editor.mergeOptions = function (defaults, options) {
     var merged = $.extend(true, {}, defaults);
@@ -138,6 +151,96 @@
     this.history = new HistoryManager(this);
 
     this.history.init();
+
+    this.rangeFormatter = new RangeFormatter(this);
+  };
+
+  // =========================
+  // INSERÇÃO E SELEÇÃO (API pública)
+  // =========================
+
+  /**
+   * Guarda a posição do cursor/seleção, se estiver dentro do editor.
+   * Use antes de abrir um modal que tira o foco do editor.
+   * @returns {boolean} true se havia seleção no editor
+   */
+  Editor.prototype.saveSelection = function () {
+    var saved = this.selection.isInsideEditor() ? this.selection.serialize() : null;
+    if (saved) this._savedSelection = saved;
+    return !!saved;
+  };
+
+  /**
+   * Foca o editor e restaura a seleção salva (por saveSelection ou, na
+   * falta dela, a última antes de o editor perder o foco). Sem nenhuma,
+   * coloca o cursor no fim do conteúdo.
+   * @returns {boolean} true se uma seleção salva foi restaurada
+   */
+  Editor.prototype.restoreSelection = function () {
+    var root = this.$content[0];
+    var saved = this._savedSelection || this._blurSelection;
+
+    root.focus();
+    if (saved && this.selection.deserialize(saved)) return true;
+
+    var range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    this.selection.setRange(range);
+    return false;
+  };
+
+  /** Foca a área de edição, mantendo a seleção que havia. */
+  Editor.prototype.focus = function () {
+    if (this.selection.isInsideEditor()) {
+      this.$content[0].focus();
+    } else {
+      this.restoreSelection();
+    }
+  };
+
+  /**
+   * Insere HTML (sanitizado) na seleção salva, como um passo de desfazer.
+   * @param {string} html
+   * @returns {boolean} false se não havia nada para inserir
+   */
+  Editor.prototype.insertHTML = function (html) {
+    this.restoreSelection();
+    this.history.save();
+    var inserted = this.rangeFormatter.insertHTML(html);
+    this._savedSelection = null;
+    if (!inserted) return false;
+
+    this.history.save();
+    this.updateToolbar();
+    this.trigger('change');
+    return true;
+  };
+
+  /**
+   * Insere uma imagem na seleção salva.
+   * @param {string} url - http(s), relativa ou data:image (PNG, JPG, GIF, WebP, AVIF)
+   * @param {Object} [attrs] - atributos do <img> (alt, style, width...)
+   * @returns {boolean} false se a URL for recusada
+   */
+  Editor.prototype.insertImage = function (url, attrs) {
+    var img = this._buildImage(url, attrs);
+    return img ? this.insertHTML(img.outerHTML) : false;
+  };
+
+  /** @private Cria o <img> num documento inerte; null se a URL for recusada. */
+  Editor.prototype._buildImage = function (url, attrs) {
+    if (!url || !this.sanitizer.isSafeUrl(url, 'img', 'src')) return null;
+
+    var doc = document.implementation.createHTMLDocument('');
+    var img = doc.createElement('img');
+    var all = $.extend({}, this.options.imageDefaults, attrs);
+    for (var name in all) {
+      if (!all.hasOwnProperty(name) || all[name] === null || all[name] === undefined || name === 'src') continue;
+      img.setAttribute(name, all[name]);
+    }
+    img.setAttribute('src', url);
+    return img;
   };
 
   // =========================
@@ -187,6 +290,12 @@
       }
 
       plugins = corePlugins.concat(activeOptionalPlugins).filter(Boolean);
+    }
+
+    // extraPlugins soma aos plugins (automáticos ou da opção `plugins`)
+    var extra = this.options.extraPlugins || [];
+    for (var x = 0; x < extra.length; x++) {
+      if (extra[x] && plugins.indexOf(extra[x]) === -1) plugins = plugins.concat([extra[x]]);
     }
 
     for (var i = 0; i < plugins.length; i++) {
@@ -378,6 +487,13 @@
 
     this.$content.on('keyup' + this.ns + ' mouseup' + this.ns, function () {
       self.updateToolbar();
+    });
+
+    // Lembra onde estava o cursor quando o foco sai (ex.: para um modal),
+    // para insertHTML/insertImage inserirem no lugar certo
+    this.$content.on('blur' + this.ns, function () {
+      var saved = self.selection.serialize();
+      if (saved) self._blurSelection = saved;
     });
 
     // Alt+F10 leva o foco para a barra de ferramentas (padrão de editores)
@@ -850,6 +966,12 @@
   // =========================
   Editor.defaults = {
     plugins: [],
+    // Plugins somados aos automáticos (sem desligar link, tabela, imagem...)
+    extraPlugins: [],
+    // Botões próprios: { nome: { icon|html|text, title, action(editor, $button), isActive(editor) } }
+    buttons: {},
+    // Atributos aplicados a toda imagem inserida (ex.: { style: 'width:100%;height:auto' })
+    imageDefaults: null,
     toolbar: [
       ['history', ['undo', 'redo']],
       ['style', ['formatBlock', 'fontName', 'fontSize']],

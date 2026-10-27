@@ -979,6 +979,165 @@ test('APS: code view mostra o código protegido restaurado', async function () {
 });
 
 // =========================
+// APS: botões customizados e API de inserção
+// =========================
+
+/** Recria o editor dentro da página (funções não passam pelo Playwright). */
+async function setupWith(page, html, factory) {
+  await page.evaluate(function (args) {
+    window.$('#t').weaver('destroy');
+    window.$('#t').val(args.html);
+    window.$('#t').weaver(new Function('return ' + args.factory)()());
+  }, { html: html, factory: factory.toString() });
+}
+
+test('APS: botão customizado aparece no grupo e recebe o editor', async function () {
+  var page = await setup();
+  page.warnings = [];
+  page.on('console', function (m) { if (m.type() === 'warning') page.warnings.push(m.text()); });
+  await setupWith(page, '<p>a</p>', function () {
+    return {
+      buttons: {
+        imageManager: {
+          icon: 'images',
+          title: 'Gerenciar imagens',
+          action: function (editor, $button) { window.__action = [editor === window.$('#t').data('weaver'), $button.attr('data-name')]; },
+          isActive: function () { return true; }
+        }
+      },
+      toolbar: [['insert', ['link', 'imageManager', 'naoExiste']]]
+    };
+  });
+  var info = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var $btns = ed.$toolbar.find('.editor-toolbar-group').first().children('button');
+    ed.$toolbar.find('[data-name="imageManager"]').trigger('click');
+    return { names: $btns.map(function () { return this.getAttribute('data-name'); }).get(), title: $btns.eq(1).attr('aria-label'), pressed: $btns.eq(1).attr('aria-pressed'), action: window.__action, link: !!ed.getPlugin('LinkPlugin') };
+  });
+  assert.deepStrictEqual(info.names, ['link', 'imageManager']);
+  assert.strictEqual(info.title, 'Gerenciar imagens');
+  assert.strictEqual(info.pressed, 'true');
+  assert.deepStrictEqual(info.action, [true, 'imageManager']);
+  assert.strictEqual(info.link, true);
+  assert.ok(page.warnings.some(function (w) { return w.indexOf('naoExiste') !== -1; }), page.warnings.join('|'));
+});
+
+test('APS: botão customizado entra na navegação por setas da barra', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', function () {
+    return { buttons: { meu: { text: 'Meu', action: function () {} } }, toolbar: [['g', ['bold', 'meu', 'italic']]] };
+  });
+  var focused = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$toolbar.find('[data-name="bold"]')[0].focus();
+    ed.$toolbar.find('[data-name="bold"]').trigger(window.$.Event('keydown', { key: 'ArrowRight' }));
+    return document.activeElement.getAttribute('data-name');
+  });
+  assert.strictEqual(focused, 'meu');
+});
+
+test('APS: botão dropdown customizado chama action com o valor', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', function () {
+    return { buttons: { modelo: { type: 'dropdown', text: 'Modelos', options: ['A', { label: 'Bê', value: 'B' }], action: function (ed, value) { window.__value = value; } } }, toolbar: [['g', ['modelo']]] };
+  });
+  var value = await page.evaluate(function () {
+    window.$('#t').data('weaver').$toolbar.find('[data-value="B"]').trigger('click');
+    return window.__value;
+  });
+  assert.strictEqual(value, 'B');
+});
+
+test('APS: registerButton vale para todos os editores', async function () {
+  var page = await setup();
+  await page.evaluate(function () {
+    window.WysiwygEditor.registerButton('global', { text: 'G', action: function () {} });
+  });
+  await setupWith(page, '', function () { return { toolbar: [['g', ['global']]] }; });
+  assert.strictEqual(await page.evaluate(function () { return window.$('#t').data('weaver').$toolbar.find('[data-name="global"]').length; }), 1);
+});
+
+test('APS: extraPlugins soma aos plugins automáticos', async function () {
+  var page = await setup();
+  await setupWith(page, '', function () {
+    function MeuPlugin(editor) { this.editor = editor; }
+    MeuPlugin.pluginName = 'MeuPlugin';
+    MeuPlugin.prototype.init = function () { window.__extra = true; };
+    return { extraPlugins: [MeuPlugin], toolbar: [['g', ['link', 'table']]] };
+  });
+  var info = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    return [window.__extra, !!ed.getPlugin('MeuPlugin'), !!ed.getPlugin('LinkPlugin'), !!ed.getPlugin('TablePlugin'), !!ed.getPlugin('HistoryPlugin')];
+  });
+  assert.deepStrictEqual(info, [true, true, true, true, true]);
+});
+
+test('APS: insertHTML insere na seleção salva depois de um modal roubar o foco', async function () {
+  var page = await setup();
+  await state(page, '<p>início fim</p>', { from: ['início', 6] });
+  var html = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.saveSelection();
+    var input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    ed.insertHTML('<b>MEIO</b>');
+    return ed.$content.html();
+  });
+  assert.strictEqual(html, '<p>início<b>MEIO</b> fim</p>');
+});
+
+test('APS: insertHTML usa a posição de antes do blur sem saveSelection', async function () {
+  var page = await setup();
+  await state(page, '<p>ab</p>', { from: ['ab', 1] });
+  var html = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    ed.insertHTML('X');
+    return ed.$content.html();
+  });
+  assert.strictEqual(html, '<p>aXb</p>');
+});
+
+test('APS: desfazer remove a inserção em um passo', async function () {
+  var page = await setup('<p>ab</p>');
+  await state(page, '<p>ab</p>', { from: ['ab', 1] });
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.saveSelection();
+    ed.insertHTML('<i>1</i><i>2</i>');
+  });
+  assert.strictEqual(await content(page), '<p>a<i>1</i><i>2</i>b</p>');
+  await exec(page, 'undo');
+  assert.strictEqual(await content(page), '<p>ab</p>');
+});
+
+test('APS: insertImage valida a URL e aplica atributos e imageDefaults', async function () {
+  var page = await setup('', { imageDefaults: { style: 'max-width:100%' } });
+  var result = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var ok = ed.insertImage('https://img.irroba.com.br/a.jpg', { alt: 'A "x"', width: 300 });
+    var bad = ed.insertImage('javascript:alert(1)');
+    return { ok: ok, bad: bad, html: ed.$content.html() };
+  });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.bad, false);
+  assert.strictEqual(result.html, '<img style="max-width:100%" alt="A &quot;x&quot;" width="300" src="https://img.irroba.com.br/a.jpg">');
+});
+
+test('APS: insertHTML sanitiza o conteúdo', async function () {
+  var page = await setup();
+  var html = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.insertHTML('<img src="x" onerror="window.__pwned=1"><p>ok</p>');
+    return ed.$content.html();
+  });
+  assert.ok(!/onerror/.test(html) && /ok/.test(html), html);
+});
+
+// =========================
 // RUNNER
 // =========================
 

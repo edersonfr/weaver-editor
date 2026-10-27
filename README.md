@@ -148,7 +148,10 @@ Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização,
 | `sanitize` | `true` | `false` desliga a sanitização (veja [Modo confiável](#modo-confiável)) |
 | `sanitizer` | — | Função `(html) => html` que substitui a sanitização |
 | `normalize` | `true` | Limpa tags repetidas e vazias ao sair do editor; `false` desliga |
-| `plugins` | automático | Lista de plugins, para montar o editor à mão |
+| `buttons` | — | Botões próprios da barra (veja [Botões próprios](#botões-próprios)) |
+| `imageDefaults` | — | Atributos aplicados a toda imagem inserida, como `{ style: 'width:100%;height:auto' }` |
+| `extraPlugins` | — | Plugins somados aos automáticos, sem desligar link, tabela, imagem etc. |
+| `plugins` | automático | Lista de plugins, para montar o editor à mão (substitui os automáticos) |
 
 ## API e eventos
 
@@ -160,6 +163,11 @@ var editor = $('#artigo').data('weaver');
 editor.getContent();                    // HTML atual (já sanitizado)
 editor.setContent('<p>Novo texto</p>'); // substitui o conteúdo (sanitiza antes)
 editor.isPristine();                    // true se nada foi editado desde o carregamento
+editor.saveSelection();                 // guarda o cursor antes de abrir um modal
+editor.insertHTML('<p>Oi</p>');         // insere (sanitizado) no cursor salvo, com desfazer
+editor.insertImage(url, { alt: 'Foto' }); // valida a URL e insere a imagem no cursor salvo
+editor.restoreSelection();              // foca o editor e volta o cursor salvo
+editor.focus();                         // foca a área de edição
 editor.exec('bold');                    // executa um comando da barra
 editor.sanitize(html);                  // sanitiza um HTML com as regras do editor
 editor.notify('Salvo!');                // mostra um aviso dentro do editor
@@ -178,6 +186,36 @@ $('#artigo').on('change', function (event, html) {
 Use `destroy` ao trocar de tela numa SPA: ele remove todos os eventos e devolve o `textarea` com o conteúdo atual.
 
 **HTML original preservado.** Enquanto nada for editado, `getContent()` (e o envio do formulário) devolve exatamente o HTML carregado, sem mudar aspas, entidades, ordem de atributos ou a formatação do CSS. Isso vale quando a sanitização não removeu nada do conteúdo; se removeu, o editor devolve a versão sanitizada.
+
+## Botões próprios
+
+Defina botões na opção `buttons` e use o nome deles na `toolbar`. O `action` recebe a instância do editor e o botão. Antes de chamá-lo, o editor guarda o cursor, então `insertHTML` e `insertImage` inserem no lugar certo mesmo depois de um modal tirar o foco:
+
+```javascript
+$('#descricao').weaver({
+  buttons: {
+    imageManager: {
+      icon: 'images',                 // ícone do Lucide; ou `html` com qualquer HTML; ou `text`
+      title: 'Gerenciar imagens',
+      action: function (editor, $button) {
+        abrirGerenciador(function (urls) {
+          urls.forEach(function (url) { editor.insertImage(url, { alt: '' }); });
+        });
+      },
+      isActive: function (editor) { return false; } // opcional: botão pressionado
+    },
+    modelo: {
+      type: 'dropdown',
+      text: 'Modelos',
+      options: ['Garantia', { label: 'Frete grátis', value: 'frete' }],
+      action: function (editor, value) { editor.insertHTML(modelos[value]); }
+    }
+  },
+  toolbar: [['insert', ['link', 'imageManager', 'modelo', 'video']]]
+});
+```
+
+Para registrar um botão para todos os editores da página, use `WysiwygEditor.registerButton('imageManager', { ... })`. Um nome na `toolbar` que não existe gera um aviso no console.
 
 ## Imagens
 
