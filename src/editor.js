@@ -746,6 +746,7 @@
     }
 
     content.appendChild(this.sanitizer.toFragment(html));
+    this.loadContentFonts();
   };
 
   Editor.prototype.updateToolbar = function () {
@@ -861,6 +862,81 @@
     document.head.appendChild(fontLink);
   };
 
+  /** Fontes do sistema e famílias genéricas: nunca são pedidas ao Google. */
+  Editor.LOCAL_FONTS = ['arial', 'helvetica', 'helvetica neue', 'courier', 'courier new', 'georgia', 'tahoma', 'times',
+    'times new roman', 'verdana', 'trebuchet ms', 'impact', 'comic sans ms', 'segoe ui', 'calibri', 'cambria',
+    'consolas', 'menlo', 'monaco', 'lucida console', 'lucida sans unicode', 'palatino linotype', 'garamond',
+    'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui', 'ui-serif', 'ui-sans-serif',
+    'ui-monospace', 'ui-rounded', 'emoji', 'math', 'inherit', 'initial', 'unset', 'revert', '-apple-system',
+    'blinkmacsystemfont'];
+
+  /** Famílias já pedidas nesta página (compartilhado entre os editores). */
+  Editor.loadedFonts = {};
+
+  /**
+   * URL do Google Fonts para uma família, ou null se ela é local ou tem
+   * caracteres que não existem em nomes do Google (evita montar URL com
+   * texto vindo do conteúdo).
+   * @param {string} name ex.: 'Open Sans', "'Lobster', cursive"
+   */
+  Editor.googleFontUrl = function (name) {
+    var family = Editor.primaryFontFamily(name);
+    if (!family || !/^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/.test(family)) return null;
+    if ($.inArray(family.toLowerCase(), Editor.LOCAL_FONTS) !== -1) return null;
+    return 'https://fonts.googleapis.com/css2?family=' + family.replace(/ /g, '+') + '&display=swap';
+  };
+
+  /** Primeira família de um valor de font-family, sem aspas. */
+  Editor.primaryFontFamily = function (value) {
+    var first = String(value || '').split(',')[0];
+    return $.trim(first.replace(/^\s*["']|["']\s*$/g, ''));
+  };
+
+  /**
+   * Carrega uma família do Google Fonts sob demanda (uma vez por página).
+   * Não faz nada com `googleFonts: false`.
+   * @returns {boolean} true se a família foi (ou já estava) pedida
+   */
+  Editor.prototype.loadFont = function (name) {
+    if (!this.options.googleFonts) return false;
+    var url = Editor.googleFontUrl(name);
+    if (!url) return false;
+    if (Editor.loadedFonts[url]) return true;
+
+    Editor.loadedFonts[url] = true;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.referrerPolicy = 'no-referrer';
+    link.href = url;
+    link.setAttribute('data-weaver-font', Editor.primaryFontFamily(name));
+    document.head.appendChild(link);
+    return true;
+  };
+
+  /**
+   * Famílias usadas no conteúdo (style="font-family" e <font face>).
+   * @returns {string[]}
+   */
+  Editor.prototype.contentFonts = function () {
+    var found = {};
+    var list = [];
+    this.$content.find('[style*="font-family"], font[face]').each(function () {
+      var family = Editor.primaryFontFamily(this.style.fontFamily || this.getAttribute('face'));
+      if (family && !found[family.toLowerCase()]) {
+        found[family.toLowerCase()] = true;
+        list.push(family);
+      }
+    });
+    return list;
+  };
+
+  /** Carrega as fontes usadas no conteúdo, para o editor exibi-las. */
+  Editor.prototype.loadContentFonts = function () {
+    if (!this.options.googleFonts) return;
+    var fonts = this.contentFonts();
+    for (var i = 0; i < fonts.length; i++) this.loadFont(fonts[i]);
+  };
+
   Editor.prototype.injectStyles = function () {
     this.loadIcons();
     this.loadFonts();
@@ -878,6 +954,9 @@
       '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
       '.wysiwyg-editor .editor-image-alt { display: flex; gap: 4px; align-items: center; }\n' +
       '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-search { position: sticky; top: 0; z-index: 1; padding: 6px; background: #fff; border-bottom: 1px solid #e5e7eb; }\n' +
+      '.wysiwyg-editor .editor-dropdown-search-input { box-sizing: border-box; width: 100%; height: 30px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-empty { padding: 8px 12px; font-size: 13px; color: #6b7280; }\n' +
       '.wysiwyg-editor weaver-raw { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px dashed #9ca3af; border-radius: 3px; background: #f3f4f6; color: #4b5563; font: 12px/1.6 Menlo, Monaco, Consolas, monospace; cursor: default; user-select: none; vertical-align: middle; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
@@ -1031,6 +1110,10 @@
       ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
     ],
     fontNames: null,
+    // Campo de busca no menu de fontes: true, false ou 'auto' (mais de 20 fontes)
+    fontSearch: 'auto',
+    // Chamado ao aplicar uma fonte: function (fontName, editor) {}
+    onFontApply: null,
     placeholder: '',
     height: null,
     aiEndpoint: 'ai-api.php',

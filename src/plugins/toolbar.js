@@ -3,7 +3,13 @@ window.ToolbarPlugin = ToolbarPlugin;
 function ToolbarPlugin(editor) {
   this.editor = editor;
   this.buttons = {};
+  this.observers = [];
 }
+
+ToolbarPlugin.prototype.destroy = function () {
+  for (var i = 0; i < this.observers.length; i++) this.observers[i].disconnect();
+  this.observers = [];
+};
 
 ToolbarPlugin.prototype.init = function () {
   this.render();
@@ -15,18 +21,23 @@ ToolbarPlugin.prototype.render = function () {
   var defaultFonts = editor.options.fontNames || ['Arial', 'Courier New', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Oswald'];
   var fontOptionsList = [];
   for (var f = 0; f < defaultFonts.length; f++) {
-    var fName = defaultFonts[f];
+    var fName = String(defaultFonts[f]);
+    // O font-family entra só quando o item aparece (lazyFonts): com o
+    // catálogo inteiro do Google, aplicar em todos baixaria 1.500 fontes
     fontOptionsList.push({
-      label: '<span style="font-family: \'' + fName + '\', sans-serif; font-size:14px;">' + fName + '</span>',
+      label: '<span data-font="' + HtmlSanitizer.escapeHtml(fName) + '" style="font-size:14px;">' + HtmlSanitizer.escapeHtml(fName) + '</span>',
       value: fName
     });
   }
+  var fontSearch = editor.options.fontSearch;
+  if (fontSearch === 'auto') fontSearch = fontOptionsList.length > 20;
 
   var defaultButtonLibrary = {
     undo: { name: 'undo', label: '<i data-lucide="undo"></i>', title: 'Desfazer' },
     redo: { name: 'redo', label: '<i data-lucide="redo"></i>', title: 'Refazer' },
     removeFormat: { name: 'removeFormat', label: '<i data-lucide="eraser"></i>', title: 'Remover Formatação' },
-    fontName: { name: 'fontName', type: 'dropdown', title: 'Fonte', text: 'Fonte', options: fontOptionsList },
+    fontName: { name: 'fontName', type: 'dropdown', title: 'Fonte', text: 'Fonte', options: fontOptionsList, lazy: true, lazyFonts: true,
+      search: fontSearch ? { placeholder: 'Buscar fonte...', empty: 'Nenhuma fonte encontrada' } : null },
     fontSize: { name: 'fontSize', type: 'dropdown', title: 'Tamanho', text: 'Tamanho', options: [
       { label: '8px', value: '8' },
       { label: '10px', value: '10' },
@@ -117,29 +128,28 @@ ToolbarPlugin.prototype.render = function () {
         
         var $menu = $('<div class="editor-dropdown-menu hidden absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 min-w-[180px] max-h-60 overflow-y-auto text-left" role="menu"/>');
 
-        for(var j = 0; j < btn.options.length; j++) {
-          var $item = $('<div class="editor-dropdown-item px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 border-b border-gray-50 last:border-0 leading-tight"/>')
-            .html(btn.options[j].label)
-            .attr('role', 'menuitem')
-            .attr('tabindex', '-1')
-            .attr('data-value', btn.options[j].value);
-          
-          $item.on('mousedown', function(e) { e.preventDefault(); }); // Evita perder o foco
-          $item.on('click', function(e) {
-            var val = $(this).attr('data-value');
-            var fromKeyboard = $menu[0].contains(document.activeElement);
-            if (val && btn.action) {
-              btn.action(editor, val, $btn);
-            } else if (val) {
-              editor.exec(btn.name, val);
-            }
-            $menu.hide();
-            $btn.attr('aria-expanded', 'false');
-            self.updateState();
-            if (fromKeyboard) editor.$content[0].focus();
-          });
-          $menu.append($item);
-        }
+        var dropdown = self.buildDropdownItems(btn, $menu);
+        // Seleção de antes de abrir: o campo de busca tira o foco do conteúdo
+        var openSelection = null;
+
+        $menu.on('mousedown', '.editor-dropdown-item', function(e) { e.preventDefault(); }); // Evita perder o foco
+        $menu.on('click', '.editor-dropdown-item', function(e) {
+          var val = $(this).attr('data-value');
+          var fromKeyboard = $menu[0].contains(document.activeElement);
+          if (openSelection && !editor.selection.isInsideEditor()) {
+            editor.$content[0].focus();
+            editor.selection.deserialize(openSelection);
+          }
+          if (val && btn.action) {
+            btn.action(editor, val, $btn);
+          } else if (val) {
+            editor.exec(btn.name, val);
+          }
+          $menu.hide();
+          $btn.attr('aria-expanded', 'false');
+          self.updateState();
+          if (fromKeyboard) editor.$content[0].focus();
+        });
 
         $btn.on('mousedown', function(e) { e.preventDefault(); });
         $btn.on('click', function(e) {
@@ -148,8 +158,11 @@ ToolbarPlugin.prototype.render = function () {
           editor.$toolbar.find('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
           editor.$toolbar.find('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
+            openSelection = editor.selection.isInsideEditor() ? editor.selection.serialize() : null;
+            dropdown.open();
             $menu.removeClass('right-0').addClass('left-0').show();
             $btn.attr('aria-expanded', 'true');
+            dropdown.shown();
             
             // Verifica se o menu vazou a tela pela direita
             if ($menu[0].getBoundingClientRect().right > editor.$container[0].getBoundingClientRect().right) {
@@ -178,14 +191,14 @@ ToolbarPlugin.prototype.render = function () {
         $btn.on('click', function (e) {
           // e.detail === 0: ativado pelo teclado (Enter/Espaço)
           if (e.detail === 0 && $menu.is(':visible')) {
-            $menu.find('[role="menuitem"]').first().focus();
+            dropdown.focusFirst();
           }
         });
         $btn.on('keydown', function (e) {
           if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (!$menu.is(':visible')) $btn.trigger('click');
-            $menu.find('[role="menuitem"]').first().focus();
+            dropdown.focusFirst();
           }
         });
 
@@ -434,6 +447,124 @@ ToolbarPlugin.prototype.render = function () {
   if ($fsGroup.children().length > 0) editor.$toolbar.append($fsGroup);
 
   WysiwygEditor.renderIcons(editor.$toolbar[0]);
+};
+
+/**
+ * Monta os itens de um dropdown. Com `btn.lazy`, os itens só são criados na
+ * primeira abertura; com `btn.search`, um campo filtra os itens pelo texto;
+ * com `btn.lazyFonts`, o font-family de cada item (span[data-font]) só é
+ * aplicado, e a fonte carregada, quando o item fica visível na lista.
+ * @returns {{open: function, shown: function, focusFirst: function}}
+ */
+ToolbarPlugin.prototype.buildDropdownItems = function (btn, $menu) {
+  var editor = this.editor;
+  var self = this;
+  var built = false;
+  var $search = null;
+  var $empty = null;
+  var observer = null;
+
+  function normalize(text) {
+    text = String(text || '').toLowerCase();
+    return text.normalize ? text.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : text;
+  }
+
+  function showFont(span) {
+    if (span.style.fontFamily) return;
+    var name = span.getAttribute('data-font');
+    editor.loadFont(name);
+    span.style.fontFamily = '"' + name.replace(/["\\]/g, '') + '", sans-serif';
+  }
+
+  function build() {
+    if (built) return;
+    built = true;
+
+    var html = [];
+    for (var j = 0; j < btn.options.length; j++) {
+      html.push('<div class="editor-dropdown-item px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 border-b border-gray-50 last:border-0 leading-tight" role="menuitem" tabindex="-1" data-value="' +
+        HtmlSanitizer.escapeHtml(btn.options[j].value) + '">' + btn.options[j].label + '</div>');
+    }
+    // Uma única inserção: com 1.500 itens, append um a um travava a abertura
+    $menu.append(html.join(''));
+
+    $menu.children('.editor-dropdown-item').each(function () {
+      this._weaverSearch = normalize($(this).text());
+    });
+
+    if (btn.lazyFonts) {
+      var spans = $menu.find('span[data-font]').get();
+      if (window.IntersectionObserver) {
+        observer = new IntersectionObserver(function (entries) {
+          for (var i = 0; i < entries.length; i++) {
+            if (!entries[i].isIntersecting) continue;
+            showFont(entries[i].target);
+            observer.unobserve(entries[i].target);
+          }
+        }, { root: $menu[0], rootMargin: '100px 0px' });
+        for (var s = 0; s < spans.length; s++) observer.observe(spans[s]);
+        self.observers.push(observer);
+      } else {
+        // Sem IntersectionObserver: limita aos primeiros itens
+        for (var k = 0; k < spans.length && k < 50; k++) showFont(spans[k]);
+      }
+    }
+  }
+
+  function filter() {
+    var term = normalize($.trim($search.val()));
+    var visible = 0;
+    $menu.children('.editor-dropdown-item').each(function () {
+      var match = !term || this._weaverSearch.indexOf(term) !== -1;
+      this.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    $empty.toggle(visible === 0);
+  }
+
+  if (btn.search) {
+    $search = $('<input type="search" class="editor-dropdown-search-input" autocomplete="off"/>')
+      .attr('placeholder', btn.search.placeholder || 'Buscar...')
+      .attr('aria-label', btn.search.placeholder || 'Buscar');
+    $empty = $('<div class="editor-dropdown-empty" role="status"/>').text(btn.search.empty || 'Nada encontrado').hide();
+    $menu.append($('<div class="editor-dropdown-search"/>').append($search), $empty);
+
+    $search.on('input', filter);
+    $search.on('keydown', function (e) {
+      var $first = $menu.children('.editor-dropdown-item').filter(':visible').first();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        $first.focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        $first.trigger('click');
+      }
+      // Esc e Tab seguem para o menu (fechar); o resto é digitação
+      if (e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
+    });
+  }
+
+  if (!btn.lazy) build();
+
+  return {
+    open: function () {
+      build();
+      if ($search && $search.val()) {
+        $search.val('');
+        filter();
+      }
+    },
+    shown: function () {
+      if ($search) $search[0].focus();
+    },
+    focusFirst: function () {
+      if ($search) {
+        $search[0].focus();
+      } else {
+        $menu.find('[role="menuitem"]').first().focus();
+      }
+    }
+  };
 };
 
 ToolbarPlugin.prototype.updateState = function () {

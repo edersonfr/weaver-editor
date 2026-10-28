@@ -128,7 +128,9 @@ Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização,
 | `height` | `300` | Altura mínima da área de edição, em pixels |
 | `placeholder` | o do `textarea` | Texto exibido com o editor vazio |
 | `fontNames` | lista padrão | Fontes do menu de fontes |
-| `googleFonts` | `true` | Carrega do Google as fontes do menu (editor e pré-visualização) |
+| `googleFonts` | `true` | Carrega do Google as fontes do menu e as usadas no conteúdo, sob demanda (editor e pré-visualização) |
+| `fontSearch` | `'auto'` | Campo de busca no menu de fontes: `true`, `false` ou `'auto'` (com mais de 20 fontes) |
+| `onFontApply` | — | `function (fontName, editor)` chamada ao aplicar uma fonte, para carregá-la também na loja |
 | `previewCss` | — | Folhas de estilo do seu site, aplicadas na pré-visualização |
 | `uploadImage` | — | Função de upload de imagens (veja [Imagens](#imagens)) |
 | `maxImageSize` | `5242880` | Tamanho máximo da imagem, em bytes (5 MB) |
@@ -170,6 +172,7 @@ editor.insertHTML('<p>Oi</p>');         // insere (sanitizado) no cursor salvo, 
 editor.insertImage(url, { alt: 'Foto' }); // valida a URL e insere a imagem no cursor salvo
 editor.restoreSelection();              // foca o editor e volta o cursor salvo
 editor.focus();                         // foca a área de edição
+editor.loadFont('Lobster');             // carrega uma fonte do Google Fonts no editor
 editor.getSelectedImage();              // <img> selecionada no editor, ou null
 editor.replaceImage(img, url, attrs);   // troca o src mantendo estilo e alinhamento
 editor.exec('bold');                    // executa um comando da barra
@@ -188,6 +191,8 @@ $('#artigo').on('change', function (event, html) {
 ```
 
 Use `destroy` ao trocar de tela numa SPA: ele remove todos os eventos e devolve o `textarea` com o conteúdo atual.
+
+**Fontes.** O menu aceita o catálogo inteiro do Google Fonts (`fontNames` com ~1.500 nomes): os itens só são montados ao abrir o menu, cada fonte só é baixada quando aparece na lista, e a busca filtra pelo nome. Ao escolher uma fonte, ou ao carregar um conteúdo que já usa uma, o editor pede ao Google só aquela família. Fontes do sistema (Arial, Georgia...) não são pedidas. O conteúdo salvo guarda apenas o `font-family`; para a fonte aparecer na loja, carregue-a lá, por exemplo em `onFontApply`.
 
 **HTML original preservado.** Enquanto nada for editado, `getContent()` (e o envio do formulário) devolve exatamente o HTML carregado, sem mudar aspas, entidades, ordem de atributos ou a formatação do CSS. Isso vale quando a sanitização não removeu nada do conteúdo; se removeu, o editor devolve a versão sanitizada.
 

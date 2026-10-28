@@ -1259,6 +1259,100 @@ test('APS: uploadImage carrega o plugin de imagem sem o botão image', async fun
 });
 
 // =========================
+// APS: FONTES DINÂMICAS
+// =========================
+
+function manyFonts() {
+  return function () {
+    var names = ['Lobster', 'Pacifico', 'Arial'];
+    for (var i = 0; i < 1500; i++) names.push('Fonte ' + i);
+    window.__fontApplied = [];
+    return {
+      fontNames: names,
+      onFontApply: function (name, editor) { window.__fontApplied.push([name, editor === window.$('#t').data('weaver')]); }
+    };
+  };
+}
+
+function fontLinks(page) {
+  return page.evaluate(function () {
+    return window.$('link[data-weaver-font]').map(function () { return this.getAttribute('data-weaver-font'); }).get();
+  });
+}
+
+test('APS: 1.500 fontes só montam o menu ao abrir e carregam as visíveis', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', manyFonts());
+  assert.strictEqual(await page.evaluate(function () { return window.$('[data-name="fontName"]').next().find('.editor-dropdown-item').length; }), 0);
+
+  var ms = await page.evaluate(function () {
+    var t = performance.now();
+    window.$('[data-name="fontName"]').trigger('click');
+    return performance.now() - t;
+  });
+  assert.ok(ms < 500, 'abrir levou ' + ms + 'ms');
+
+  var info = await page.evaluate(function () {
+    var $menu = window.$('[data-name="fontName"]').next();
+    return { items: $menu.find('.editor-dropdown-item').length, search: $menu.find('input[type="search"]').length };
+  });
+  assert.deepStrictEqual(info, { items: 1503, search: 1 });
+
+  await page.waitForTimeout(100);
+  var links = await fontLinks(page);
+  assert.ok(links.indexOf('Lobster') !== -1, links.join());
+  assert.ok(links.indexOf('Arial') === -1, 'fonte do sistema não vai ao Google');
+  assert.ok(links.length < 60, 'carregou ' + links.length + ' fontes');
+});
+
+test('APS: busca filtra as fontes e avisa quando não encontra', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', manyFonts());
+  await page.click('[data-name="fontName"]');
+  var menu = '.editor-dropdown-menu:has(input[type="search"])';
+
+  await page.fill(menu + ' input[type="search"]', 'lob');
+  assert.deepStrictEqual(await page.$$eval(menu + ' .editor-dropdown-item', function (els) {
+    return els.filter(function (el) { return el.style.display !== 'none'; }).map(function (el) { return el.getAttribute('data-value'); });
+  }), ['Lobster']);
+
+  await page.fill(menu + ' input[type="search"]', 'zzz');
+  assert.strictEqual(await page.isVisible('text=Nenhuma fonte encontrada'), true);
+});
+
+test('APS: escolher Lobster pela busca aplica na seleção, carrega e chama onFontApply', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>texto aqui</p>', manyFonts());
+  await state(page, '<p>texto aqui</p>', { from: ['texto', 0], to: ['texto', 5] });
+  await page.click('[data-name="fontName"]');
+  await page.keyboard.type('lobs'); // a busca recebe o foco ao abrir
+  await page.keyboard.press('Enter');
+
+  var html = await content(page);
+  assert.ok(/<span style="font-family: Lobster;">texto<\/span> aqui/.test(html), html);
+  assert.ok((await fontLinks(page)).indexOf('Lobster') !== -1);
+  assert.deepStrictEqual(await page.evaluate(function () { return window.__fontApplied; }), [['Lobster', true]]);
+});
+
+test('APS: fontes usadas no conteúdo são carregadas ao abrir o editor', async function () {
+  var page = await setup();
+  await setupWith(page, '<p><span style="font-family: \'Pacifico\', cursive">a</span><span style="font-family: Pacifico">b</span>' +
+    '<span style="font-family: Arial">c</span><span style="font-family: \'x&amp;family=Evil\'">d</span></p>', function () { return {}; });
+  assert.deepStrictEqual(await fontLinks(page), ['Pacifico']);
+
+  // <font face> (modo confiável) também conta
+  await setupWith(page, '<p><font face="Lobster">b</font></p>', function () { return { allowedTags: '*', allowedAttributes: { '*': '*' } }; });
+  assert.ok((await fontLinks(page)).indexOf('Lobster') !== -1);
+});
+
+test('APS: googleFonts false não carrega fontes do conteúdo nem do menu', async function () {
+  var page = await setup('<p><span style="font-family: Pacifico">a</span></p>', { googleFonts: false });
+  await page.click('[data-name="fontName"]');
+  await page.waitForTimeout(100);
+  assert.deepStrictEqual(await fontLinks(page), []);
+});
+
+// =========================
 // RUNNER
 // =========================
 

@@ -20,10 +20,10 @@ BasicCommandsPlugin.prototype.init = function () {
     editor.$content.focus();
 
     var range = editor.selection.getRange();
-    if (!range || range.collapsed || !editor.selection.isInsideEditor()) return;
+    if (!range || range.collapsed || !editor.selection.isInsideEditor()) return false;
 
     var texts = editor.selection._textNodesInRange(range);
-    if (!texts.length) return;
+    if (!texts.length) return false;
 
     for (var i = 0; i < texts.length; i++) {
       var text = texts[i];
@@ -49,6 +49,7 @@ BasicCommandsPlugin.prototype.init = function () {
 
     editor.trigger('change');
     editor.updateToolbar();
+    return true;
   }
 
   // Blocos que recebem alinhamento, recuo e troca de formato.
@@ -316,7 +317,10 @@ BasicCommandsPlugin.prototype.init = function () {
   });
 
   editor.registerCommand('fontName', function (editor, value) {
-    applySpanStyle('fontFamily', value);
+    editor.loadFont(value);
+    if (applySpanStyle('fontFamily', value) && typeof editor.options.onFontApply === 'function') {
+      try { editor.options.onFontApply(value, editor); } catch (e) { /* erro do integrador */ }
+    }
   });
 
   editor.registerCommand('fontSize', function (editor, value) {
