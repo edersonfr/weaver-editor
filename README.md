@@ -51,11 +51,13 @@ O editor é um único arquivo, que depende só do jQuery (testado com a versão 
 <script src="/js/weaver-editor.min.js"></script>
 ```
 
-**Pelo CDN do jsDelivr**, direto deste repositório (troque `main` por um commit para fixar a versão):
+**Pelo CDN do jsDelivr**, com a versão fixada no tag:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@main/dist/weaver-editor.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@v1.1.0/dist/weaver-editor.min.js"></script>
 ```
+
+Use sempre um tag (`@v1.1.0`), nunca `@main`: a `main` muda a cada commit, e o editor mudaria junto em produção. As versões e o que mudou em cada uma estão no [CHANGELOG](CHANGELOG.md) e nas [Releases](https://github.com/edersonfr/weaver-editor/releases), que também trazem o `weaver-editor.min.js` para baixar. Em tempo de execução, a versão carregada fica em `WysiwygEditor.VERSION`.
 
 Funciona nas versões atuais do Chrome, Edge, Firefox e Safari. O Internet Explorer não é suportado.
 

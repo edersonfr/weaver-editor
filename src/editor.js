@@ -13,6 +13,9 @@
     this.init();
   }
 
+  /** Versão do editor (a mesma do package.json e do tag no GitHub). */
+  Editor.VERSION = '1.1.0';
+
   Editor.instanceCount = 0;
 
   /** Botões registrados para todos os editores da página (registerButton). */

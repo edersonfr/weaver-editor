@@ -1479,6 +1479,12 @@ test('APS: Tailwind da página com outra paleta não muda a aparência do editor
   assert.deepStrictEqual(content, { list: 'disc', h1: '700', prose: false });
 });
 
+test('APS: WysiwygEditor.VERSION é a versão do package.json', async function () {
+  var page = await setup();
+  var version = await page.evaluate(function () { return window.WysiwygEditor.VERSION; });
+  assert.strictEqual(version, require('../package.json').version);
+});
+
 // =========================
 // RUNNER
 // =========================
