@@ -54,8 +54,12 @@ O editor é um único arquivo, que depende só do jQuery (testado com a versão 
 **Pelo CDN do jsDelivr**, com a versão fixada no tag:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@v1.1.0/dist/weaver-editor.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@v1.1.0/dist/weaver-editor.min.js"
+        integrity="sha384-c7oOrLnhc5mQo12f2DljdvdQaiIwxCPiayKwrUFwT1x+GMGIye3R7D91P5y1U92N"
+        crossorigin="anonymous"></script>
 ```
+
+O `integrity` (SRI) faz o navegador recusar o arquivo se o conteúdo servido pelo CDN não for exatamente o da versão 1.1.0. Cada versão tem o seu hash, publicado na Release correspondente.
 
 Use sempre um tag (`@v1.1.0`), nunca `@main`: a `main` muda a cada commit, e o editor mudaria junto em produção. As versões e o que mudou em cada uma estão no [CHANGELOG](CHANGELOG.md) e nas [Releases](https://github.com/edersonfr/weaver-editor/releases), que também trazem o `weaver-editor.min.js` para baixar. Em tempo de execução, a versão carregada fica em `WysiwygEditor.VERSION`.
 
