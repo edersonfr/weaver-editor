@@ -1352,6 +1352,133 @@ test('APS: googleFonts false não carrega fontes do conteúdo nem do menu', asyn
   assert.deepStrictEqual(await fontLinks(page), []);
 });
 
+/**
+ * Cores calculadas da toolbar, de um item de menu, do conteúdo e do code view,
+ * com o contraste (WCAG) entre texto e fundo de cada um.
+ */
+async function themeColors(page) {
+  return page.evaluate(function () {
+    function rgb(c) { var m = c.match(/[\d.]+/g).map(Number); return m; }
+    function lum(c) {
+      var v = rgb(c).slice(0, 3).map(function (x) { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    }
+    function contrast(fg, bg) {
+      var a = lum(fg), b = lum(bg);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+    // Fundo efetivo: sobe até o primeiro ancestral com fundo opaco
+    function backdrop(el) {
+      for (; el && el.nodeType === 1; el = el.parentNode) {
+        var bg = getComputedStyle(el).backgroundColor;
+        if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
+      }
+      return 'rgb(255, 255, 255)';
+    }
+    function info(el) {
+      var cs = getComputedStyle(el);
+      return { bg: cs.backgroundColor, fg: cs.color, border: cs.borderTopColor, contrast: contrast(cs.color, backdrop(el)) };
+    }
+    var ed = window.$('#t').data('weaver');
+    var $menu = ed.$toolbar.find('[data-name="formatBlock"]').closest('.editor-dropdown-wrapper').find('.editor-dropdown-menu');
+    $menu.css('display', 'flex');
+    var item = $menu.find('[role="menuitem"]')[0];
+    var codeview = ed.$container.find('.editor-codeview-wrapper')[0];
+    codeview.style.display = 'block';
+    var r = {
+      toolbar: info(ed.$toolbar[0]),
+      button: info(ed.$toolbar.find('[data-name="bold"]')[0]),
+      menu: info($menu[0]),
+      item: info(item),
+      content: info(ed.$content[0]),
+      code: info(ed.$container.find('.editor-codeview-highlight')[0]),
+      codeBg: getComputedStyle(codeview).backgroundColor
+    };
+    r.code.contrast = contrast(r.code.fg, r.codeBg);
+    codeview.style.display = '';
+    $menu.css('display', '');
+    return r;
+  });
+}
+
+function assertReadable(c, label) {
+  ['toolbar', 'button', 'item', 'content', 'code'].forEach(function (k) {
+    assert.ok(c[k].contrast >= 4.5, label + ': ' + k + ' com contraste ' + c[k].contrast.toFixed(2) + ' ' + JSON.stringify(c[k]));
+  });
+}
+
+test('APS: <html class="dark"> deixa toolbar, menus, conteúdo e code view escuros e legíveis', async function () {
+  var page = await setup('<p>texto</p>');
+  var light = await themeColors(page);
+  assert.strictEqual(light.content.bg, 'rgb(255, 255, 255)');
+  assert.strictEqual(light.toolbar.bg, 'rgb(249, 250, 251)');
+  assertReadable(light, 'claro');
+
+  await page.evaluate(function () { document.documentElement.classList.add('dark'); });
+  var dark = await themeColors(page);
+  assert.strictEqual(dark.content.bg, 'rgb(17, 24, 39)');
+  assert.strictEqual(dark.toolbar.bg, 'rgb(31, 41, 55)');
+  assert.strictEqual(dark.menu.bg, 'rgb(55, 65, 81)');
+  assert.strictEqual(dark.codeBg, 'rgb(30, 30, 30)');
+  assertReadable(dark, 'escuro');
+
+  // O integrador redefine as variáveis com um seletor simples
+  await page.addStyleTag({ content: '.wysiwyg-editor{--weaver-accent:#0f766e}.dark .wysiwyg-editor{--weaver-content-bg:#fff;--weaver-content-fg:#111}' });
+  var custom = await themeColors(page);
+  assert.strictEqual(custom.content.bg, 'rgb(255, 255, 255)');
+  assert.strictEqual(custom.toolbar.bg, 'rgb(31, 41, 55)');
+});
+
+test('APS: opção theme fixa o tema, e setTheme troca depois', async function () {
+  var page = await setup('<p>texto</p>', { theme: 'light' });
+  await page.evaluate(function () { document.documentElement.classList.add('dark'); });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(255, 255, 255)', 'light ignora .dark');
+
+  await page.evaluate(function () {
+    document.documentElement.classList.remove('dark');
+    window.$('#t').data('weaver').setTheme('dark');
+  });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(17, 24, 39)', 'dark sem .dark na página');
+
+  await page.evaluate(function () { window.$('#t').data('weaver').setTheme('auto'); });
+  await page.emulateMedia({ colorScheme: 'light' });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(255, 255, 255)', 'auto com sistema claro');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(17, 24, 39)', 'auto com sistema escuro');
+
+  // Sem theme, o modo escuro do sistema não muda nada (comportamento anterior)
+  await page.evaluate(function () { window.$('#t').data('weaver').setTheme(null); });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(255, 255, 255)', 'sem theme ignora o sistema');
+});
+
+test('APS: Tailwind da página com outra paleta não muda a aparência do editor', async function () {
+  var page = await setup('<h1>T</h1><ul><li>a</li></ul>');
+  var before = await themeColors(page);
+
+  // Utilitárias com as mesmas classes e outras cores, antes e depois do CSS do Weaver,
+  // mais o preflight do Tailwind (listas sem marcador, títulos sem tamanho)
+  await page.evaluate(function () {
+    var css = '.bg-white{background-color:red}.bg-gray-50{background-color:#ff0}.border-gray-300{border-color:lime}' +
+      '.border-gray-200{border-color:lime}.text-gray-700{color:pink}.text-gray-800{color:pink}.border{border-color:lime}' +
+      '.prose{color:purple}ul,ol{list-style:none;margin:0;padding:0}h1{font-size:inherit;font-weight:inherit}';
+    var head = document.createElement('style'); head.textContent = css;
+    document.head.insertBefore(head, document.head.firstChild);
+    var tail = document.createElement('style'); tail.textContent = css;
+    document.body.appendChild(tail);
+  });
+
+  assert.deepStrictEqual(await themeColors(page), before);
+  var content = await page.evaluate(function () {
+    var c = window.$('#t').data('weaver').$content[0];
+    return {
+      list: getComputedStyle(c.querySelector('ul')).listStyleType,
+      h1: getComputedStyle(c.querySelector('h1')).fontWeight,
+      prose: c.classList.contains('prose')
+    };
+  });
+  assert.deepStrictEqual(content, { list: 'disc', h1: '700', prose: false });
+});
+
 // =========================
 // RUNNER
 // =========================

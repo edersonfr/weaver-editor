@@ -84,14 +84,16 @@
   };
 
   Editor.prototype.buildLayout = function () {
-    this.$container = $('<div class="wysiwyg-editor border border-gray-300 rounded-md shadow-sm flex flex-col bg-white font-sans text-gray-800 relative"/>');
+    // Borda, fundo, cor e fonte da raiz vêm das variáveis do tema (base-styles.js)
+    this.$container = $('<div class="wysiwyg-editor"/>');
+    this.setTheme(this.options.theme);
     this.$toolbar = $('<div class="editor-toolbar flex flex-wrap gap-1 p-2 border-b border-gray-200 rounded-t-md bg-gray-50 items-center z-10" role="toolbar" aria-label="Ferramentas de formatação"/>');
     
     // Configurações herdadas na inicialização do plugin
     var minHeight = this.options.height ? this.options.height + 'px' : '300px';
     var placeholder = this.options.placeholder || this.$el.attr('placeholder') || 'Digite aqui...';
 
-    this.$content = $('<div contenteditable="true" class="editor-content p-4 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto prose max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>')
+    this.$content = $('<div contenteditable="true" class="editor-content p-4 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>')
       .css('min-height', minHeight)
       .attr('data-placeholder', placeholder);
 
@@ -569,6 +571,22 @@
     });
   };
 
+  Editor.THEMES = ['light', 'dark', 'auto'];
+
+  /**
+   * Troca o tema do editor.
+   * - 'light' ou 'dark': fixa o tema, ignorando a página;
+   * - 'auto': escuro quando o sistema está em modo escuro (ou há .dark num ancestral);
+   * - sem valor: segue a classe .dark num ancestral (ex.: <html class="dark">).
+   * @param {string} [theme]
+   */
+  Editor.prototype.setTheme = function (theme) {
+    if (Editor.THEMES.indexOf(theme) === -1) theme = null;
+    this.options.theme = theme;
+    if (theme) this.$container.attr('data-weaver-theme', theme);
+    else this.$container.removeAttr('data-weaver-theme');
+  };
+
   /**
    * Remove o editor da página: desfaz todos os eventos (inclusive os de
    * document), devolve o textarea com o conteúdo atual e libera a instância.
@@ -948,35 +966,35 @@
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
       '.wysiwyg-editor .editor-toolbar-group { flex-wrap: wrap; }\n' +
       '.wysiwyg-editor button:has(.weaver-icon-fallback) { width: auto; min-width: 32px; }\n' +
-      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid #2563eb !important; outline-offset: 1px; }\n' +
-      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
-      '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
+      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid var(--weaver-accent) !important; outline-offset: 1px; }\n' +
+      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid var(--weaver-border-soft); background: var(--weaver-notice-bg); color: var(--weaver-notice-fg); }\n' +
+      '.wysiwyg-editor .editor-notice[data-type="error"] { background: var(--weaver-error-bg); color: var(--weaver-error-fg); }\n' +
       '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
       '.wysiwyg-editor .editor-image-alt { display: flex; gap: 4px; align-items: center; }\n' +
-      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
-      '.wysiwyg-editor .editor-dropdown-search { position: sticky; top: 0; z-index: 1; padding: 6px; background: #fff; border-bottom: 1px solid #e5e7eb; }\n' +
-      '.wysiwyg-editor .editor-dropdown-search-input { box-sizing: border-box; width: 100%; height: 30px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
-      '.wysiwyg-editor .editor-dropdown-empty { padding: 8px 12px; font-size: 13px; color: #6b7280; }\n' +
-      '.wysiwyg-editor weaver-raw { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px dashed #9ca3af; border-radius: 3px; background: #f3f4f6; color: #4b5563; font: 12px/1.6 Menlo, Monaco, Consolas, monospace; cursor: default; user-select: none; vertical-align: middle; }\n' +
+      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid var(--weaver-border); border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-search { position: sticky; top: 0; z-index: 1; padding: 6px; background: var(--weaver-menu-bg); border-bottom: 1px solid var(--weaver-border-soft); }\n' +
+      '.wysiwyg-editor .editor-dropdown-search-input { box-sizing: border-box; width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--weaver-border); border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-empty { padding: 8px 12px; font-size: 13px; color: var(--weaver-muted); }\n' +
+      '.wysiwyg-editor weaver-raw { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px dashed var(--weaver-placeholder); border-radius: 3px; background: var(--weaver-hover-strong); color: var(--weaver-fg-soft); font: 12px/1.6 Menlo, Monaco, Consolas, monospace; cursor: default; user-select: none; vertical-align: middle; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
       '.editor-show-blocks p, .editor-show-blocks div, .editor-show-blocks ul, .editor-show-blocks ol, .editor-show-blocks blockquote, .editor-show-blocks table {\n' +
-      '  border: 1px dashed #adb5bd !important; padding: 2px;\n' +
+      '  border: 1px dashed var(--weaver-blocks) !important; padding: 2px;\n' +
       '}\n' +
       '.editor-content:empty:before {\n' +
       '  content: attr(data-placeholder);\n' +
-      '  color:#999;\n' +
+      '  color: var(--weaver-placeholder);\n' +
       '}\n' +
       '.editor-preview-frame {\n' +
       '  width:100%;\n' +
       '  height:400px;\n' +
-      '  border:1px solid #ddd;\n' +
+      '  border:1px solid var(--weaver-border);\n' +
       '  background:#fff;\n' +
       '  transition: width 0.3s ease; \n' +
       '}\n' +
       '.editor-content.drag-over {\n' +
-      '  background: #f0f8ff; \n' +
-      '  border: 1px dashed #007bff; \n' +
+      '  background: var(--weaver-drop-bg); \n' +
+      '  border: 1px dashed var(--weaver-accent); \n' +
       '}\n' +
       '.img-resize-wrapper {\n' +
       '  display: inline-block;\n' +
@@ -1004,7 +1022,7 @@
       '  display: none;\n' +
       '  width: 100%;\n' +
       '  height: 400px;\n' +
-      '  background: #363636;\n' +
+      '  background: var(--weaver-code-bg);\n' +
       '  position: relative;\n' +
       '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;\n' +
       '  font-size: 14px;\n' +
@@ -1018,9 +1036,9 @@
       '  width: 50px;\n' +
       '  padding: 15px 5px 15px 0;\n' +
       '  text-align: right;\n' +
-      '  color: #888;\n' +
-      '  background: #2c2c2c;\n' +
-      '  border-right: 1px solid #555;\n' +
+      '  color: var(--weaver-code-line);\n' +
+      '  background: var(--weaver-code-gutter);\n' +
+      '  border-right: 1px solid var(--weaver-code-border);\n' +
       '  box-sizing: border-box;\n' +
       '  overflow: hidden;\n' +
       '  user-select: none;\n' +
@@ -1062,13 +1080,13 @@
       '  background: rgba(100, 150, 255, 0.3) !important;\n' +
       '}\n' +
       '.editor-codeview-highlight {\n' +
-      '  color: #e0e0e0;\n' +
+      '  color: var(--weaver-code-fg);\n' +
       '  z-index: 1;\n' +
       '  pointer-events: none;\n' +
       '  overflow: auto;\n' +
       '}\n' +
       '.editor-codeview-highlight .html-tag {\n' +
-      '  color: #f9eb26;\n' +
+      '  color: var(--weaver-code-tag);\n' +
       '}\n';
 
     // Estilos base (equivalentes às classes Tailwind usadas): o editor
@@ -1116,6 +1134,8 @@
     onFontApply: null,
     placeholder: '',
     height: null,
+    // Tema: 'light', 'dark', 'auto' (segue o sistema) ou null (segue .dark na página)
+    theme: null,
     aiEndpoint: 'ai-api.php',
     onAiGenerate: null,
     // Ícones: versão fixa do Lucide. Para servir do seu domínio, aponte para

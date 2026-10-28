@@ -15,6 +15,7 @@ Editor HTML WYSIWYG leve para jQuery. Transforma qualquer `<textarea>` num edito
 - [Barra de ferramentas](#barra-de-ferramentas)
 - [Opções](#opções)
 - [API e eventos](#api-e-eventos)
+- [Tema e aparência](#tema-e-aparência)
 - [Imagens](#imagens)
 - [Assistente de IA](#assistente-de-ia)
 - [Atalhos de teclado](#atalhos-de-teclado)
@@ -127,6 +128,7 @@ Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização,
 | `toolbar` | barra completa | Grupos e botões da barra (veja acima) |
 | `height` | `300` | Altura mínima da área de edição, em pixels |
 | `placeholder` | o do `textarea` | Texto exibido com o editor vazio |
+| `theme` | — | `'light'`, `'dark'` ou `'auto'` (segue o sistema); sem valor, segue a classe `.dark` da página (veja [Tema e aparência](#tema-e-aparência)) |
 | `fontNames` | lista padrão | Fontes do menu de fontes |
 | `googleFonts` | `true` | Carrega do Google as fontes do menu e as usadas no conteúdo, sob demanda (editor e pré-visualização) |
 | `fontSearch` | `'auto'` | Campo de busca no menu de fontes: `true`, `false` ou `'auto'` (com mais de 20 fontes) |
@@ -178,6 +180,7 @@ editor.replaceImage(img, url, attrs);   // troca o src mantendo estilo e alinham
 editor.exec('bold');                    // executa um comando da barra
 editor.sanitize(html);                  // sanitiza um HTML com as regras do editor
 editor.notify('Salvo!');                // mostra um aviso dentro do editor
+editor.setTheme('dark');                // 'light', 'dark', 'auto' ou null (segue .dark da página)
 
 $('#artigo').weaver('destroy');         // remove o editor e devolve o textarea
 ```
@@ -195,6 +198,43 @@ Use `destroy` ao trocar de tela numa SPA: ele remove todos os eventos e devolve 
 **Fontes.** O menu aceita o catálogo inteiro do Google Fonts (`fontNames` com ~1.500 nomes): os itens só são montados ao abrir o menu, cada fonte só é baixada quando aparece na lista, e a busca filtra pelo nome. Ao escolher uma fonte, ou ao carregar um conteúdo que já usa uma, o editor pede ao Google só aquela família. Fontes do sistema (Arial, Georgia...) não são pedidas. O conteúdo salvo guarda apenas o `font-family`; para a fonte aparecer na loja, carregue-a lá, por exemplo em `onFontApply`.
 
 **HTML original preservado.** Enquanto nada for editado, `getContent()` (e o envio do formulário) devolve exatamente o HTML carregado, sem mudar aspas, entidades, ordem de atributos ou a formatação do CSS. Isso vale quando a sanitização não removeu nada do conteúdo; se removeu, o editor devolve a versão sanitizada.
+
+## Tema e aparência
+
+O editor fica escuro quando a página tem a classe `.dark` num ancestral, como `<html class="dark">` (o padrão do Tailwind). A opção `theme` muda isso:
+
+| `theme` | Comportamento |
+| --- | --- |
+| sem valor | Segue a classe `.dark` da página |
+| `'auto'` | Segue o modo escuro do sistema (`prefers-color-scheme`), além da classe `.dark` |
+| `'light'` | Sempre claro, mesmo com `.dark` na página |
+| `'dark'` | Sempre escuro |
+
+As cores ficam em variáveis CSS na raiz `.wysiwyg-editor`. Para ajustar, redefina as variáveis nos seus estilos, nos dois temas:
+
+```css
+.wysiwyg-editor { --weaver-accent: #0f766e; }
+.dark .wysiwyg-editor:not([data-weaver-theme="light"]), .wysiwyg-editor[data-weaver-theme="dark"] {
+  --weaver-accent: #14b8a6;
+  --weaver-content-bg: #fff;   /* área de texto clara, como na loja */
+  --weaver-content-fg: #1f2937;
+}
+```
+
+| Variável | Uso |
+| --- | --- |
+| `--weaver-bg`, `--weaver-fg` | Fundo e texto do editor |
+| `--weaver-content-bg`, `--weaver-content-fg` | Fundo e texto da área de edição (padrão: os dois acima) |
+| `--weaver-toolbar-bg` | Fundo da barra de ferramentas |
+| `--weaver-menu-bg`, `--weaver-input-bg` | Botões, menus e janelas; campos de texto |
+| `--weaver-border`, `--weaver-border-soft` | Bordas de botões e campos; divisórias |
+| `--weaver-hover`, `--weaver-active` | Botão sob o mouse; botão ativo |
+| `--weaver-accent`, `--weaver-link` | Cor de destaque (foco, seleção, botão Salvar); links no conteúdo |
+| `--weaver-code-bg`, `--weaver-code-fg`, `--weaver-code-tag` | Code view: fundo, texto e tags |
+
+A lista completa está em [`src/core/base-styles.js`](src/core/base-styles.js).
+
+**Tailwind na página.** A interface usa nomes de classe do Tailwind (`bg-white`, `border-gray-300`...), mas o CSS do editor, com escopo em `.wysiwyg-editor`, tem prioridade sobre as utilitárias da página. Por isso, uma paleta `gray` diferente não muda o editor. A área de edição não usa `prose`, e o editor restaura listas com marcador e tamanhos de título, que o preflight do Tailwind zera. Só um Tailwind com `important: true` passa por cima dessas regras.
 
 ## Botões próprios
 
