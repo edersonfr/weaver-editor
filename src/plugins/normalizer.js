@@ -28,6 +28,9 @@ NormalizerPlugin.prototype.bind = function () {
 };
 
 NormalizerPlugin.prototype.normalize = function () {
+  // normalize: false desliga; conteúdo sem edição fica como foi carregado
+  if (this.editor.options.normalize === false || this.editor.isPristine()) return;
+
   var root = this.editor.$content[0];
   var before = root.innerHTML;
 
@@ -80,7 +83,9 @@ NormalizerPlugin.prototype.removeEmpty = function (root) {
       el.parentNode &&
       el.childNodes.length === 0 &&
       NormalizerPlugin.KEEP_EMPTY.indexOf(el.tagName) === -1 &&
-      !el.hasAttribute('id') // âncoras de link interno (<a id="...">)
+      // Só sobras de formatação (<b></b>, <span></span>). Com atributos, o
+      // vazio é intencional: âncoras (<a id>), <div class="clearfix">, ícones
+      !el.attributes.length
     ) {
       el.parentNode.removeChild(el);
     }

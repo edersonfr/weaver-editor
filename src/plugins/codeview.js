@@ -45,6 +45,11 @@ CodeViewPlugin.prototype.init = function () {
   });
 };
 
+/** Indica se o código foi alterado desde que o code view foi aberto. */
+CodeViewPlugin.prototype.isModified = function () {
+  return this.$textarea.val() !== this.shownCode;
+};
+
 CodeViewPlugin.prototype.formatHtml = function (html) {
   var escaped = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // Regex que busca tudo que estiver entre &lt; e &gt; para pintar de amarelo
@@ -153,13 +158,14 @@ CodeViewPlugin.prototype.toggle = function () {
   var $codeViewBtn = this.editor.$toolbar.find('[data-name="codeview"]');
 
   if (this.active) {
-    // Lê direto do conteúdo: getContent() já considera o code view ativo
-    var html = this.editor.$content.html();
-    
+    // Lê do conteúdo com o código protegido (<weaver-raw>) já restaurado
+    var html = WysiwygEditor.cleanOutput(this.editor.$content.html());
+
     // Aplica a formatação em cascata inteligente no HTML
     html = this.beautifyHtml(html);
 
     this.$textarea.val(html);
+    this.shownCode = this.$textarea.val();
     this.updateView();
 
     this.editor.$content.hide();
@@ -168,11 +174,14 @@ CodeViewPlugin.prototype.toggle = function () {
     this.editor.$toolbar.find('button').not($codeViewBtn).prop('disabled', true);
     $codeViewBtn.addClass('active');
   } else {
-    var val = this.$textarea.val();
-    this.editor.history.save();
-    this.editor.setContent(val); // setContent sanitiza
-    this.editor.history.save();
-    this.editor.trigger('change');
+    // Código não alterado: o conteúdo fica como estava (e o HTML original
+    // continua valendo no getContent)
+    if (this.isModified()) {
+      this.editor.history.save();
+      this.editor._loadContent(this.$textarea.val()); // sanitiza
+      this.editor.history.save();
+      this.editor.trigger('change');
+    }
     this.$wrapper.hide();
     this.editor.$content.show();
     

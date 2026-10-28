@@ -15,6 +15,7 @@ Editor HTML WYSIWYG leve para jQuery. Transforma qualquer `<textarea>` num edito
 - [Barra de ferramentas](#barra-de-ferramentas)
 - [Opções](#opções)
 - [API e eventos](#api-e-eventos)
+- [Tema e aparência](#tema-e-aparência)
 - [Imagens](#imagens)
 - [Assistente de IA](#assistente-de-ia)
 - [Atalhos de teclado](#atalhos-de-teclado)
@@ -50,11 +51,13 @@ O editor é um único arquivo, que depende só do jQuery (testado com a versão 
 <script src="/js/weaver-editor.min.js"></script>
 ```
 
-**Pelo CDN do jsDelivr**, direto deste repositório (troque `main` por um commit para fixar a versão):
+**Pelo CDN do jsDelivr**, com a versão fixada no tag:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@main/dist/weaver-editor.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@v1.1.0/dist/weaver-editor.min.js"></script>
 ```
+
+Use sempre um tag (`@v1.1.0`), nunca `@main`: a `main` muda a cada commit, e o editor mudaria junto em produção. As versões e o que mudou em cada uma estão no [CHANGELOG](CHANGELOG.md) e nas [Releases](https://github.com/edersonfr/weaver-editor/releases), que também trazem o `weaver-editor.min.js` para baixar. Em tempo de execução, a versão carregada fica em `WysiwygEditor.VERSION`.
 
 Funciona nas versões atuais do Chrome, Edge, Firefox e Safari. O Internet Explorer não é suportado.
 
@@ -127,8 +130,11 @@ Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização,
 | `toolbar` | barra completa | Grupos e botões da barra (veja acima) |
 | `height` | `300` | Altura mínima da área de edição, em pixels |
 | `placeholder` | o do `textarea` | Texto exibido com o editor vazio |
+| `theme` | — | `'light'`, `'dark'` ou `'auto'` (segue o sistema); sem valor, segue a classe `.dark` da página (veja [Tema e aparência](#tema-e-aparência)) |
 | `fontNames` | lista padrão | Fontes do menu de fontes |
-| `googleFonts` | `true` | Carrega do Google as fontes do menu (editor e pré-visualização) |
+| `googleFonts` | `true` | Carrega do Google as fontes do menu e as usadas no conteúdo, sob demanda (editor e pré-visualização) |
+| `fontSearch` | `'auto'` | Campo de busca no menu de fontes: `true`, `false` ou `'auto'` (com mais de 20 fontes) |
+| `onFontApply` | — | `function (fontName, editor)` chamada ao aplicar uma fonte, para carregá-la também na loja |
 | `previewCss` | — | Folhas de estilo do seu site, aplicadas na pré-visualização |
 | `uploadImage` | — | Função de upload de imagens (veja [Imagens](#imagens)) |
 | `maxImageSize` | `5242880` | Tamanho máximo da imagem, em bytes (5 MB) |
@@ -137,11 +143,23 @@ Os recursos de link, tabela, imagem, vídeo, código-fonte, pré-visualização,
 | `onAiGenerate` | — | Função própria para gerar o conteúdo da IA |
 | `iconsUrl` | Lucide 0.525.0 (unpkg) | Arquivo de ícones; `false` usa o Lucide já carregado na página |
 | `iconsIntegrity` | — | Hash SRI do arquivo de ícones |
-| `allowedTags` | lista segura | Tags aceitas no conteúdo |
-| `allowedAttributes` | lista segura | Atributos aceitos, por tag (`'*'` vale para todas) |
-| `allowedStyles` | lista segura | Propriedades CSS aceitas no atributo `style` |
-| `allowedIframeSources` | YouTube e Vimeo | Lista de RegExp com os endereços de iframe aceitos |
-| `plugins` | automático | Lista de plugins, para montar o editor à mão |
+| `allowedTags` | lista segura | Tags aceitas no conteúdo; `'*'` aceita qualquer tag HTML |
+| `allowedAttributes` | lista segura | Atributos aceitos, por tag (`'*'` vale para todas). Aceita RegExp (`/^data-[\w-]+$/`) e `'*'` como lista |
+| `allowedStyles` | lista segura | Propriedades CSS aceitas no atributo `style`; `'*'` aceita todas |
+| `allowedIframeSources` | YouTube e Vimeo | Lista de RegExp com os endereços de iframe aceitos; `'*'` aceita qualquer http(s) |
+| `forbiddenTags` | `script`, `style`, `svg`... | Tags removidas com todo o conteúdo, mesmo se liberadas em `allowedTags` |
+| `allowCssUrls` | `false` | Aceita `url()` no CSS inline, com endereço http(s), relativo ou imagem `data:` |
+| `keepComments` | `false` | Mantém os comentários HTML |
+| `iframeAttributes` | `true` | Acrescenta `sandbox`, `referrerpolicy` e `loading` aos iframes |
+| `sanitize` | `true` | `false` desliga a sanitização (veja [Modo confiável](#modo-confiável)) |
+| `sanitizer` | — | Função `(html) => html` que substitui a sanitização |
+| `normalize` | `true` | Limpa tags repetidas e vazias ao sair do editor; `false` desliga |
+| `buttons` | — | Botões próprios da barra (veja [Botões próprios](#botões-próprios)) |
+| `imageToolbar` | — | Botões extras (ou removidos) na barra da imagem selecionada (veja [Imagens](#imagens)) |
+| `uploadPastedImages` | `false` | Envia pelo `uploadImage` as imagens em base64 de HTML colado ou solto |
+| `imageDefaults` | — | Atributos aplicados a toda imagem inserida, como `{ style: 'width:100%;height:auto' }` |
+| `extraPlugins` | — | Plugins somados aos automáticos, sem desligar link, tabela, imagem etc. |
+| `plugins` | automático | Lista de plugins, para montar o editor à mão (substitui os automáticos) |
 
 ## API e eventos
 
@@ -152,9 +170,19 @@ var editor = $('#artigo').data('weaver');
 
 editor.getContent();                    // HTML atual (já sanitizado)
 editor.setContent('<p>Novo texto</p>'); // substitui o conteúdo (sanitiza antes)
+editor.isPristine();                    // true se nada foi editado desde o carregamento
+editor.saveSelection();                 // guarda o cursor antes de abrir um modal
+editor.insertHTML('<p>Oi</p>');         // insere (sanitizado) no cursor salvo, com desfazer
+editor.insertImage(url, { alt: 'Foto' }); // valida a URL e insere a imagem no cursor salvo
+editor.restoreSelection();              // foca o editor e volta o cursor salvo
+editor.focus();                         // foca a área de edição
+editor.loadFont('Lobster');             // carrega uma fonte do Google Fonts no editor
+editor.getSelectedImage();              // <img> selecionada no editor, ou null
+editor.replaceImage(img, url, attrs);   // troca o src mantendo estilo e alinhamento
 editor.exec('bold');                    // executa um comando da barra
 editor.sanitize(html);                  // sanitiza um HTML com as regras do editor
 editor.notify('Salvo!');                // mostra um aviso dentro do editor
+editor.setTheme('dark');                // 'light', 'dark', 'auto' ou null (segue .dark da página)
 
 $('#artigo').weaver('destroy');         // remove o editor e devolve o textarea
 ```
@@ -168,6 +196,77 @@ $('#artigo').on('change', function (event, html) {
 ```
 
 Use `destroy` ao trocar de tela numa SPA: ele remove todos os eventos e devolve o `textarea` com o conteúdo atual.
+
+**Fontes.** O menu aceita o catálogo inteiro do Google Fonts (`fontNames` com ~1.500 nomes): os itens só são montados ao abrir o menu, cada fonte só é baixada quando aparece na lista, e a busca filtra pelo nome. Ao escolher uma fonte, ou ao carregar um conteúdo que já usa uma, o editor pede ao Google só aquela família. Fontes do sistema (Arial, Georgia...) não são pedidas. O conteúdo salvo guarda apenas o `font-family`; para a fonte aparecer na loja, carregue-a lá, por exemplo em `onFontApply`.
+
+**HTML original preservado.** Enquanto nada for editado, `getContent()` (e o envio do formulário) devolve exatamente o HTML carregado, sem mudar aspas, entidades, ordem de atributos ou a formatação do CSS. Isso vale quando a sanitização não removeu nada do conteúdo; se removeu, o editor devolve a versão sanitizada.
+
+## Tema e aparência
+
+O editor fica escuro quando a página tem a classe `.dark` num ancestral, como `<html class="dark">` (o padrão do Tailwind). A opção `theme` muda isso:
+
+| `theme` | Comportamento |
+| --- | --- |
+| sem valor | Segue a classe `.dark` da página |
+| `'auto'` | Segue o modo escuro do sistema (`prefers-color-scheme`), além da classe `.dark` |
+| `'light'` | Sempre claro, mesmo com `.dark` na página |
+| `'dark'` | Sempre escuro |
+
+As cores ficam em variáveis CSS na raiz `.wysiwyg-editor`. Para ajustar, redefina as variáveis nos seus estilos, nos dois temas:
+
+```css
+.wysiwyg-editor { --weaver-accent: #0f766e; }
+.dark .wysiwyg-editor:not([data-weaver-theme="light"]), .wysiwyg-editor[data-weaver-theme="dark"] {
+  --weaver-accent: #14b8a6;
+  --weaver-content-bg: #fff;   /* área de texto clara, como na loja */
+  --weaver-content-fg: #1f2937;
+}
+```
+
+| Variável | Uso |
+| --- | --- |
+| `--weaver-bg`, `--weaver-fg` | Fundo e texto do editor |
+| `--weaver-content-bg`, `--weaver-content-fg` | Fundo e texto da área de edição (padrão: os dois acima) |
+| `--weaver-toolbar-bg` | Fundo da barra de ferramentas |
+| `--weaver-menu-bg`, `--weaver-input-bg` | Botões, menus e janelas; campos de texto |
+| `--weaver-border`, `--weaver-border-soft` | Bordas de botões e campos; divisórias |
+| `--weaver-hover`, `--weaver-active` | Botão sob o mouse; botão ativo |
+| `--weaver-accent`, `--weaver-link` | Cor de destaque (foco, seleção, botão Salvar); links no conteúdo |
+| `--weaver-code-bg`, `--weaver-code-fg`, `--weaver-code-tag` | Code view: fundo, texto e tags |
+
+A lista completa está em [`src/core/base-styles.js`](src/core/base-styles.js).
+
+**Tailwind na página.** A interface usa nomes de classe do Tailwind (`bg-white`, `border-gray-300`...), mas o CSS do editor, com escopo em `.wysiwyg-editor`, tem prioridade sobre as utilitárias da página. Por isso, uma paleta `gray` diferente não muda o editor. A área de edição não usa `prose`, e o editor restaura listas com marcador e tamanhos de título, que o preflight do Tailwind zera. Só um Tailwind com `important: true` passa por cima dessas regras.
+
+## Botões próprios
+
+Defina botões na opção `buttons` e use o nome deles na `toolbar`. O `action` recebe a instância do editor e o botão. Antes de chamá-lo, o editor guarda o cursor, então `insertHTML` e `insertImage` inserem no lugar certo mesmo depois de um modal tirar o foco:
+
+```javascript
+$('#descricao').weaver({
+  buttons: {
+    imageManager: {
+      icon: 'images',                 // ícone do Lucide; ou `html` com qualquer HTML; ou `text`
+      title: 'Gerenciar imagens',
+      action: function (editor, $button) {
+        abrirGerenciador(function (urls) {
+          urls.forEach(function (url) { editor.insertImage(url, { alt: '' }); });
+        });
+      },
+      isActive: function (editor) { return false; } // opcional: botão pressionado
+    },
+    modelo: {
+      type: 'dropdown',
+      text: 'Modelos',
+      options: ['Garantia', { label: 'Frete grátis', value: 'frete' }],
+      action: function (editor, value) { editor.insertHTML(modelos[value]); }
+    }
+  },
+  toolbar: [['insert', ['link', 'imageManager', 'modelo', 'video']]]
+});
+```
+
+Para registrar um botão para todos os editores da página, use `WysiwygEditor.registerButton(nome, definicao)`. Um nome na `toolbar` que não existe gera um aviso no console.
 
 ## Imagens
 
@@ -189,6 +288,29 @@ $('#artigo').weaver({
 ```
 
 Formatos aceitos: PNG, JPG, GIF, WebP e AVIF. No servidor, confira o tipo e o tamanho de novo antes de salvar.
+
+O `done` aceita atributos para a imagem: `done(url, { alt: 'Foto', width: 600 })`.
+
+**Colar e arrastar:** um print colado com `Ctrl+V` ou uma imagem arrastada passa pelo mesmo caminho (com `uploadImage`, sobe para o servidor). Ao colar do Word ou do Excel, que mandam um PNG junto com o HTML, vale o HTML. Com `uploadPastedImages: true`, as imagens em base64 dentro de um HTML colado ou solto também sobem pelo `uploadImage`, e o `src` delas é trocado pela URL devolvida.
+
+Com `uploadImage` ou `imageToolbar` configurados, os recursos de imagem (colar, redimensionar, alinhar) ficam ativos mesmo sem o botão `image` na barra.
+
+**Barra da imagem:** clique numa imagem para redimensionar, alinhar, editar o texto alternativo ou remover. Para acrescentar botões ou tirar os padrões (`w100`, `w50`, `w25`, `original`, `floatLeft`, `center`, `floatRight`, `noFloat`, `alt`, `remove`):
+
+```javascript
+$('#descricao').weaver({
+  imageToolbar: {
+    add: [{
+      icon: 'replace',
+      title: 'Trocar imagem',
+      action: function (editor, img) {
+        abrirGerenciador(function (url) { editor.replaceImage(img, url); });
+      }
+    }],
+    remove: ['w25']
+  }
+});
+```
 
 ## Assistente de IA
 
@@ -248,7 +370,7 @@ O editor sanitiza todo HTML que entra: conteúdo inicial, colar, arrastar, códi
 
 > **Sanitize também no servidor.** O editor protege quem está editando, mas o envio do formulário pode ser forjado. Antes de salvar ou exibir o HTML, passe-o por uma biblioteca de servidor, como o [HTML Purifier](http://htmlpurifier.org/) (PHP) ou o [DOMPurify](https://github.com/cure53/DOMPurify) (Node).
 
-- **Tags bloqueadas sempre:** `script`, `style`, `svg`, `math`, `object`, `embed`, `form` e similares saem mesmo se estiverem em `allowedTags`.
+- **Tags bloqueadas:** `script`, `style`, `svg`, `math`, `object`, `embed`, `form` e similares saem mesmo se estiverem em `allowedTags`. A lista pode ser trocada em `forbiddenTags` (veja [Modo confiável](#modo-confiável)).
 - **iframes:** só players do YouTube (`youtube-nocookie.com`) e do Vimeo, sempre com `sandbox`. Para liberar outros, use `allowedIframeSources`.
 - **CSS inline:** só propriedades de formatação. `position` e `url()` são removidos.
 - **Pré-visualização:** roda num iframe com `sandbox` e sem scripts.
@@ -260,6 +382,33 @@ O editor sanitiza todo HTML que entra: conteúdo inicial, colar, arrastar, códi
 
   Para não depender de CDN, sirva o arquivo do seu domínio com `iconsUrl: '/js/lucide.min.js'`. Se os ícones não carregarem, os botões mostram o nome.
 - **Google Fonts e LGPD:** as fontes do menu vêm do Google, que recebe o IP do visitante. Use `googleFonts: false` para desligar.
+
+### Modo confiável
+
+Quando quem edita é o dono do conteúdo (por exemplo, o lojista editando a própria loja), a sanitização pode ser afrouxada para não alterar o HTML existente:
+
+```javascript
+$('#descricao').weaver({
+  forbiddenTags: [],                 // ou ['script'] para manter só scripts de fora
+  allowedTags: '*',
+  allowedAttributes: { '*': '*' },   // ou ['class', 'style', /^data-[\w-]+$/, /^aria-[\w-]+$/]
+  allowedStyles: '*',
+  allowCssUrls: true,
+  keepComments: true,
+  iframeAttributes: false,
+  allowedIframeSources: '*'
+});
+```
+
+Para desligar tudo, use `sanitize: false`, ou passe a sua própria função em `sanitizer`.
+
+Mesmo nesses modos, nada executa dentro do editor:
+
+- `<script>`, `<style>`, `<link>`, `<meta>`, `<form>`, `<input>` e afins aparecem como um marcador cinza não editável. O CSS não vaza para a página, e os campos não vão junto no envio do formulário. No `getContent()` e no código-fonte, eles voltam como eram.
+- Atributos que executam código (`onclick`, `onerror`, `srcdoc`, `href="javascript:..."`) ficam desativados no editor e voltam na saída.
+- `expression()`, `behavior` e escapes CSS fora de aspas continuam bloqueados com `allowedStyles: '*'`, e `url()` só passa com `allowCssUrls`.
+
+> **Com o modo confiável, a validação do HTML passa a ser responsabilidade do servidor.** O editor deixa de remover o que o servidor precisa barrar antes de exibir o conteúdo.
 
 ## Desenvolvimento
 

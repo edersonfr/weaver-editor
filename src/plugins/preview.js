@@ -52,9 +52,19 @@ PreviewPlugin.prototype.enable = function () {
   var html = this.editor.sanitize(this.editor.getContent());
 
   var cssLinks = this.buildCssLinks();
-  var googleFonts = this.editor.options.googleFonts
-    ? '<link rel="stylesheet" referrerpolicy="no-referrer" href="' + HtmlSanitizer.escapeHtml(WysiwygEditor.GOOGLE_FONTS_URL) + '">'
-    : '';
+  var googleFonts = '';
+  if (this.editor.options.googleFonts) {
+    // Fontes do menu + as usadas no conteúdo (ex.: 'Lobster' escolhida no menu)
+    var fontUrls = [WysiwygEditor.GOOGLE_FONTS_URL];
+    var used = this.editor.contentFonts();
+    for (var i = 0; i < used.length; i++) {
+      var url = WysiwygEditor.googleFontUrl(used[i]);
+      if (url) fontUrls.push(url);
+    }
+    for (var u = 0; u < fontUrls.length; u++) {
+      googleFonts += '<link rel="stylesheet" referrerpolicy="no-referrer" href="' + HtmlSanitizer.escapeHtml(fontUrls[u]) + '">';
+    }
+  }
 
   // Segunda camada além do sandbox: CSP que proíbe qualquer script
   var csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';

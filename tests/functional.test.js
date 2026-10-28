@@ -166,8 +166,21 @@ test('B3: code view não junta palavras e é estável em idas e voltas', async f
   await exec(page, 'codeview');
   assert.ok(/palavra outra/.test(first), first);
   assert.strictEqual(second, first);
-  var text = await page.evaluate(function () { return window.$('#t').data('weaver').$content.text().replace(/\s+/g, ' ').trim(); });
-  assert.strictEqual(text, 'palavra outra item');
+  var text = await page.evaluate(function () { return window.$('#t').data('weaver').$content.find('p').text().replace(/\s+/g, ' ').trim(); });
+  assert.strictEqual(text, 'palavra outra');
+  // Code view aberto e fechado sem alterar o código não muda o conteúdo
+  assert.strictEqual(await content(page), '<p>palavra\noutra</p><ul><li>item</li></ul>');
+});
+
+test('B3: alterar o código no code view aplica a mudança', async function () {
+  var page = await setup('<p>a</p>');
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.exec('codeview');
+    ed.getPlugin('CodeViewPlugin').$textarea.val('<p>b</p>');
+    ed.exec('codeview');
+  });
+  assert.strictEqual(await content(page), '<p>b</p>');
 });
 
 test('B3: enviar o formulário com o code view aberto salva as edições', async function () {
@@ -817,6 +830,659 @@ test('A11y: botões ativos expõem aria-pressed', async function () {
   await page.evaluate(function () { window.$('#t').data('weaver').updateToolbar(); });
   assert.strictEqual(await page.getAttribute('[data-name="bold"]', 'aria-pressed'), 'true');
   assert.strictEqual(await page.getAttribute('[data-name="italic"]', 'aria-pressed'), null);
+});
+
+// =========================
+// APS: HTML original e modo confiável
+// =========================
+
+function getContent(page) {
+  return page.evaluate(function () { return window.$('#t').data('weaver').getContent(); });
+}
+
+/** Opções do modo confiável usadas no APS. */
+var TRUSTED = {
+  forbiddenTags: [],
+  allowedTags: '*',
+  allowedAttributes: { '*': '*' },
+  allowedStyles: '*',
+  allowCssUrls: true,
+  keepComments: true,
+  iframeAttributes: false,
+  allowedIframeSources: '*'
+};
+
+var APS_HTML = '<!-- banner -->\n' +
+  '<section data-id="1" style="background-image:url(https://img.irroba.com.br/a.jpg);display:grid;gap:8px">\n' +
+  '  <style>.x{color:red}</style>\n' +
+  '  <font face="Arial">texto</font>\n' +
+  '  <iframe src="https://www.google.com/maps/embed?pb=1"></iframe>\n' +
+  '  <script>window.__ran = 1<\/script>\n' +
+  '</section>';
+
+test('APS: modo confiável devolve o HTML idêntico sem edição', async function () {
+  var page = await setup(APS_HTML, TRUSTED);
+  assert.strictEqual(await getContent(page), APS_HTML);
+  assert.strictEqual(await page.evaluate(function () { return window.__ran || 0; }), 0);
+});
+
+test('APS: modo confiável preserva tudo também depois de editar', async function () {
+  var page = await setup(APS_HTML, TRUSTED);
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.find('font').append(' mais');
+    ed.trigger('change');
+  });
+  var html = await getContent(page);
+  ['<!-- banner -->', 'data-id="1"', 'style="background-image:url(https://img.irroba.com.br/a.jpg);display:grid;gap:8px"',
+    '<style>.x{color:red}</style>', '<font face="Arial">texto mais</font>', 'src="https://www.google.com/maps/embed?pb=1"', '<script>window.__ran = 1</script>'
+  ].forEach(function (piece) {
+    assert.ok(html.indexOf(piece) !== -1, 'faltou ' + piece + ' em ' + html);
+  });
+  assert.ok(html.indexOf('sandbox') === -1, html);
+  assert.ok(html.indexOf('weaver') === -1, html);
+});
+
+test('APS: <script> e <style> viram marcador inerte no editor', async function () {
+  var page = await setup(APS_HTML, TRUSTED);
+  var live = await page.evaluate(function () {
+    var c = window.$('#t').data('weaver').$content;
+    return { script: c.find('script').length, style: c.find('style').length, raw: c.find('weaver-raw').length };
+  });
+  assert.deepStrictEqual(live, { script: 0, style: 0, raw: 2 });
+});
+
+test('APS: modo padrão devolve o HTML original quando nada foi removido', async function () {
+  var original = '<p style="color:red;text-align:center">Olá &amp; <b>mundo</b></p>\n<p class=\'x\'>dois</p>';
+  var page = await setup(original);
+  assert.strictEqual(await getContent(page), original);
+  // E é isso que vai no submit do formulário
+  var submitted = await page.evaluate(function () {
+    window.$('form').on('submit', function (e) { e.preventDefault(); });
+    window.$('form').trigger('submit');
+    return window.$('#t').val();
+  });
+  assert.strictEqual(submitted, original);
+});
+
+test('APS: modo padrão não devolve o original se a sanitização removeu algo', async function () {
+  var page = await setup('<p onclick="x()">a</p><section>b</section>');
+  assert.strictEqual(await getContent(page), '<p>a</p>b');
+});
+
+test('APS: depois de editar vale o conteúdo novo; desfazer volta ao original', async function () {
+  var original = '<p style="color:red">a</p>';
+  var page = await setup(original);
+  await state(page, '<p style="color:red">a</p>', { from: ['a', 1] });
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.history.save();
+    ed.$content.find('p').append('b');
+    ed.history.save();
+  });
+  assert.strictEqual(await getContent(page), '<p style="color:red">ab</p>');
+  await exec(page, 'undo');
+  assert.strictEqual(await getContent(page), original);
+});
+
+test('APS: focar e sair sem editar não normaliza o conteúdo', async function () {
+  var original = '<div class="clearfix"></div><p><b><b>x</b></b></p><p></p>';
+  var page = await setup(original);
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.focus();
+    ed.$content.blur();
+  });
+  assert.strictEqual(await getContent(page), original);
+});
+
+test('APS: normalizador mantém elementos vazios com atributos', async function () {
+  var page = await setup('<div class="clearfix"></div><p>a<b></b></p>');
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.find('p').append('b');
+    ed.$content.focus();
+    ed.$content.blur();
+  });
+  assert.strictEqual(await getContent(page), '<div class="clearfix"></div><p>ab</p>');
+});
+
+test('APS: rel="nofollow" é mantido em links com target _blank', async function () {
+  var page = await setup('<p><a href="https://x.com" target="_blank" rel="nofollow">x</a> <a href="/y" rel="sponsored">y</a></p>');
+  var html = await page.evaluate(function () { return window.$('#t').data('weaver').$content.html(); });
+  assert.ok(html.indexOf('rel="nofollow noopener noreferrer"') !== -1, html);
+  assert.ok(html.indexOf('rel="sponsored"') !== -1, html);
+});
+
+test('APS: data-* e aria-* liberados por RegExp', async function () {
+  var page = await setup('<p data-a="1" aria-label="r" data-x-y="2" foo="3">a</p>', {
+    allowedAttributes: { '*': ['class', /^data-[\w-]+$/, /^aria-[\w-]+$/] }
+  });
+  assert.strictEqual(await getContent(page), '<p data-a="1" aria-label="r" data-x-y="2">a</p>');
+});
+
+test('APS: allowedTags "*" mantém tags HTML desconhecidas pela lista padrão', async function () {
+  var html = '<section><article><header>h</header><details><summary>s</summary>d</details><dl><dt>t</dt><dd>d</dd></dl></article></section>';
+  var page = await setup(html, { allowedTags: '*' });
+  assert.strictEqual(await getContent(page), html);
+});
+
+test('APS: code view mostra o código protegido restaurado', async function () {
+  var page = await setup('<p>a</p><style>.x{}</style>', TRUSTED);
+  var code = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.exec('codeview');
+    return ed.getPlugin('CodeViewPlugin').$textarea.val();
+  });
+  assert.ok(code.indexOf('<style>.x{}</style>') !== -1, code);
+  assert.ok(code.indexOf('weaver-raw') === -1, code);
+});
+
+// =========================
+// APS: botões customizados e API de inserção
+// =========================
+
+/** Recria o editor dentro da página (funções não passam pelo Playwright). */
+async function setupWith(page, html, factory) {
+  await page.evaluate(function (args) {
+    window.$('#t').weaver('destroy');
+    window.$('#t').val(args.html);
+    window.$('#t').weaver(new Function('return ' + args.factory)()());
+  }, { html: html, factory: factory.toString() });
+}
+
+test('APS: botão customizado aparece no grupo e recebe o editor', async function () {
+  var page = await setup();
+  page.warnings = [];
+  page.on('console', function (m) { if (m.type() === 'warning') page.warnings.push(m.text()); });
+  await setupWith(page, '<p>a</p>', function () {
+    return {
+      buttons: {
+        imageManager: {
+          icon: 'images',
+          title: 'Gerenciar imagens',
+          action: function (editor, $button) { window.__action = [editor === window.$('#t').data('weaver'), $button.attr('data-name')]; },
+          isActive: function () { return true; }
+        }
+      },
+      toolbar: [['insert', ['link', 'imageManager', 'naoExiste']]]
+    };
+  });
+  var info = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var $btns = ed.$toolbar.find('.editor-toolbar-group').first().children('button');
+    ed.$toolbar.find('[data-name="imageManager"]').trigger('click');
+    return { names: $btns.map(function () { return this.getAttribute('data-name'); }).get(), title: $btns.eq(1).attr('aria-label'), pressed: $btns.eq(1).attr('aria-pressed'), action: window.__action, link: !!ed.getPlugin('LinkPlugin') };
+  });
+  assert.deepStrictEqual(info.names, ['link', 'imageManager']);
+  assert.strictEqual(info.title, 'Gerenciar imagens');
+  assert.strictEqual(info.pressed, 'true');
+  assert.deepStrictEqual(info.action, [true, 'imageManager']);
+  assert.strictEqual(info.link, true);
+  assert.ok(page.warnings.some(function (w) { return w.indexOf('naoExiste') !== -1; }), page.warnings.join('|'));
+});
+
+test('APS: botão customizado entra na navegação por setas da barra', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', function () {
+    return { buttons: { meu: { text: 'Meu', action: function () {} } }, toolbar: [['g', ['bold', 'meu', 'italic']]] };
+  });
+  var focused = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.$toolbar.find('[data-name="bold"]')[0].focus();
+    ed.$toolbar.find('[data-name="bold"]').trigger(window.$.Event('keydown', { key: 'ArrowRight' }));
+    return document.activeElement.getAttribute('data-name');
+  });
+  assert.strictEqual(focused, 'meu');
+});
+
+test('APS: botão dropdown customizado chama action com o valor', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', function () {
+    return { buttons: { modelo: { type: 'dropdown', text: 'Modelos', options: ['A', { label: 'Bê', value: 'B' }], action: function (ed, value) { window.__value = value; } } }, toolbar: [['g', ['modelo']]] };
+  });
+  var value = await page.evaluate(function () {
+    window.$('#t').data('weaver').$toolbar.find('[data-value="B"]').trigger('click');
+    return window.__value;
+  });
+  assert.strictEqual(value, 'B');
+});
+
+test('APS: registerButton vale para todos os editores', async function () {
+  var page = await setup();
+  await page.evaluate(function () {
+    window.WysiwygEditor.registerButton('global', { text: 'G', action: function () {} });
+  });
+  await setupWith(page, '', function () { return { toolbar: [['g', ['global']]] }; });
+  assert.strictEqual(await page.evaluate(function () { return window.$('#t').data('weaver').$toolbar.find('[data-name="global"]').length; }), 1);
+});
+
+test('APS: extraPlugins soma aos plugins automáticos', async function () {
+  var page = await setup();
+  await setupWith(page, '', function () {
+    function MeuPlugin(editor) { this.editor = editor; }
+    MeuPlugin.pluginName = 'MeuPlugin';
+    MeuPlugin.prototype.init = function () { window.__extra = true; };
+    return { extraPlugins: [MeuPlugin], toolbar: [['g', ['link', 'table']]] };
+  });
+  var info = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    return [window.__extra, !!ed.getPlugin('MeuPlugin'), !!ed.getPlugin('LinkPlugin'), !!ed.getPlugin('TablePlugin'), !!ed.getPlugin('HistoryPlugin')];
+  });
+  assert.deepStrictEqual(info, [true, true, true, true, true]);
+});
+
+test('APS: insertHTML insere na seleção salva depois de um modal roubar o foco', async function () {
+  var page = await setup();
+  await state(page, '<p>início fim</p>', { from: ['início', 6] });
+  var html = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.saveSelection();
+    var input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    ed.insertHTML('<b>MEIO</b>');
+    return ed.$content.html();
+  });
+  assert.strictEqual(html, '<p>início<b>MEIO</b> fim</p>');
+});
+
+test('APS: insertHTML usa a posição de antes do blur sem saveSelection', async function () {
+  var page = await setup();
+  await state(page, '<p>ab</p>', { from: ['ab', 1] });
+  var html = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    ed.insertHTML('X');
+    return ed.$content.html();
+  });
+  assert.strictEqual(html, '<p>aXb</p>');
+});
+
+test('APS: desfazer remove a inserção em um passo', async function () {
+  var page = await setup('<p>ab</p>');
+  await state(page, '<p>ab</p>', { from: ['ab', 1] });
+  await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.saveSelection();
+    ed.insertHTML('<i>1</i><i>2</i>');
+  });
+  assert.strictEqual(await content(page), '<p>a<i>1</i><i>2</i>b</p>');
+  await exec(page, 'undo');
+  assert.strictEqual(await content(page), '<p>ab</p>');
+});
+
+test('APS: insertImage valida a URL e aplica atributos e imageDefaults', async function () {
+  var page = await setup('', { imageDefaults: { style: 'max-width:100%' } });
+  var result = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var ok = ed.insertImage('https://img.irroba.com.br/a.jpg', { alt: 'A "x"', width: 300 });
+    var bad = ed.insertImage('javascript:alert(1)');
+    return { ok: ok, bad: bad, html: ed.$content.html() };
+  });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.bad, false);
+  assert.strictEqual(result.html, '<img style="max-width:100%" alt="A &quot;x&quot;" width="300" src="https://img.irroba.com.br/a.jpg">');
+});
+
+test('APS: insertHTML sanitiza o conteúdo', async function () {
+  var page = await setup();
+  var html = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    ed.insertHTML('<img src="x" onerror="window.__pwned=1"><p>ok</p>');
+    return ed.$content.html();
+  });
+  assert.ok(!/onerror/.test(html) && /ok/.test(html), html);
+});
+
+// =========================
+// APS: colar imagens e barra da imagem
+// =========================
+
+var PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+/** Editor com uploadImage que conta as chamadas e devolve URLs previsíveis. */
+function uploadingEditor(extra) {
+  return function () {
+    var opts = {
+      uploadPastedImages: true,
+      toolbar: [['font', ['bold']]],
+      uploadImage: function (file, done) {
+        window.__uploads = (window.__uploads || []).concat([file.name + '|' + file.type]);
+        done('https://cdn.example/' + window.__uploads.length + '.png', { alt: 'up' });
+      }
+    };
+    return opts;
+  };
+}
+
+async function pasteData(page, spec) {
+  await page.evaluate(function (spec) {
+    var ed = window.$('#t').data('weaver');
+    ed.$content.focus();
+    var r = document.createRange();
+    r.selectNodeContents(ed.$content[0]);
+    r.collapse(false);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+    var dt = new DataTransfer();
+    if (spec.html) dt.setData('text/html', spec.html);
+    if (spec.text) dt.setData('text/plain', spec.text);
+    for (var i = 0; i < (spec.files || 0); i++) {
+      var bin = atob(spec.png.split(',')[1]);
+      var bytes = new Uint8Array(bin.length);
+      for (var b = 0; b < bin.length; b++) bytes[b] = bin.charCodeAt(b);
+      dt.items.add(new File([bytes], 'print' + i + '.png', { type: 'image/png' }));
+    }
+    ed.$content[0].dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, spec);
+  await page.waitForTimeout(150);
+}
+
+test('APS: colar um print chama uploadImage uma vez e insere a URL', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', uploadingEditor());
+  await pasteData(page, { files: 1, png: PNG_1PX });
+  assert.deepStrictEqual(await page.evaluate(function () { return window.__uploads; }), ['print0.png|image/png']);
+  var html = await content(page);
+  assert.ok(html.indexOf('<img alt="up" src="https://cdn.example/1.png">') !== -1, html);
+});
+
+test('APS: colar HTML com duas imagens base64 envia as duas e tira o data:', async function () {
+  var page = await setup();
+  await setupWith(page, '', uploadingEditor());
+  var png2 = PNG_1PX.replace('YII=', 'YIA=');
+  await pasteData(page, { html: '<p>texto <img src="' + PNG_1PX + '"> e <img src="' + png2 + '"></p>' });
+  await page.waitForTimeout(150);
+  assert.strictEqual((await page.evaluate(function () { return window.__uploads; })).length, 2);
+  var html = await page.evaluate(function () { return window.$('#t').data('weaver').getContent(); });
+  assert.ok(html.indexOf('data:') === -1, html);
+  assert.ok(html.indexOf('https://cdn.example/1.png') !== -1 && html.indexOf('https://cdn.example/2.png') !== -1, html);
+});
+
+test('APS: colar do Excel (HTML com tabela + PNG) cola a tabela, não o print', async function () {
+  var page = await setup();
+  await setupWith(page, '', uploadingEditor());
+  await pasteData(page, { html: '<table><tr><td>1</td></tr></table>', text: '1', files: 1, png: PNG_1PX });
+  assert.strictEqual(await page.evaluate(function () { return window.__uploads; }), undefined);
+  assert.ok((await content(page)).indexOf('<td>1</td>') !== -1);
+});
+
+test('APS: sem uploadPastedImages, data: colado fica como está', async function () {
+  var page = await setup();
+  await pasteData(page, { html: '<p><img src="' + PNG_1PX + '"></p>' });
+  assert.ok((await content(page)).indexOf('data:image/png') !== -1);
+});
+
+test('APS: botão extra na barra da imagem troca o src com replaceImage', async function () {
+  var page = await setup();
+  await setupWith(page, '<p><img src="https://a.com/1.jpg" alt="Foto" style="width: 50%; float: left"></p>', function () {
+    return {
+      toolbar: [['insert', ['image']]],
+      imageToolbar: { add: [{ name: 'trocar', icon: 'replace', title: 'Trocar imagem', action: function (editor, img) {
+        window.__same = img === editor.getSelectedImage();
+        editor.replaceImage(img, 'https://a.com/2.jpg', { 'data-x': null });
+      } }], remove: ['w25'] }
+    };
+  });
+  var info = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var img = ed.$content.find('img')[0];
+    window.$(img).trigger('click');
+    var $tb = ed.getPlugin('ImagePlugin').$toolbar;
+    var hasW25 = $tb.find('[title="Largura 25%"]').length;
+    $tb.find('[title="Trocar imagem"]').trigger('click');
+    return { same: window.__same, hasW25: hasW25, html: ed.getContent() };
+  });
+  assert.strictEqual(info.same, true);
+  assert.strictEqual(info.hasW25, 0);
+  assert.strictEqual(info.html, '<p><img src="https://a.com/2.jpg" alt="Foto" style="width: 50%; float: left"></p>');
+  await exec(page, 'undo');
+  assert.ok((await page.evaluate(function () { return window.$('#t').data('weaver').getContent(); })).indexOf('https://a.com/1.jpg') !== -1);
+});
+
+test('APS: replaceImage recusa URL insegura', async function () {
+  var page = await setup('<p><img src="https://a.com/1.jpg"></p>');
+  var ok = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    return ed.replaceImage(ed.$content.find('img')[0], 'javascript:alert(1)');
+  });
+  assert.strictEqual(ok, false);
+});
+
+test('APS: uploadImage carrega o plugin de imagem sem o botão image', async function () {
+  var page = await setup();
+  await setupWith(page, '', function () { return { toolbar: [['font', ['bold']]], uploadImage: function () {} }; });
+  assert.strictEqual(await page.evaluate(function () { return !!window.$('#t').data('weaver').getPlugin('ImagePlugin'); }), true);
+});
+
+// =========================
+// APS: FONTES DINÂMICAS
+// =========================
+
+function manyFonts() {
+  return function () {
+    var names = ['Lobster', 'Pacifico', 'Arial'];
+    for (var i = 0; i < 1500; i++) names.push('Fonte ' + i);
+    window.__fontApplied = [];
+    return {
+      fontNames: names,
+      onFontApply: function (name, editor) { window.__fontApplied.push([name, editor === window.$('#t').data('weaver')]); }
+    };
+  };
+}
+
+function fontLinks(page) {
+  return page.evaluate(function () {
+    return window.$('link[data-weaver-font]').map(function () { return this.getAttribute('data-weaver-font'); }).get();
+  });
+}
+
+test('APS: 1.500 fontes só montam o menu ao abrir e carregam as visíveis', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', manyFonts());
+  assert.strictEqual(await page.evaluate(function () { return window.$('[data-name="fontName"]').next().find('.editor-dropdown-item').length; }), 0);
+
+  var ms = await page.evaluate(function () {
+    var t = performance.now();
+    window.$('[data-name="fontName"]').trigger('click');
+    return performance.now() - t;
+  });
+  assert.ok(ms < 500, 'abrir levou ' + ms + 'ms');
+
+  var info = await page.evaluate(function () {
+    var $menu = window.$('[data-name="fontName"]').next();
+    return { items: $menu.find('.editor-dropdown-item').length, search: $menu.find('input[type="search"]').length };
+  });
+  assert.deepStrictEqual(info, { items: 1503, search: 1 });
+
+  await page.waitForTimeout(100);
+  var links = await fontLinks(page);
+  assert.ok(links.indexOf('Lobster') !== -1, links.join());
+  assert.ok(links.indexOf('Arial') === -1, 'fonte do sistema não vai ao Google');
+  assert.ok(links.length < 60, 'carregou ' + links.length + ' fontes');
+});
+
+test('APS: busca filtra as fontes e avisa quando não encontra', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>a</p>', manyFonts());
+  await page.click('[data-name="fontName"]');
+  var menu = '.editor-dropdown-menu:has(input[type="search"])';
+
+  await page.fill(menu + ' input[type="search"]', 'lob');
+  assert.deepStrictEqual(await page.$$eval(menu + ' .editor-dropdown-item', function (els) {
+    return els.filter(function (el) { return el.style.display !== 'none'; }).map(function (el) { return el.getAttribute('data-value'); });
+  }), ['Lobster']);
+
+  await page.fill(menu + ' input[type="search"]', 'zzz');
+  assert.strictEqual(await page.isVisible('text=Nenhuma fonte encontrada'), true);
+});
+
+test('APS: escolher Lobster pela busca aplica na seleção, carrega e chama onFontApply', async function () {
+  var page = await setup();
+  await setupWith(page, '<p>texto aqui</p>', manyFonts());
+  await state(page, '<p>texto aqui</p>', { from: ['texto', 0], to: ['texto', 5] });
+  await page.click('[data-name="fontName"]');
+  await page.keyboard.type('lobs'); // a busca recebe o foco ao abrir
+  await page.keyboard.press('Enter');
+
+  var html = await content(page);
+  assert.ok(/<span style="font-family: Lobster;">texto<\/span> aqui/.test(html), html);
+  assert.ok((await fontLinks(page)).indexOf('Lobster') !== -1);
+  assert.deepStrictEqual(await page.evaluate(function () { return window.__fontApplied; }), [['Lobster', true]]);
+});
+
+test('APS: fontes usadas no conteúdo são carregadas ao abrir o editor', async function () {
+  var page = await setup();
+  await setupWith(page, '<p><span style="font-family: \'Pacifico\', cursive">a</span><span style="font-family: Pacifico">b</span>' +
+    '<span style="font-family: Arial">c</span><span style="font-family: \'x&amp;family=Evil\'">d</span></p>', function () { return {}; });
+  assert.deepStrictEqual(await fontLinks(page), ['Pacifico']);
+
+  // <font face> (modo confiável) também conta
+  await setupWith(page, '<p><font face="Lobster">b</font></p>', function () { return { allowedTags: '*', allowedAttributes: { '*': '*' } }; });
+  assert.ok((await fontLinks(page)).indexOf('Lobster') !== -1);
+});
+
+test('APS: googleFonts false não carrega fontes do conteúdo nem do menu', async function () {
+  var page = await setup('<p><span style="font-family: Pacifico">a</span></p>', { googleFonts: false });
+  await page.click('[data-name="fontName"]');
+  await page.waitForTimeout(100);
+  assert.deepStrictEqual(await fontLinks(page), []);
+});
+
+/**
+ * Cores calculadas da toolbar, de um item de menu, do conteúdo e do code view,
+ * com o contraste (WCAG) entre texto e fundo de cada um.
+ */
+async function themeColors(page) {
+  return page.evaluate(function () {
+    function rgb(c) { var m = c.match(/[\d.]+/g).map(Number); return m; }
+    function lum(c) {
+      var v = rgb(c).slice(0, 3).map(function (x) { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    }
+    function contrast(fg, bg) {
+      var a = lum(fg), b = lum(bg);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+    // Fundo efetivo: sobe até o primeiro ancestral com fundo opaco
+    function backdrop(el) {
+      for (; el && el.nodeType === 1; el = el.parentNode) {
+        var bg = getComputedStyle(el).backgroundColor;
+        if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
+      }
+      return 'rgb(255, 255, 255)';
+    }
+    function info(el) {
+      var cs = getComputedStyle(el);
+      return { bg: cs.backgroundColor, fg: cs.color, border: cs.borderTopColor, contrast: contrast(cs.color, backdrop(el)) };
+    }
+    var ed = window.$('#t').data('weaver');
+    var $menu = ed.$toolbar.find('[data-name="formatBlock"]').closest('.editor-dropdown-wrapper').find('.editor-dropdown-menu');
+    $menu.css('display', 'flex');
+    var item = $menu.find('[role="menuitem"]')[0];
+    var codeview = ed.$container.find('.editor-codeview-wrapper')[0];
+    codeview.style.display = 'block';
+    var r = {
+      toolbar: info(ed.$toolbar[0]),
+      button: info(ed.$toolbar.find('[data-name="bold"]')[0]),
+      menu: info($menu[0]),
+      item: info(item),
+      content: info(ed.$content[0]),
+      code: info(ed.$container.find('.editor-codeview-highlight')[0]),
+      codeBg: getComputedStyle(codeview).backgroundColor
+    };
+    r.code.contrast = contrast(r.code.fg, r.codeBg);
+    codeview.style.display = '';
+    $menu.css('display', '');
+    return r;
+  });
+}
+
+function assertReadable(c, label) {
+  ['toolbar', 'button', 'item', 'content', 'code'].forEach(function (k) {
+    assert.ok(c[k].contrast >= 4.5, label + ': ' + k + ' com contraste ' + c[k].contrast.toFixed(2) + ' ' + JSON.stringify(c[k]));
+  });
+}
+
+test('APS: <html class="dark"> deixa toolbar, menus, conteúdo e code view escuros e legíveis', async function () {
+  var page = await setup('<p>texto</p>');
+  var light = await themeColors(page);
+  assert.strictEqual(light.content.bg, 'rgb(255, 255, 255)');
+  assert.strictEqual(light.toolbar.bg, 'rgb(249, 250, 251)');
+  assertReadable(light, 'claro');
+
+  await page.evaluate(function () { document.documentElement.classList.add('dark'); });
+  var dark = await themeColors(page);
+  assert.strictEqual(dark.content.bg, 'rgb(17, 24, 39)');
+  assert.strictEqual(dark.toolbar.bg, 'rgb(31, 41, 55)');
+  assert.strictEqual(dark.menu.bg, 'rgb(55, 65, 81)');
+  assert.strictEqual(dark.codeBg, 'rgb(30, 30, 30)');
+  assertReadable(dark, 'escuro');
+
+  // O integrador redefine as variáveis com um seletor simples
+  await page.addStyleTag({ content: '.wysiwyg-editor{--weaver-accent:#0f766e}.dark .wysiwyg-editor{--weaver-content-bg:#fff;--weaver-content-fg:#111}' });
+  var custom = await themeColors(page);
+  assert.strictEqual(custom.content.bg, 'rgb(255, 255, 255)');
+  assert.strictEqual(custom.toolbar.bg, 'rgb(31, 41, 55)');
+});
+
+test('APS: opção theme fixa o tema, e setTheme troca depois', async function () {
+  var page = await setup('<p>texto</p>', { theme: 'light' });
+  await page.evaluate(function () { document.documentElement.classList.add('dark'); });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(255, 255, 255)', 'light ignora .dark');
+
+  await page.evaluate(function () {
+    document.documentElement.classList.remove('dark');
+    window.$('#t').data('weaver').setTheme('dark');
+  });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(17, 24, 39)', 'dark sem .dark na página');
+
+  await page.evaluate(function () { window.$('#t').data('weaver').setTheme('auto'); });
+  await page.emulateMedia({ colorScheme: 'light' });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(255, 255, 255)', 'auto com sistema claro');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(17, 24, 39)', 'auto com sistema escuro');
+
+  // Sem theme, o modo escuro do sistema não muda nada (comportamento anterior)
+  await page.evaluate(function () { window.$('#t').data('weaver').setTheme(null); });
+  assert.strictEqual((await themeColors(page)).content.bg, 'rgb(255, 255, 255)', 'sem theme ignora o sistema');
+});
+
+test('APS: Tailwind da página com outra paleta não muda a aparência do editor', async function () {
+  var page = await setup('<h1>T</h1><ul><li>a</li></ul>');
+  var before = await themeColors(page);
+
+  // Utilitárias com as mesmas classes e outras cores, antes e depois do CSS do Weaver,
+  // mais o preflight do Tailwind (listas sem marcador, títulos sem tamanho)
+  await page.evaluate(function () {
+    var css = '.bg-white{background-color:red}.bg-gray-50{background-color:#ff0}.border-gray-300{border-color:lime}' +
+      '.border-gray-200{border-color:lime}.text-gray-700{color:pink}.text-gray-800{color:pink}.border{border-color:lime}' +
+      '.prose{color:purple}ul,ol{list-style:none;margin:0;padding:0}h1{font-size:inherit;font-weight:inherit}';
+    var head = document.createElement('style'); head.textContent = css;
+    document.head.insertBefore(head, document.head.firstChild);
+    var tail = document.createElement('style'); tail.textContent = css;
+    document.body.appendChild(tail);
+  });
+
+  assert.deepStrictEqual(await themeColors(page), before);
+  var content = await page.evaluate(function () {
+    var c = window.$('#t').data('weaver').$content[0];
+    return {
+      list: getComputedStyle(c.querySelector('ul')).listStyleType,
+      h1: getComputedStyle(c.querySelector('h1')).fontWeight,
+      prose: c.classList.contains('prose')
+    };
+  });
+  assert.deepStrictEqual(content, { list: 'disc', h1: '700', prose: false });
+});
+
+test('APS: WysiwygEditor.VERSION é a versão do package.json', async function () {
+  var page = await setup();
+  var version = await page.evaluate(function () { return window.WysiwygEditor.VERSION; });
+  assert.strictEqual(version, require('../package.json').version);
 });
 
 // =========================

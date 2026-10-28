@@ -26,12 +26,23 @@ Plugin.prototype.init = function () {};
  * Princípios:
  * - O HTML é interpretado num documento inerte (createHTMLDocument), onde
  *   scripts não rodam e imagens não carregam, então `onerror` nunca dispara.
- * - Somente tags e atributos da allowlist sobrevivem. Tags perigosas são
- *   removidas junto com o conteúdo, mesmo que o integrador as libere.
+ * - Somente tags e atributos da allowlist sobrevivem. Tags proibidas
+ *   (forbiddenTags) são removidas junto com o conteúdo, mesmo que o
+ *   integrador as libere em allowedTags.
  * - URLs são normalizadas como o navegador faz (removendo espaços e
  *   caracteres de controle) antes de validar o protocolo.
  * - CSS inline passa por uma allowlist de propriedades e não aceita url().
  * - iframes só são aceitos para players do YouTube e do Vimeo.
+ *
+ * Modo confiável (opções): forbiddenTags, allowedTags: '*', RegExp em
+ * allowedAttributes, allowedStyles: '*', allowCssUrls, keepComments,
+ * iframeAttributes: false, allowedIframeSources: '*', e por fim
+ * sanitize: false ou sanitizer: function (html) {...}.
+ *
+ * Em qualquer modo, o que chega ao editor vivo passa por protect():
+ * <script>, <style>, <form> e afins viram um marcador <weaver-raw> inerte,
+ * e atributos que executam código (onclick, srcdoc...) são renomeados.
+ * unprotect() devolve tudo ao original na saída (getContent).
  */
 function HtmlSanitizer(options) {
   options = options || {};
@@ -40,14 +51,23 @@ function HtmlSanitizer(options) {
   this.allowedAttributes = options.allowedAttributes || HtmlSanitizer.defaults.allowedAttributes;
   this.allowedStyles = options.allowedStyles || HtmlSanitizer.defaults.allowedStyles;
   this.allowedIframeSources = options.allowedIframeSources || HtmlSanitizer.defaults.allowedIframeSources;
+  this.forbiddenTags = HtmlSanitizer.lowerList(Array.isArray(options.forbiddenTags) ? options.forbiddenTags : HtmlSanitizer.FORBIDDEN_TAGS);
+  this.keepComments = !!options.keepComments;
+  this.allowCssUrls = !!options.allowCssUrls;
+  this.iframeAttributes = options.iframeAttributes !== false;
+
+  // sanitize: false desliga a allowlist; sanitizer: fn a substitui
+  this.customSanitizer = typeof options.sanitizer === 'function' ? options.sanitizer : null;
+  this.enabled = options.sanitize !== false && !this.customSanitizer;
 }
 
 HtmlSanitizer.HTML_NS = 'http://www.w3.org/1999/xhtml';
 
 /**
- * Tags removidas SEMPRE, com todo o conteúdo, mesmo se constarem em allowedTags.
- * Inclui as que executam código, carregam recursos ou causam confusão de
- * namespace no parser (svg/math), base de ataques de mXSS.
+ * Tags removidas por padrão, com todo o conteúdo, mesmo se constarem em
+ * allowedTags. Inclui as que executam código, carregam recursos ou causam
+ * confusão de namespace no parser (svg/math), base de ataques de mXSS.
+ * Pode ser trocada pela opção `forbiddenTags`.
  */
 HtmlSanitizer.FORBIDDEN_TAGS = [
   'script', 'style', 'noscript', 'template', 'object', 'embed', 'applet',
@@ -56,11 +76,35 @@ HtmlSanitizer.FORBIDDEN_TAGS = [
   'button', 'input', 'form', 'portal'
 ];
 
+/**
+ * Tags que nunca entram vivas no editor, mesmo quando o sanitizador as
+ * deixa passar: executam código, carregam CSS na página inteira, mudam a
+ * URL base ou enviariam campos junto com o formulário da página.
+ * Elas viram <weaver-raw> e voltam ao original no getContent().
+ */
+HtmlSanitizer.RAW_TAGS = [
+  'script', 'style', 'link', 'meta', 'base', 'title', 'noscript', 'template',
+  'object', 'embed', 'applet', 'frame', 'frameset', 'noembed', 'noframes',
+  'xmp', 'plaintext', 'portal', 'form', 'input', 'button', 'select', 'textarea'
+];
+
+HtmlSanitizer.RAW_TAG = 'weaver-raw';
+HtmlSanitizer.RAW_ATTR_PREFIX = 'data-weaver-attr-';
+
 /** Atributos que contêm URLs e precisam de validação de protocolo. */
 HtmlSanitizer.URL_ATTRIBUTES = ['href', 'src', 'poster', 'cite'];
 
-/** Padrões CSS que podem carregar recursos ou executar código. */
+/** Padrões CSS que podem carregar recursos ou executar código (modo padrão). */
 HtmlSanitizer.UNSAFE_CSS_VALUE = /url\s*\(|expression\s*\(|javascript\s*:|vbscript\s*:|@import|behavior\s*:|-moz-binding|[<>\\]/i;
+
+/** Padrões que executam código; bloqueados em qualquer modo. */
+HtmlSanitizer.CSS_EXEC = /expression\s*\(|javascript\s*:|vbscript\s*:|@import|behavior\s*:|-moz-binding/i;
+
+/** Funções CSS que carregam recursos externos. */
+HtmlSanitizer.CSS_RESOURCE = /url\s*\(|image-set\s*\(|\bimage\s*\(|cross-fade\s*\(/i;
+
+/** Propriedades que executam código em navegadores antigos. */
+HtmlSanitizer.FORBIDDEN_STYLES = ['behavior', '-moz-binding'];
 
 HtmlSanitizer.defaults = {
   allowedTags: [
@@ -112,10 +156,11 @@ HtmlSanitizer.defaults = {
 };
 
 /**
- * Valores de `display` aceitos. Bloqueia, por exemplo, `contents` e `fixed`
- * em combinações usadas para sobrepor a interface.
+ * Valores de `display` aceitos com a allowlist de estilos padrão. Bloqueia,
+ * por exemplo, `contents`, usado para sobrepor a interface.
+ * Com allowedStyles: '*', qualquer valor passa.
  */
-HtmlSanitizer.ALLOWED_DISPLAY = ['block', 'inline', 'inline-block', 'none', 'table', 'table-cell', 'table-row', 'list-item', 'flex', 'inline-flex'];
+HtmlSanitizer.ALLOWED_DISPLAY = ['block', 'inline', 'inline-block', 'none', 'table', 'table-cell', 'table-row', 'list-item', 'flex', 'inline-flex', 'grid', 'inline-grid'];
 
 /**
  * Sanitiza e devolve uma string HTML.
@@ -123,18 +168,24 @@ HtmlSanitizer.ALLOWED_DISPLAY = ['block', 'inline', 'inline-block', 'none', 'tab
  * @returns {string}
  */
 HtmlSanitizer.prototype.sanitize = function (html) {
+  if (this.customSanitizer) return String(this.customSanitizer(HtmlSanitizer.toStr(html)));
   return this._parse(html).innerHTML;
 };
 
 /**
  * Sanitiza e devolve um DocumentFragment pronto para inserir no documento.
- * Os nós são importados de um documento inerte, então nada executa.
+ * Os nós são importados de um documento inerte e protegidos (protect), então
+ * nada executa, mesmo com a sanitização desligada.
  * @param {string} html
  * @returns {DocumentFragment}
  */
 HtmlSanitizer.prototype.toFragment = function (html) {
-  var body = this._parse(html);
+  var body = this.customSanitizer
+    ? HtmlSanitizer.parseInert(this.customSanitizer(HtmlSanitizer.toStr(html)))
+    : this._parse(html);
   var fragment = document.createDocumentFragment();
+
+  HtmlSanitizer.protect(body);
 
   while (body.firstChild) {
     fragment.appendChild(document.importNode(body.firstChild, true));
@@ -171,10 +222,7 @@ HtmlSanitizer.prototype.textToHtml = function (text) {
 HtmlSanitizer.prototype.isSafeUrl = function (url, tag, attr) {
   if (url === null || url === undefined) return false;
 
-  // O navegador ignora espaços e caracteres de controle antes de interpretar
-  // o protocolo (" javascript:" e "java\tscript:" executam). Normalizamos igual.
-  var normalized = String(url).replace(/[\u0000-\u0020\u007F-\u00A0\u1680\u180E\u2000-\u200F\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, '');
-
+  var normalized = HtmlSanitizer.normalizeUrl(url);
   var match = /^([a-z][a-z0-9+.\-]*):/i.exec(normalized);
 
   // Sem protocolo: caminho relativo, âncora ou URL relativa ao protocolo ("//...").
@@ -195,11 +243,15 @@ HtmlSanitizer.prototype.isSafeUrl = function (url, tag, attr) {
 
 /**
  * Indica se a URL pode ser usada como src de iframe.
+ * Com allowedIframeSources: '*', aceita qualquer endereço http(s).
  * @param {string} src
  * @returns {boolean}
  */
 HtmlSanitizer.prototype.isAllowedIframeSource = function (src) {
   if (!src) return false;
+  if (this.allowedIframeSources === '*') {
+    return /^(?:https?:)?\/\//i.test(HtmlSanitizer.normalizeUrl(src));
+  }
   for (var i = 0; i < this.allowedIframeSources.length; i++) {
     if (this.allowedIframeSources[i].test(src)) return true;
   }
@@ -212,45 +264,118 @@ HtmlSanitizer.prototype.isAllowedIframeSource = function (src) {
  * @returns {string} CSS limpo (pode ser vazio)
  */
 HtmlSanitizer.prototype.cleanStyle = function (cssText) {
-  var declarations = HtmlSanitizer.splitDeclarations(cssText || '');
-  var kept = [];
-
-  for (var i = 0; i < declarations.length; i++) {
-    var decl = declarations[i];
-    var colon = decl.indexOf(':');
-    if (colon === -1) continue;
-
-    var prop = decl.substring(0, colon).trim().toLowerCase();
-    var value = decl.substring(colon + 1).trim();
-
-    if (!prop || !value) continue;
-    if (this.allowedStyles.indexOf(prop) === -1) continue;
-    if (HtmlSanitizer.UNSAFE_CSS_VALUE.test(value)) continue;
-
-    if (prop === 'display') {
-      var displayValue = value.replace(/\s*!important\s*$/i, '').toLowerCase();
-      if (HtmlSanitizer.ALLOWED_DISPLAY.indexOf(displayValue) === -1) continue;
-    }
-
-    kept.push(prop + ': ' + value);
-  }
-
-  return kept.join('; ');
+  return this._filterStyle(cssText).css;
 };
 
 // =========================
 // INTERNOS
 // =========================
 
+/**
+ * @returns {{css: string, changed: boolean}} changed indica se alguma
+ *   declaração foi descartada (sem descarte, o texto original é mantido).
+ */
+HtmlSanitizer.prototype._filterStyle = function (cssText) {
+  cssText = cssText || '';
+  var declarations = HtmlSanitizer.splitDeclarations(cssText);
+  var kept = [];
+  // Comentários CSS poderiam esconder declarações da contagem: reescreve
+  var changed = cssText.indexOf('/*') !== -1;
+
+  for (var i = 0; i < declarations.length; i++) {
+    var decl = declarations[i];
+    var colon = decl.indexOf(':');
+    if (colon === -1) {
+      if (decl.trim()) changed = true;
+      continue;
+    }
+
+    var prop = decl.substring(0, colon).trim().toLowerCase();
+    var value = decl.substring(colon + 1).trim();
+
+    if (!prop || !value || !this._isAllowedStyle(prop) || !this._isSafeCssValue(prop, value)) {
+      changed = true;
+      continue;
+    }
+
+    kept.push(prop + ': ' + value);
+  }
+
+  return { css: kept.join('; '), changed: changed };
+};
+
+HtmlSanitizer.prototype._isAllowedStyle = function (prop) {
+  if (this.allowedStyles === '*') {
+    return HtmlSanitizer.FORBIDDEN_STYLES.indexOf(prop) === -1 && /^-?[a-z][a-z0-9-]*$/.test(prop);
+  }
+  return this.allowedStyles.indexOf(prop) !== -1;
+};
+
+HtmlSanitizer.prototype._isSafeCssValue = function (prop, value) {
+  var permissive = this.allowedStyles === '*';
+  // Conteúdo entre aspas não vira função CSS; fora delas, um escape
+  // ("\75 rl(") poderia esconder url() da verificação
+  var bare = value.replace(/"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'/g, '""');
+
+  if (permissive) {
+    if (/\\/.test(bare) || HtmlSanitizer.CSS_EXEC.test(bare)) return false;
+  } else {
+    if (/[<>\\]/.test(value) || HtmlSanitizer.CSS_EXEC.test(value)) return false;
+  }
+
+  if (HtmlSanitizer.CSS_RESOURCE.test(bare) || (!permissive && HtmlSanitizer.CSS_RESOURCE.test(value))) {
+    if (!this.allowCssUrls || !this._cssUrlsAreSafe(value)) return false;
+  }
+
+  if (prop === 'display' && !permissive) {
+    var displayValue = value.replace(/\s*!important\s*$/i, '').toLowerCase();
+    if (HtmlSanitizer.ALLOWED_DISPLAY.indexOf(displayValue) === -1) return false;
+  }
+
+  return true;
+};
+
+/** Valida cada endereço de url(), image-set() etc. como src de imagem. */
+HtmlSanitizer.prototype._cssUrlsAreSafe = function (value) {
+  var urls = [];
+  var re = /url\s*\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^)]*?))\s*\)/gi;
+  var m;
+  while ((m = re.exec(value))) {
+    urls.push(m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : m[3]));
+  }
+
+  // image-set("a.png" 1x) aceita endereços entre aspas, sem url()
+  if (/image-set\s*\(|\bimage\s*\(|cross-fade\s*\(/i.test(value)) {
+    var strings = value.match(/"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'/g) || [];
+    for (var s = 0; s < strings.length; s++) urls.push(strings[s].slice(1, -1));
+  }
+
+  for (var i = 0; i < urls.length; i++) {
+    // Escapes CSS ("java\73 cript:") burlariam a validação do protocolo
+    if (/\\/.test(urls[i]) || !this.isSafeUrl(urls[i], 'img', 'src')) return false;
+  }
+  return true;
+};
+
 HtmlSanitizer.prototype._parse = function (html) {
-  var doc = document.implementation.createHTMLDocument('');
-  var body = doc.body;
+  var body = HtmlSanitizer.parseInert(html);
 
-  body.innerHTML = html === null || html === undefined ? '' : String(html);
+  // Marcadores do próprio editor (ex.: conteúdo copiado dele e colado de
+  // volta) voltam ao original e passam pelas mesmas regras
+  HtmlSanitizer.unprotect(body);
 
-  this._walk(body);
+  if (this.enabled) this._walk(body);
 
   return body;
+};
+
+HtmlSanitizer.prototype._isAllowedTag = function (tag) {
+  return this.allowedTags === '*' || this.allowedTags.indexOf(tag) !== -1;
+};
+
+/** svg/math só passam se listados explicitamente em allowedTags (não com '*'). */
+HtmlSanitizer.prototype._isAllowedForeignTag = function (tag) {
+  return Array.isArray(this.allowedTags) && this.allowedTags.indexOf(tag) !== -1;
 };
 
 HtmlSanitizer.prototype._walk = function (parent) {
@@ -258,6 +383,8 @@ HtmlSanitizer.prototype._walk = function (parent) {
 
   for (var i = 0; i < children.length; i++) {
     var node = children[i];
+
+    if (node.nodeType === 8 && this.keepComments) continue;
 
     // Comentários e instruções de processamento são descartados.
     if (node.nodeType === 8 || node.nodeType === 7) {
@@ -269,21 +396,24 @@ HtmlSanitizer.prototype._walk = function (parent) {
 
     var tag = (node.localName || node.nodeName).toLowerCase();
 
-    // Elementos fora do namespace HTML (svg, math e filhos) são removidos inteiros.
-    if (node.namespaceURI && node.namespaceURI !== HtmlSanitizer.HTML_NS) {
+    // Elementos fora do namespace HTML (svg, math e filhos) são removidos
+    // inteiros, salvo se liberados um a um em allowedTags.
+    if (node.namespaceURI && node.namespaceURI !== HtmlSanitizer.HTML_NS && !this._isAllowedForeignTag(tag)) {
       parent.removeChild(node);
       continue;
     }
 
-    if (HtmlSanitizer.FORBIDDEN_TAGS.indexOf(tag) !== -1) {
+    if (this.forbiddenTags.indexOf(tag) !== -1) {
       parent.removeChild(node);
       continue;
     }
 
     // Limpa os filhos antes de decidir sobre o pai (bottom-up).
     this._walk(node);
+    // O conteúdo de <template> fica fora de childNodes
+    if (node.content && node.content.nodeType === 11) this._walk(node.content);
 
-    if (this.allowedTags.indexOf(tag) === -1) {
+    if (!this._isAllowedTag(tag)) {
       // Tag desconhecida: mantém o conteúdo, descarta a tag.
       while (node.firstChild) {
         parent.insertBefore(node.firstChild, node);
@@ -299,11 +429,28 @@ HtmlSanitizer.prototype._walk = function (parent) {
 };
 
 /**
+ * @param {Array|string} list - lista de nomes e RegExp, ou '*'
+ */
+HtmlSanitizer.matchesAttribute = function (list, name) {
+  if (!list) return false;
+  if (list === '*') return true;
+  for (var i = 0; i < list.length; i++) {
+    var rule = list[i];
+    if (rule === '*') return true;
+    if (rule instanceof RegExp ? rule.test(name) : rule === name) return true;
+  }
+  return false;
+};
+
+HtmlSanitizer.prototype._isAllowedAttribute = function (tag, name) {
+  return HtmlSanitizer.matchesAttribute(this.allowedAttributes[tag], name) ||
+    HtmlSanitizer.matchesAttribute(this.allowedAttributes['*'], name);
+};
+
+/**
  * @returns {boolean} false quando o elemento inteiro deve ser removido.
  */
 HtmlSanitizer.prototype._cleanAttributes = function (el, tag) {
-  var allowedForTag = this.allowedAttributes[tag] || [];
-  var allowedGlobal = this.allowedAttributes['*'] || [];
   var attrs = Array.prototype.slice.call(el.attributes);
 
   for (var i = 0; i < attrs.length; i++) {
@@ -317,7 +464,7 @@ HtmlSanitizer.prototype._cleanAttributes = function (el, tag) {
       continue;
     }
 
-    if (allowedForTag.indexOf(name) === -1 && allowedGlobal.indexOf(name) === -1) {
+    if (!this._isAllowedAttribute(tag, name)) {
       el.removeAttribute(originalName);
       continue;
     }
@@ -328,12 +475,13 @@ HtmlSanitizer.prototype._cleanAttributes = function (el, tag) {
     }
 
     if (name === 'style') {
-      var cleanCss = this.cleanStyle(value);
-      if (cleanCss) {
-        el.setAttribute('style', cleanCss);
-      } else {
+      var style = this._filterStyle(value);
+      if (!style.css) {
         el.removeAttribute(originalName);
+      } else if (style.changed) {
+        el.setAttribute('style', style.css);
       }
+      // Sem descarte, o texto original fica como está
       continue;
     }
 
@@ -342,24 +490,152 @@ HtmlSanitizer.prototype._cleanAttributes = function (el, tag) {
     }
   }
 
-  if (tag === 'a') {
-    if (el.getAttribute('target') === '_blank') {
-      el.setAttribute('rel', 'noopener noreferrer');
-    } else {
-      el.removeAttribute('rel');
-    }
+  // target="_blank" exige noopener/noreferrer; os demais valores de rel
+  // (nofollow, sponsored...) são mantidos
+  if (tag === 'a' && el.getAttribute('target') === '_blank') {
+    var rel = (el.getAttribute('rel') || '').split(/\s+/).filter(Boolean);
+    var lower = rel.map(function (r) { return r.toLowerCase(); });
+    if (lower.indexOf('noopener') === -1) rel.push('noopener');
+    if (lower.indexOf('noreferrer') === -1) rel.push('noreferrer');
+    el.setAttribute('rel', rel.join(' '));
   }
 
   if (tag === 'iframe') {
     if (!this.isAllowedIframeSource(el.getAttribute('src'))) {
       return false;
     }
-    el.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
-    el.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-    el.setAttribute('loading', 'lazy');
+    if (this.iframeAttributes) {
+      el.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+      el.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+      el.setAttribute('loading', 'lazy');
+    }
   }
 
   return true;
+};
+
+// =========================
+// PROTEÇÃO DO EDITOR VIVO
+// =========================
+
+/** Atributos com URL que podem executar código (javascript:) no editor. */
+HtmlSanitizer.EXEC_URL_ATTRIBUTES = ['href', 'src', 'action', 'data', 'formaction', 'xlink:href'];
+
+/**
+ * Prepara nós (de um documento inerte) para entrar no editor vivo sem
+ * executar nada: tags de RAW_TAGS viram <weaver-raw> com o HTML original
+ * em data-raw, e atributos que executam código ganham o prefixo
+ * data-weaver-attr-. Com a sanitização padrão, nada disso chega aqui.
+ * @param {Element|DocumentFragment} root
+ */
+HtmlSanitizer.protect = function (root) {
+  var doc = root.ownerDocument || root;
+  var selector = HtmlSanitizer.RAW_TAGS.join(',');
+  var el;
+
+  // querySelector devolve o mais externo primeiro; ele leva os filhos junto
+  while ((el = root.querySelector(selector))) {
+    var raw = doc.createElement(HtmlSanitizer.RAW_TAG);
+    raw.setAttribute('contenteditable', 'false');
+    raw.setAttribute('data-raw', el.outerHTML);
+    raw.setAttribute('title', 'Código <' + el.localName + '> preservado (edite pelo código-fonte)');
+    raw.textContent = '<' + el.localName + '>';
+    el.parentNode.replaceChild(raw, el);
+  }
+
+  var all = root.querySelectorAll('*');
+  for (var i = 0; i < all.length; i++) {
+    var attrs = Array.prototype.slice.call(all[i].attributes);
+    for (var a = 0; a < attrs.length; a++) {
+      var name = attrs[a].name.toLowerCase();
+      if (!HtmlSanitizer.isExecutableAttribute(all[i].localName, name, attrs[a].value)) continue;
+      all[i].removeAttribute(attrs[a].name);
+      all[i].setAttribute(HtmlSanitizer.RAW_ATTR_PREFIX + name.replace(/:/g, '--'), attrs[a].value);
+    }
+  }
+};
+
+/**
+ * Indica se o atributo executaria código no editor vivo: handlers (on*),
+ * srcdoc e URLs javascript:/vbscript: (ou data: em quem navega, como iframe).
+ */
+HtmlSanitizer.isExecutableAttribute = function (tag, name, value) {
+  if (name.indexOf('on') === 0 || name === 'srcdoc') return true;
+  if (HtmlSanitizer.EXEC_URL_ATTRIBUTES.indexOf(name) === -1) return false;
+
+  var url = HtmlSanitizer.normalizeUrl(value);
+  if (/^(?:javascript|vbscript):/i.test(url)) return true;
+  return /^data:/i.test(url) && ['img', 'source', 'video', 'audio', 'image'].indexOf(tag) === -1;
+};
+
+/**
+ * Desfaz protect(): devolve as tags e os atributos originais.
+ * @param {Element} root - de preferência num documento inerte
+ */
+HtmlSanitizer.unprotect = function (root) {
+  var doc = root.ownerDocument;
+  var raws = root.querySelectorAll(HtmlSanitizer.RAW_TAG);
+
+  for (var r = 0; r < raws.length; r++) {
+    var holder = doc.createElement('template');
+    holder.innerHTML = raws[r].getAttribute('data-raw') || '';
+    var nodes = holder.content;
+    raws[r].parentNode.replaceChild(doc.importNode(nodes, true), raws[r]);
+  }
+
+  var prefix = HtmlSanitizer.RAW_ATTR_PREFIX;
+  if ((root.innerHTML || '').indexOf(prefix) === -1) return;
+
+  var all = root.querySelectorAll('*');
+  for (var i = 0; i < all.length; i++) {
+    var attrs = Array.prototype.slice.call(all[i].attributes);
+    for (var a = 0; a < attrs.length; a++) {
+      if (attrs[a].name.indexOf(prefix) !== 0) continue;
+      all[i].removeAttribute(attrs[a].name);
+      try {
+        all[i].setAttribute(attrs[a].name.substring(prefix.length).replace(/--/g, ':'), attrs[a].value);
+      } catch (e) { /* nome inválido: descarta */ }
+    }
+  }
+};
+
+/**
+ * Interpreta HTML num documento inerte (scripts não rodam, imagens não carregam).
+ * @param {string} html
+ * @returns {HTMLElement} body do documento inerte
+ */
+HtmlSanitizer.parseInert = function (html) {
+  var doc = document.implementation.createHTMLDocument('');
+  doc.body.innerHTML = HtmlSanitizer.toStr(html);
+  return doc.body;
+};
+
+/**
+ * HTML como o navegador o serializa depois de interpretar (sem sanitizar).
+ * Serve para comparar se a sanitização mudou alguma coisa.
+ * @param {string} html
+ * @returns {string}
+ */
+HtmlSanitizer.serialize = function (html) {
+  return HtmlSanitizer.parseInert(html).innerHTML;
+};
+
+HtmlSanitizer.toStr = function (html) {
+  return html === null || html === undefined ? '' : String(html);
+};
+
+/**
+ * O navegador ignora espaços e caracteres de controle antes de interpretar
+ * o protocolo (" javascript:" e "java\tscript:" executam). Normalizamos igual.
+ */
+HtmlSanitizer.normalizeUrl = function (url) {
+  return String(url).replace(/[\u0000-\u0020\u007F-\u00A0\u1680\u180E\u2000-\u200F\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, '');
+};
+
+HtmlSanitizer.lowerList = function (list) {
+  var out = [];
+  for (var i = 0; i < list.length; i++) out.push(String(list[i]).toLowerCase());
+  return out;
 };
 
 /**
@@ -419,12 +695,79 @@ window.HtmlSanitizer = HtmlSanitizer;
  *
  * Arquivo gerado a partir da lista de classes usadas em src/. Ao usar uma
  * classe utilitária nova num plugin, acrescente-a aqui.
+ *
+ * Cores: as classes de cor (bg-white, border-gray-300, text-gray-700...)
+ * apontam para variáveis --weaver-*, definidas na raiz .wysiwyg-editor.
+ * Assim o tema escuro só troca as variáveis, e um Tailwind da página com
+ * outra paleta não muda o editor (as regras daqui têm especificidade 0,2,0,
+ * acima da 0,1,0 das utilitárias do Tailwind).
  */
+var WeaverThemeLight = [
+  "--weaver-bg:#fff", "--weaver-fg:#1f2937", "--weaver-fg-soft:#374151", "--weaver-muted:#6b7280",
+  "--weaver-toolbar-bg:#f9fafb", "--weaver-menu-bg:#fff", "--weaver-input-bg:#fff",
+  "--weaver-border:#d1d5db", "--weaver-border-soft:#e5e7eb",
+  "--weaver-hover:#f9fafb", "--weaver-hover-strong:#f3f4f6", "--weaver-active:#e5e7eb",
+  "--weaver-accent:#2563eb", "--weaver-accent-hover:#1d4ed8", "--weaver-accent-text:#2563eb",
+  "--weaver-ai:#9333ea", "--weaver-ai-hover:#7e22ce", "--weaver-ai-text:#9333ea",
+  "--weaver-danger:#ef4444", "--weaver-danger-text:#dc2626", "--weaver-danger-bg:#fef2f2", "--weaver-danger-border:#fecaca",
+  "--weaver-placeholder:#9ca3af", "--weaver-blocks:#adb5bd", "--weaver-drop-bg:#f0f8ff",
+  "--weaver-notice-bg:#eff6ff", "--weaver-notice-fg:#1e40af", "--weaver-error-bg:#fef2f2", "--weaver-error-fg:#b91c1c",
+  "--weaver-content-bg:var(--weaver-bg)", "--weaver-content-fg:var(--weaver-fg)", "--weaver-link:var(--weaver-accent-text)",
+  "--weaver-code-bg:#363636", "--weaver-code-gutter:#2c2c2c", "--weaver-code-border:#555", "--weaver-code-fg:#e0e0e0",
+  "--weaver-code-line:#888", "--weaver-code-tag:#f9eb26"
+].join(';');
+
+var WeaverThemeDark = [
+  "color-scheme:dark",
+  "--weaver-bg:#111827", "--weaver-fg:#f3f4f6", "--weaver-fg-soft:#e5e7eb", "--weaver-muted:#9ca3af",
+  "--weaver-toolbar-bg:#1f2937", "--weaver-menu-bg:#374151", "--weaver-input-bg:#1f2937",
+  "--weaver-border:#4b5563", "--weaver-border-soft:#374151",
+  "--weaver-hover:#4b5563", "--weaver-hover-strong:#4b5563", "--weaver-active:#6b7280",
+  "--weaver-accent:#3b82f6", "--weaver-accent-hover:#2563eb", "--weaver-accent-text:#93c5fd",
+  "--weaver-ai:#9333ea", "--weaver-ai-hover:#a855f7", "--weaver-ai-text:#d8b4fe",
+  "--weaver-danger:#f87171", "--weaver-danger-text:#fca5a5", "--weaver-danger-bg:rgba(127,29,29,.35)", "--weaver-danger-border:#7f1d1d",
+  "--weaver-placeholder:#6b7280", "--weaver-blocks:#6b7280", "--weaver-drop-bg:rgba(59,130,246,.15)",
+  "--weaver-notice-bg:rgba(30,58,138,.45)", "--weaver-notice-fg:#bfdbfe", "--weaver-error-bg:rgba(127,29,29,.45)", "--weaver-error-fg:#fecaca",
+  "--weaver-code-bg:#1e1e1e", "--weaver-code-gutter:#181818", "--weaver-code-border:#333", "--weaver-code-fg:#e0e0e0",
+  "--weaver-code-line:#858585", "--weaver-code-tag:#f9eb26"
+].join(';');
+
 var WeaverBaseStyles = [
   "@keyframes weaver-spin{to{transform:rotate(360deg)}}",
+  // Tema: claro por padrão; escuro com .dark num ancestral (ex.: <html class="dark">),
+  // com theme: 'dark', ou com theme: 'auto' e o sistema em modo escuro.
+  // :where() zera a especificidade: qualquer seletor do integrador
+  // (.wysiwyg-editor, .dark .wysiwyg-editor) redefine as variáveis
+  ":where(.wysiwyg-editor){" + WeaverThemeLight + "}",
+  ":where(.dark .wysiwyg-editor:not([data-weaver-theme=\"light\"]), .wysiwyg-editor[data-weaver-theme=\"dark\"]){" + WeaverThemeDark + "}",
+  "@media (prefers-color-scheme: dark){:where(.wysiwyg-editor[data-weaver-theme=\"auto\"]){" + WeaverThemeDark + "}}",
+  ".wysiwyg-editor{position:relative;display:flex;flex-direction:column;border:1px solid var(--weaver-border);border-radius:.375rem;box-shadow:0 1px 2px rgba(0,0,0,.05);background-color:var(--weaver-bg);color:var(--weaver-fg);font-family:ui-sans-serif,system-ui,-apple-system,\"Segoe UI\",Roboto,Arial,sans-serif}",
   ".wysiwyg-editor, .wysiwyg-editor *{box-sizing:border-box}",
   ".wysiwyg-editor button{font:inherit;color:inherit;cursor:pointer}",
-  ".wysiwyg-editor .editor-content{line-height:1.6}",
+  ".wysiwyg-editor input:not([type=\"color\"]):not([type=\"checkbox\"]):not([type=\"radio\"]), .wysiwyg-editor textarea:not(.editor-codeview-textarea), .wysiwyg-editor select{background-color:var(--weaver-input-bg);color:var(--weaver-fg)}",
+  ".wysiwyg-editor input::placeholder, .wysiwyg-editor textarea::placeholder{color:var(--weaver-placeholder);opacity:1}",
+  ".wysiwyg-editor input[type=\"checkbox\"]{accent-color:var(--weaver-accent)}",
+  ".wysiwyg-editor .editor-content{line-height:1.6;background-color:var(--weaver-content-bg);color:var(--weaver-content-fg)}",
+  // Conteúdo: devolve os padrões do navegador que o preflight do Tailwind zera
+  // (listas sem marcador, títulos sem tamanho), sem depender do plugin prose
+  ".wysiwyg-editor .editor-content h1{font-size:2em;font-weight:700;margin:.67em 0}",
+  ".wysiwyg-editor .editor-content h2{font-size:1.5em;font-weight:700;margin:.83em 0}",
+  ".wysiwyg-editor .editor-content h3{font-size:1.17em;font-weight:700;margin:1em 0}",
+  ".wysiwyg-editor .editor-content h4{font-size:1em;font-weight:700;margin:1.33em 0}",
+  ".wysiwyg-editor .editor-content h5{font-size:.83em;font-weight:700;margin:1.67em 0}",
+  ".wysiwyg-editor .editor-content h6{font-size:.67em;font-weight:700;margin:2.33em 0}",
+  ".wysiwyg-editor .editor-content p{margin:1em 0}",
+  ".wysiwyg-editor .editor-content ul, .wysiwyg-editor .editor-content ol{margin:1em 0;padding-left:40px}",
+  ".wysiwyg-editor .editor-content ul{list-style:disc}",
+  ".wysiwyg-editor .editor-content ol{list-style:decimal}",
+  ".wysiwyg-editor .editor-content ul ul{list-style:circle}",
+  ".wysiwyg-editor .editor-content li ul, .wysiwyg-editor .editor-content li ol{margin:0}",
+  ".wysiwyg-editor .editor-content blockquote{margin:1em 40px}",
+  ".wysiwyg-editor .editor-content a{color:var(--weaver-link);text-decoration:underline}",
+  ".wysiwyg-editor .editor-content b, .wysiwyg-editor .editor-content strong{font-weight:bolder}",
+  ".wysiwyg-editor .editor-content pre, .wysiwyg-editor .editor-content code{font-family:Menlo,Monaco,Consolas,\"Courier New\",monospace}",
+  ".wysiwyg-editor .editor-content pre{margin:1em 0}",
+  ".wysiwyg-editor .editor-content img, .wysiwyg-editor .editor-content video{display:inline;max-width:100%}",
   ".wysiwyg-editor .relative{position:relative}",
   ".wysiwyg-editor .absolute{position:absolute}",
   ".wysiwyg-editor .inline-block{display:inline-block}",
@@ -484,16 +827,16 @@ var WeaverBaseStyles = [
   ".wysiwyg-editor .py-1{padding-top:.25rem;padding-bottom:.25rem}",
   ".wysiwyg-editor .py-1\\.5{padding-top:.375rem;padding-bottom:.375rem}",
   ".wysiwyg-editor .py-2{padding-top:.5rem;padding-bottom:.5rem}",
-  ".wysiwyg-editor .border{border:1px solid #e5e7eb}",
-  ".wysiwyg-editor .border-b{border-bottom:1px solid #e5e7eb}",
-  ".wysiwyg-editor .border-r{border-right:1px solid #e5e7eb}",
+  ".wysiwyg-editor .border{border:1px solid var(--weaver-border-soft)}",
+  ".wysiwyg-editor .border-b{border-bottom:1px solid var(--weaver-border-soft)}",
+  ".wysiwyg-editor .border-r{border-right:1px solid var(--weaver-border-soft)}",
   ".wysiwyg-editor .border-none{border:none}",
-  ".wysiwyg-editor .border-gray-50{border-color:#f9fafb}",
-  ".wysiwyg-editor .border-gray-100{border-color:#f3f4f6}",
-  ".wysiwyg-editor .border-gray-200{border-color:#e5e7eb}",
-  ".wysiwyg-editor .border-gray-300{border-color:#d1d5db}",
-  ".wysiwyg-editor .border-red-200{border-color:#fecaca}",
-  ".wysiwyg-editor .border-red-500{border-color:#ef4444}",
+  ".wysiwyg-editor .border-gray-50{border-color:var(--weaver-border-soft)}",
+  ".wysiwyg-editor .border-gray-100{border-color:var(--weaver-border-soft)}",
+  ".wysiwyg-editor .border-gray-200{border-color:var(--weaver-border-soft)}",
+  ".wysiwyg-editor .border-gray-300{border-color:var(--weaver-border)}",
+  ".wysiwyg-editor .border-red-200{border-color:var(--weaver-danger-border)}",
+  ".wysiwyg-editor .border-red-500{border-color:var(--weaver-danger)}",
   ".wysiwyg-editor .box-border{box-sizing:border-box}",
   ".wysiwyg-editor .rounded{border-radius:.25rem}",
   ".wysiwyg-editor .rounded-sm{border-radius:.125rem}",
@@ -503,22 +846,22 @@ var WeaverBaseStyles = [
   ".wysiwyg-editor .rounded-r{border-radius:0 .25rem .25rem 0}",
   ".wysiwyg-editor .rounded-t-md{border-radius:.375rem .375rem 0 0}",
   ".wysiwyg-editor .rounded-b-md{border-radius:0 0 .375rem .375rem}",
-  ".wysiwyg-editor .bg-white{background-color:#fff}",
-  ".wysiwyg-editor .bg-gray-50{background-color:#f9fafb}",
-  ".wysiwyg-editor .bg-gray-200{background-color:#e5e7eb}",
-  ".wysiwyg-editor .bg-blue-600{background-color:#2563eb}",
-  ".wysiwyg-editor .bg-purple-600{background-color:#9333ea}",
+  ".wysiwyg-editor .bg-white{background-color:var(--weaver-menu-bg)}",
+  ".wysiwyg-editor .bg-gray-50{background-color:var(--weaver-toolbar-bg)}",
+  ".wysiwyg-editor .bg-gray-200{background-color:var(--weaver-active)}",
+  ".wysiwyg-editor .bg-blue-600{background-color:var(--weaver-accent)}",
+  ".wysiwyg-editor .bg-purple-600{background-color:var(--weaver-ai)}",
   ".wysiwyg-editor .text-sm{font-size:.875rem;line-height:1.25rem}",
   ".wysiwyg-editor .text-xs{font-size:.75rem;line-height:1rem}",
   ".wysiwyg-editor .text-center{text-align:center}",
   ".wysiwyg-editor .text-left{text-align:left}",
-  ".wysiwyg-editor .text-gray-500{color:#6b7280}",
-  ".wysiwyg-editor .text-gray-700{color:#374151}",
-  ".wysiwyg-editor .text-gray-800{color:#1f2937}",
-  ".wysiwyg-editor .text-blue-600{color:#2563eb}",
-  ".wysiwyg-editor .text-purple-600{color:#9333ea}",
-  ".wysiwyg-editor .text-red-500{color:#ef4444}",
-  ".wysiwyg-editor .text-red-600{color:#dc2626}",
+  ".wysiwyg-editor .text-gray-500{color:var(--weaver-muted)}",
+  ".wysiwyg-editor .text-gray-700{color:var(--weaver-fg-soft)}",
+  ".wysiwyg-editor .text-gray-800{color:var(--weaver-fg)}",
+  ".wysiwyg-editor .text-blue-600{color:var(--weaver-accent-text)}",
+  ".wysiwyg-editor .text-purple-600{color:var(--weaver-ai-text)}",
+  ".wysiwyg-editor .text-red-500{color:var(--weaver-danger)}",
+  ".wysiwyg-editor .text-red-600{color:var(--weaver-danger-text)}",
   ".wysiwyg-editor .text-white{color:#fff}",
   ".wysiwyg-editor .font-medium{font-weight:500}",
   ".wysiwyg-editor .font-semibold{font-weight:600}",
@@ -542,11 +885,11 @@ var WeaverBaseStyles = [
   ".wysiwyg-editor .z-50{z-index:50}",
   ".wysiwyg-editor .z-\\[100\\]{z-index:100}",
   ".wysiwyg-editor .animate-spin{animation:weaver-spin 1s linear infinite}",
-  ".wysiwyg-editor .hover\\:bg-gray-50:hover{background-color:#f9fafb}",
-  ".wysiwyg-editor .hover\\:bg-gray-100:hover{background-color:#f3f4f6}",
-  ".wysiwyg-editor .hover\\:bg-blue-700:hover{background-color:#1d4ed8}",
-  ".wysiwyg-editor .hover\\:bg-purple-700:hover{background-color:#7e22ce}",
-  ".wysiwyg-editor .hover\\:bg-red-50:hover{background-color:#fef2f2}",
+  ".wysiwyg-editor .hover\\:bg-gray-50:hover{background-color:var(--weaver-hover)}",
+  ".wysiwyg-editor .hover\\:bg-gray-100:hover{background-color:var(--weaver-hover-strong)}",
+  ".wysiwyg-editor .hover\\:bg-blue-700:hover{background-color:var(--weaver-accent-hover)}",
+  ".wysiwyg-editor .hover\\:bg-purple-700:hover{background-color:var(--weaver-ai-hover)}",
+  ".wysiwyg-editor .hover\\:bg-red-50:hover{background-color:var(--weaver-danger-bg)}",
   ".wysiwyg-editor .hover\\:border-blue-500:hover{border-color:#3b82f6}",
   ".wysiwyg-editor .hover\\:z-10:hover{z-index:10}",
   ".wysiwyg-editor .focus\\:outline-none:focus{outline:none}",
@@ -1273,7 +1616,7 @@ HistoryManager.prototype.restore = function (entry) {
   if (!entry) return;
 
   // Não usar jQuery .html(): ele avalia <script> a cada desfazer/refazer.
-  this.editor.setContent(entry.html);
+  this.editor._loadContent(entry.html);
 
   // Devolve o cursor para onde estava, em vez de jogá-lo para o início
   if (!entry.caret || !this.editor.selection.deserialize(entry.caret)) {
@@ -1691,14 +2034,30 @@ window.RangeFormatter = RangeFormatter;
     this.init();
   }
 
+  /** Versão do editor (a mesma do package.json e do tag no GitHub). */
+  Editor.VERSION = '1.1.0';
+
   Editor.instanceCount = 0;
+
+  /** Botões registrados para todos os editores da página (registerButton). */
+  Editor.buttons = {};
+
+  /**
+   * Registra um botão de toolbar para todos os editores. Use o nome dele
+   * na opção `toolbar`. Formato igual ao da opção `buttons`.
+   * @param {string} name
+   * @param {Object} def - { icon|html|text, title, action(editor, $button), isActive(editor) }
+   */
+  Editor.registerButton = function (name, def) {
+    Editor.buttons[name] = def;
+  };
 
   /**
    * Opções que são listas ou mapas SUBSTITUEM o padrão em vez de serem fundidas.
    * Com $.extend(true), arrays eram mesclados por posição: pedir só
    * [['font', ['bold']]] gerava a toolbar padrão inteira com 'redo' no meio.
    */
-  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources'];
+  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'extraPlugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources', 'forbiddenTags'];
 
   Editor.mergeOptions = function (defaults, options) {
     var merged = $.extend(true, {}, defaults);
@@ -1749,14 +2108,16 @@ window.RangeFormatter = RangeFormatter;
   };
 
   Editor.prototype.buildLayout = function () {
-    this.$container = $('<div class="wysiwyg-editor border border-gray-300 rounded-md shadow-sm flex flex-col bg-white font-sans text-gray-800 relative"/>');
+    // Borda, fundo, cor e fonte da raiz vêm das variáveis do tema (base-styles.js)
+    this.$container = $('<div class="wysiwyg-editor"/>');
+    this.setTheme(this.options.theme);
     this.$toolbar = $('<div class="editor-toolbar flex flex-wrap gap-1 p-2 border-b border-gray-200 rounded-t-md bg-gray-50 items-center z-10" role="toolbar" aria-label="Ferramentas de formatação"/>');
     
     // Configurações herdadas na inicialização do plugin
     var minHeight = this.options.height ? this.options.height + 'px' : '300px';
     var placeholder = this.options.placeholder || this.$el.attr('placeholder') || 'Digite aqui...';
 
-    this.$content = $('<div contenteditable="true" class="editor-content p-4 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto prose max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>')
+    this.$content = $('<div contenteditable="true" class="editor-content p-4 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>')
       .css('min-height', minHeight)
       .attr('data-placeholder', placeholder);
 
@@ -1816,6 +2177,134 @@ window.RangeFormatter = RangeFormatter;
     this.history = new HistoryManager(this);
 
     this.history.init();
+
+    this.rangeFormatter = new RangeFormatter(this);
+  };
+
+  // =========================
+  // INSERÇÃO E SELEÇÃO (API pública)
+  // =========================
+
+  /**
+   * Guarda a posição do cursor/seleção, se estiver dentro do editor.
+   * Use antes de abrir um modal que tira o foco do editor.
+   * @returns {boolean} true se havia seleção no editor
+   */
+  Editor.prototype.saveSelection = function () {
+    var saved = this.selection.isInsideEditor() ? this.selection.serialize() : null;
+    if (saved) this._savedSelection = saved;
+    return !!saved;
+  };
+
+  /**
+   * Foca o editor e restaura a seleção salva (por saveSelection ou, na
+   * falta dela, a última antes de o editor perder o foco). Sem nenhuma,
+   * coloca o cursor no fim do conteúdo.
+   * @returns {boolean} true se uma seleção salva foi restaurada
+   */
+  Editor.prototype.restoreSelection = function () {
+    var root = this.$content[0];
+    var saved = this._savedSelection || this._blurSelection;
+
+    root.focus();
+    if (saved && this.selection.deserialize(saved)) return true;
+
+    var range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    this.selection.setRange(range);
+    return false;
+  };
+
+  /** Foca a área de edição, mantendo a seleção que havia. */
+  Editor.prototype.focus = function () {
+    if (this.selection.isInsideEditor()) {
+      this.$content[0].focus();
+    } else {
+      this.restoreSelection();
+    }
+  };
+
+  /**
+   * Insere HTML (sanitizado) na seleção salva, como um passo de desfazer.
+   * @param {string} html
+   * @returns {boolean} false se não havia nada para inserir
+   */
+  Editor.prototype.insertHTML = function (html) {
+    this.restoreSelection();
+    this.history.save();
+    var inserted = this.rangeFormatter.insertHTML(html);
+    this._savedSelection = null;
+    if (!inserted) return false;
+
+    this.history.save();
+    this.updateToolbar();
+    this.trigger('change');
+    return true;
+  };
+
+  /**
+   * Insere uma imagem na seleção salva.
+   * @param {string} url - http(s), relativa ou data:image (PNG, JPG, GIF, WebP, AVIF)
+   * @param {Object} [attrs] - atributos do <img> (alt, style, width...)
+   * @returns {boolean} false se a URL for recusada
+   */
+  Editor.prototype.insertImage = function (url, attrs) {
+    var img = this._buildImage(url, attrs);
+    return img ? this.insertHTML(img.outerHTML) : false;
+  };
+
+  /**
+   * Imagem selecionada (clicada) no editor, ou null.
+   * @returns {HTMLImageElement|null}
+   */
+  Editor.prototype.getSelectedImage = function () {
+    var plugin = this.getPlugin('ImagePlugin');
+    return plugin && plugin.activeImage && this.$content[0].contains(plugin.activeImage) ? plugin.activeImage : null;
+  };
+
+  /**
+   * Troca o src de uma imagem do editor, mantendo estilo, alt e
+   * alinhamento. Um passo de desfazer.
+   * @param {HTMLImageElement} img
+   * @param {string} url
+   * @param {Object} [attrs] - atributos a aplicar (null remove o atributo)
+   * @returns {boolean} false se a URL for recusada ou a imagem não estiver no editor
+   */
+  Editor.prototype.replaceImage = function (img, url, attrs) {
+    if (!img || !this.$content[0].contains(img) || !url || !this.sanitizer.isSafeUrl(url, 'img', 'src')) return false;
+
+    this.history.save();
+    img.setAttribute('src', url);
+    for (var name in attrs || {}) {
+      if (!attrs.hasOwnProperty(name) || name === 'src' || /^on/i.test(name)) continue;
+      if (attrs[name] === null) {
+        img.removeAttribute(name);
+      } else {
+        img.setAttribute(name, attrs[name]);
+      }
+    }
+    this.history.save();
+
+    var plugin = this.getPlugin('ImagePlugin');
+    if (plugin && plugin.activeImage === img) plugin.positionToolbar();
+    this.trigger('change');
+    return true;
+  };
+
+  /** @private Cria o <img> num documento inerte; null se a URL for recusada. */
+  Editor.prototype._buildImage = function (url, attrs) {
+    if (!url || !this.sanitizer.isSafeUrl(url, 'img', 'src')) return null;
+
+    var doc = document.implementation.createHTMLDocument('');
+    var img = doc.createElement('img');
+    var all = $.extend({}, this.options.imageDefaults, attrs);
+    for (var name in all) {
+      if (!all.hasOwnProperty(name) || all[name] === null || all[name] === undefined || name === 'src') continue;
+      img.setAttribute(name, all[name]);
+    }
+    img.setAttribute('src', url);
+    return img;
   };
 
   // =========================
@@ -1864,7 +2353,19 @@ window.RangeFormatter = RangeFormatter;
         }
       }
 
+      // Sem o botão `image` (ex.: gerenciador de imagens próprio), o plugin
+      // ainda é preciso para colar prints, redimensionar e trocar imagens
+      if ((this.options.uploadImage || this.options.imageToolbar) && activeOptionalPlugins.indexOf(window.ImagePlugin) === -1) {
+        activeOptionalPlugins.push(window.ImagePlugin);
+      }
+
       plugins = corePlugins.concat(activeOptionalPlugins).filter(Boolean);
+    }
+
+    // extraPlugins soma aos plugins (automáticos ou da opção `plugins`)
+    var extra = this.options.extraPlugins || [];
+    for (var x = 0; x < extra.length; x++) {
+      if (extra[x] && plugins.indexOf(extra[x]) === -1) plugins = plugins.concat([extra[x]]);
     }
 
     for (var i = 0; i < plugins.length; i++) {
@@ -2058,6 +2559,13 @@ window.RangeFormatter = RangeFormatter;
       self.updateToolbar();
     });
 
+    // Lembra onde estava o cursor quando o foco sai (ex.: para um modal),
+    // para insertHTML/insertImage inserirem no lugar certo
+    this.$content.on('blur' + this.ns, function () {
+      var saved = self.selection.serialize();
+      if (saved) self._blurSelection = saved;
+    });
+
     // Alt+F10 leva o foco para a barra de ferramentas (padrão de editores)
     this.$content.on('keydown' + this.ns, function (e) {
       if (e.altKey && e.key === 'F10') {
@@ -2085,6 +2593,22 @@ window.RangeFormatter = RangeFormatter;
         self.$content[0].focus();
       }
     });
+  };
+
+  Editor.THEMES = ['light', 'dark', 'auto'];
+
+  /**
+   * Troca o tema do editor.
+   * - 'light' ou 'dark': fixa o tema, ignorando a página;
+   * - 'auto': escuro quando o sistema está em modo escuro (ou há .dark num ancestral);
+   * - sem valor: segue a classe .dark num ancestral (ex.: <html class="dark">).
+   * @param {string} [theme]
+   */
+  Editor.prototype.setTheme = function (theme) {
+    if (Editor.THEMES.indexOf(theme) === -1) theme = null;
+    this.options.theme = theme;
+    if (theme) this.$container.attr('data-weaver-theme', theme);
+    else this.$container.removeAttr('data-weaver-theme');
   };
 
   /**
@@ -2132,23 +2656,44 @@ window.RangeFormatter = RangeFormatter;
     // uma barreira de segurança, pois o POST pode ser forjado.
 
     // Com o code view aberto, o conteúdo vigente é o que está no código
-    // (antes, enviar o formulário nesse modo descartava as edições)
-    if (this.codeView && this.codeView.active) {
+    // (antes, enviar o formulário nesse modo descartava as edições).
+    // Código não alterado: vale o conteúdo do editor (e o HTML original).
+    if (this.codeView && this.codeView.active && this.codeView.isModified()) {
       return this.sanitize(this.codeView.$textarea.val());
     }
 
-    return Editor.cleanOutput(this.$content.html());
+    var html = Editor.cleanOutput(this.$content.html());
+
+    // Nada foi editado desde o carregamento: devolve o HTML original byte a
+    // byte (aspas, entidades, ordem de atributos e formatação do CSS)
+    if (this._source && html === this._source.dom) {
+      return this._source.html;
+    }
+
+    return html;
+  };
+
+  /**
+   * Indica se o conteúdo continua igual ao último carregado por setContent
+   * (ou pelo textarea), ou seja, se o usuário ainda não editou nada.
+   * @returns {boolean}
+   */
+  Editor.prototype.isPristine = function () {
+    return !!this._source && Editor.cleanOutput(this.$content.html()) === this._source.dom;
   };
 
   /**
    * Remove do HTML final os estados visuais do editor (imagem selecionada,
-   * marcadores), que não devem ser salvos no conteúdo.
+   * marcadores) e devolve o código protegido (<weaver-raw>, atributos
+   * renomeados) ao original.
    */
   Editor.cleanOutput = function (html) {
     if (html.indexOf('weaver-') === -1) return html;
 
-    var holder = document.createElement('div');
-    holder.innerHTML = html;
+    // Documento inerte: o código restaurado (onerror, <script>) não executa
+    var holder = HtmlSanitizer.parseInert(html);
+
+    HtmlSanitizer.unprotect(holder);
 
     var states = holder.querySelectorAll('.weaver-selected');
     for (var i = 0; i < states.length; i++) {
@@ -2214,7 +2759,26 @@ window.RangeFormatter = RangeFormatter;
     return null;
   };
 
+  /**
+   * Troca todo o conteúdo do editor. O HTML é guardado: enquanto nada for
+   * editado, getContent() devolve exatamente esta string (desde que a
+   * sanitização não tenha removido nada dela).
+   * @param {string} html
+   */
   Editor.prototype.setContent = function (html) {
+    html = HtmlSanitizer.toStr(html);
+    this._loadContent(html);
+
+    var dom = Editor.cleanOutput(this.$content.html());
+    this._source = HtmlSanitizer.serialize(html) === dom ? { html: html, dom: dom } : null;
+  };
+
+  /**
+   * Carrega HTML no editor sem mudar o HTML de referência (usado pelo
+   * desfazer/refazer e pelo code view).
+   * @private
+   */
+  Editor.prototype._loadContent = function (html) {
     // Sempre sanitiza e insere nós vindos de um documento inerte: nenhum
     // <script> ou handler (onerror, onload...) chega a executar.
     var content = this.$content[0];
@@ -2224,6 +2788,7 @@ window.RangeFormatter = RangeFormatter;
     }
 
     content.appendChild(this.sanitizer.toFragment(html));
+    this.loadContentFonts();
   };
 
   Editor.prototype.updateToolbar = function () {
@@ -2339,6 +2904,81 @@ window.RangeFormatter = RangeFormatter;
     document.head.appendChild(fontLink);
   };
 
+  /** Fontes do sistema e famílias genéricas: nunca são pedidas ao Google. */
+  Editor.LOCAL_FONTS = ['arial', 'helvetica', 'helvetica neue', 'courier', 'courier new', 'georgia', 'tahoma', 'times',
+    'times new roman', 'verdana', 'trebuchet ms', 'impact', 'comic sans ms', 'segoe ui', 'calibri', 'cambria',
+    'consolas', 'menlo', 'monaco', 'lucida console', 'lucida sans unicode', 'palatino linotype', 'garamond',
+    'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui', 'ui-serif', 'ui-sans-serif',
+    'ui-monospace', 'ui-rounded', 'emoji', 'math', 'inherit', 'initial', 'unset', 'revert', '-apple-system',
+    'blinkmacsystemfont'];
+
+  /** Famílias já pedidas nesta página (compartilhado entre os editores). */
+  Editor.loadedFonts = {};
+
+  /**
+   * URL do Google Fonts para uma família, ou null se ela é local ou tem
+   * caracteres que não existem em nomes do Google (evita montar URL com
+   * texto vindo do conteúdo).
+   * @param {string} name ex.: 'Open Sans', "'Lobster', cursive"
+   */
+  Editor.googleFontUrl = function (name) {
+    var family = Editor.primaryFontFamily(name);
+    if (!family || !/^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/.test(family)) return null;
+    if ($.inArray(family.toLowerCase(), Editor.LOCAL_FONTS) !== -1) return null;
+    return 'https://fonts.googleapis.com/css2?family=' + family.replace(/ /g, '+') + '&display=swap';
+  };
+
+  /** Primeira família de um valor de font-family, sem aspas. */
+  Editor.primaryFontFamily = function (value) {
+    var first = String(value || '').split(',')[0];
+    return $.trim(first.replace(/^\s*["']|["']\s*$/g, ''));
+  };
+
+  /**
+   * Carrega uma família do Google Fonts sob demanda (uma vez por página).
+   * Não faz nada com `googleFonts: false`.
+   * @returns {boolean} true se a família foi (ou já estava) pedida
+   */
+  Editor.prototype.loadFont = function (name) {
+    if (!this.options.googleFonts) return false;
+    var url = Editor.googleFontUrl(name);
+    if (!url) return false;
+    if (Editor.loadedFonts[url]) return true;
+
+    Editor.loadedFonts[url] = true;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.referrerPolicy = 'no-referrer';
+    link.href = url;
+    link.setAttribute('data-weaver-font', Editor.primaryFontFamily(name));
+    document.head.appendChild(link);
+    return true;
+  };
+
+  /**
+   * Famílias usadas no conteúdo (style="font-family" e <font face>).
+   * @returns {string[]}
+   */
+  Editor.prototype.contentFonts = function () {
+    var found = {};
+    var list = [];
+    this.$content.find('[style*="font-family"], font[face]').each(function () {
+      var family = Editor.primaryFontFamily(this.style.fontFamily || this.getAttribute('face'));
+      if (family && !found[family.toLowerCase()]) {
+        found[family.toLowerCase()] = true;
+        list.push(family);
+      }
+    });
+    return list;
+  };
+
+  /** Carrega as fontes usadas no conteúdo, para o editor exibi-las. */
+  Editor.prototype.loadContentFonts = function () {
+    if (!this.options.googleFonts) return;
+    var fonts = this.contentFonts();
+    for (var i = 0; i < fonts.length; i++) this.loadFont(fonts[i]);
+  };
+
   Editor.prototype.injectStyles = function () {
     this.loadIcons();
     this.loadFonts();
@@ -2350,31 +2990,35 @@ window.RangeFormatter = RangeFormatter;
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
       '.wysiwyg-editor .editor-toolbar-group { flex-wrap: wrap; }\n' +
       '.wysiwyg-editor button:has(.weaver-icon-fallback) { width: auto; min-width: 32px; }\n' +
-      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid #2563eb !important; outline-offset: 1px; }\n' +
-      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
-      '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
+      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid var(--weaver-accent) !important; outline-offset: 1px; }\n' +
+      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid var(--weaver-border-soft); background: var(--weaver-notice-bg); color: var(--weaver-notice-fg); }\n' +
+      '.wysiwyg-editor .editor-notice[data-type="error"] { background: var(--weaver-error-bg); color: var(--weaver-error-fg); }\n' +
       '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
       '.wysiwyg-editor .editor-image-alt { display: flex; gap: 4px; align-items: center; }\n' +
-      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid var(--weaver-border); border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-search { position: sticky; top: 0; z-index: 1; padding: 6px; background: var(--weaver-menu-bg); border-bottom: 1px solid var(--weaver-border-soft); }\n' +
+      '.wysiwyg-editor .editor-dropdown-search-input { box-sizing: border-box; width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--weaver-border); border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-empty { padding: 8px 12px; font-size: 13px; color: var(--weaver-muted); }\n' +
+      '.wysiwyg-editor weaver-raw { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px dashed var(--weaver-placeholder); border-radius: 3px; background: var(--weaver-hover-strong); color: var(--weaver-fg-soft); font: 12px/1.6 Menlo, Monaco, Consolas, monospace; cursor: default; user-select: none; vertical-align: middle; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
       '.editor-show-blocks p, .editor-show-blocks div, .editor-show-blocks ul, .editor-show-blocks ol, .editor-show-blocks blockquote, .editor-show-blocks table {\n' +
-      '  border: 1px dashed #adb5bd !important; padding: 2px;\n' +
+      '  border: 1px dashed var(--weaver-blocks) !important; padding: 2px;\n' +
       '}\n' +
       '.editor-content:empty:before {\n' +
       '  content: attr(data-placeholder);\n' +
-      '  color:#999;\n' +
+      '  color: var(--weaver-placeholder);\n' +
       '}\n' +
       '.editor-preview-frame {\n' +
       '  width:100%;\n' +
       '  height:400px;\n' +
-      '  border:1px solid #ddd;\n' +
+      '  border:1px solid var(--weaver-border);\n' +
       '  background:#fff;\n' +
       '  transition: width 0.3s ease; \n' +
       '}\n' +
       '.editor-content.drag-over {\n' +
-      '  background: #f0f8ff; \n' +
-      '  border: 1px dashed #007bff; \n' +
+      '  background: var(--weaver-drop-bg); \n' +
+      '  border: 1px dashed var(--weaver-accent); \n' +
       '}\n' +
       '.img-resize-wrapper {\n' +
       '  display: inline-block;\n' +
@@ -2402,7 +3046,7 @@ window.RangeFormatter = RangeFormatter;
       '  display: none;\n' +
       '  width: 100%;\n' +
       '  height: 400px;\n' +
-      '  background: #363636;\n' +
+      '  background: var(--weaver-code-bg);\n' +
       '  position: relative;\n' +
       '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;\n' +
       '  font-size: 14px;\n' +
@@ -2416,9 +3060,9 @@ window.RangeFormatter = RangeFormatter;
       '  width: 50px;\n' +
       '  padding: 15px 5px 15px 0;\n' +
       '  text-align: right;\n' +
-      '  color: #888;\n' +
-      '  background: #2c2c2c;\n' +
-      '  border-right: 1px solid #555;\n' +
+      '  color: var(--weaver-code-line);\n' +
+      '  background: var(--weaver-code-gutter);\n' +
+      '  border-right: 1px solid var(--weaver-code-border);\n' +
       '  box-sizing: border-box;\n' +
       '  overflow: hidden;\n' +
       '  user-select: none;\n' +
@@ -2460,13 +3104,13 @@ window.RangeFormatter = RangeFormatter;
       '  background: rgba(100, 150, 255, 0.3) !important;\n' +
       '}\n' +
       '.editor-codeview-highlight {\n' +
-      '  color: #e0e0e0;\n' +
+      '  color: var(--weaver-code-fg);\n' +
       '  z-index: 1;\n' +
       '  pointer-events: none;\n' +
       '  overflow: auto;\n' +
       '}\n' +
       '.editor-codeview-highlight .html-tag {\n' +
-      '  color: #f9eb26;\n' +
+      '  color: var(--weaver-code-tag);\n' +
       '}\n';
 
     // Estilos base (equivalentes às classes Tailwind usadas): o editor
@@ -2487,6 +3131,17 @@ window.RangeFormatter = RangeFormatter;
   // =========================
   Editor.defaults = {
     plugins: [],
+    // Plugins somados aos automáticos (sem desligar link, tabela, imagem...)
+    extraPlugins: [],
+    // Botões próprios: { nome: { icon|html|text, title, action(editor, $button), isActive(editor) } }
+    buttons: {},
+    // Atributos aplicados a toda imagem inserida (ex.: { style: 'width:100%;height:auto' })
+    imageDefaults: null,
+    // Botões extras na barra da imagem: [ { icon|html|text, title, action(editor, img) } ]
+    // ou { add: [...], remove: ['w25', 'original'] }
+    imageToolbar: null,
+    // Imagens em data: dentro do HTML colado/solto sobem pelo uploadImage
+    uploadPastedImages: false,
     toolbar: [
       ['history', ['undo', 'redo']],
       ['style', ['formatBlock', 'fontName', 'fontSize']],
@@ -2497,8 +3152,14 @@ window.RangeFormatter = RangeFormatter;
       ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
     ],
     fontNames: null,
+    // Campo de busca no menu de fontes: true, false ou 'auto' (mais de 20 fontes)
+    fontSearch: 'auto',
+    // Chamado ao aplicar uma fonte: function (fontName, editor) {}
+    onFontApply: null,
     placeholder: '',
     height: null,
+    // Tema: 'light', 'dark', 'auto' (segue o sistema) ou null (segue .dark na página)
+    theme: null,
     aiEndpoint: 'ai-api.php',
     onAiGenerate: null,
     // Ícones: versão fixa do Lucide. Para servir do seu domínio, aponte para
@@ -2545,7 +3206,13 @@ window.ToolbarPlugin = ToolbarPlugin;
 function ToolbarPlugin(editor) {
   this.editor = editor;
   this.buttons = {};
+  this.observers = [];
 }
+
+ToolbarPlugin.prototype.destroy = function () {
+  for (var i = 0; i < this.observers.length; i++) this.observers[i].disconnect();
+  this.observers = [];
+};
 
 ToolbarPlugin.prototype.init = function () {
   this.render();
@@ -2557,18 +3224,23 @@ ToolbarPlugin.prototype.render = function () {
   var defaultFonts = editor.options.fontNames || ['Arial', 'Courier New', 'Georgia', 'Tahoma', 'Times New Roman', 'Verdana', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Oswald'];
   var fontOptionsList = [];
   for (var f = 0; f < defaultFonts.length; f++) {
-    var fName = defaultFonts[f];
+    var fName = String(defaultFonts[f]);
+    // O font-family entra só quando o item aparece (lazyFonts): com o
+    // catálogo inteiro do Google, aplicar em todos baixaria 1.500 fontes
     fontOptionsList.push({
-      label: '<span style="font-family: \'' + fName + '\', sans-serif; font-size:14px;">' + fName + '</span>',
+      label: '<span data-font="' + HtmlSanitizer.escapeHtml(fName) + '" style="font-size:14px;">' + HtmlSanitizer.escapeHtml(fName) + '</span>',
       value: fName
     });
   }
+  var fontSearch = editor.options.fontSearch;
+  if (fontSearch === 'auto') fontSearch = fontOptionsList.length > 20;
 
   var defaultButtonLibrary = {
     undo: { name: 'undo', label: '<i data-lucide="undo"></i>', title: 'Desfazer' },
     redo: { name: 'redo', label: '<i data-lucide="redo"></i>', title: 'Refazer' },
     removeFormat: { name: 'removeFormat', label: '<i data-lucide="eraser"></i>', title: 'Remover Formatação' },
-    fontName: { name: 'fontName', type: 'dropdown', title: 'Fonte', text: 'Fonte', options: fontOptionsList },
+    fontName: { name: 'fontName', type: 'dropdown', title: 'Fonte', text: 'Fonte', options: fontOptionsList, lazy: true, lazyFonts: true,
+      search: fontSearch ? { placeholder: 'Buscar fonte...', empty: 'Nenhuma fonte encontrada' } : null },
     fontSize: { name: 'fontSize', type: 'dropdown', title: 'Tamanho', text: 'Tamanho', options: [
       { label: '8px', value: '8' },
       { label: '10px', value: '10' },
@@ -2589,7 +3261,7 @@ ToolbarPlugin.prototype.render = function () {
       { label: '<h4 style="margin:0; font-size:16px; font-weight:bold;">Título 4</h4>', value: 'H4' },
       { label: '<h5 style="margin:0; font-size:14px; font-weight:bold;">Título 5</h5>', value: 'H5' },
       { label: '<h6 style="margin:0; font-size:12px; font-weight:bold;">Título 6</h6>', value: 'H6' },
-      { label: '<blockquote style="margin:0; border-left:3px solid #ccc; padding-left:8px; font-style:italic; color:#666; font-size:14px;">Citação</blockquote>', value: 'BLOCKQUOTE' },
+      { label: '<blockquote style="margin:0; border-left:3px solid var(--weaver-border); padding-left:8px; font-style:italic; color:var(--weaver-muted); font-size:14px;">Citação</blockquote>', value: 'BLOCKQUOTE' },
       { label: '<pre style="margin:0; background:#1f2937; color:#f3f4f6; padding:2px 8px; border-radius:4px; font-size:12px; font-family:monospace; line-height:1.2;">Bloco de Código</pre>', value: 'PRE' }
     ]},
     bold: { name: 'bold', label: '<i data-lucide="bold"></i>', title: 'Negrito' },
@@ -2631,6 +3303,16 @@ ToolbarPlugin.prototype.render = function () {
     ai: { name: 'ai', label: '<i data-lucide="sparkles"></i>', title: 'Assistente IA' }
   };
 
+  // Botões do integrador: os registrados globalmente (registerButton) e os
+  // da opção `buttons`, que podem até substituir um botão padrão
+  var customButtons = $.extend({}, WysiwygEditor.buttons, editor.options.buttons);
+  for (var customName in customButtons) {
+    if (customButtons.hasOwnProperty(customName) && customButtons[customName]) {
+      defaultButtonLibrary[customName] = ToolbarPlugin.normalizeButton(customName, customButtons[customName]);
+    }
+  }
+  this.customButtons = customButtons;
+
   var self = this;
 
   function createButtonElement(btn) {
@@ -2649,36 +3331,41 @@ ToolbarPlugin.prototype.render = function () {
         
         var $menu = $('<div class="editor-dropdown-menu hidden absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 min-w-[180px] max-h-60 overflow-y-auto text-left" role="menu"/>');
 
-        for(var j = 0; j < btn.options.length; j++) {
-          var $item = $('<div class="editor-dropdown-item px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 border-b border-gray-50 last:border-0 leading-tight"/>')
-            .html(btn.options[j].label)
-            .attr('role', 'menuitem')
-            .attr('tabindex', '-1')
-            .attr('data-value', btn.options[j].value);
-          
-          $item.on('mousedown', function(e) { e.preventDefault(); }); // Evita perder o foco
-          $item.on('click', function(e) {
-            var val = $(this).attr('data-value');
-            var fromKeyboard = $menu[0].contains(document.activeElement);
-            if (val) {
-              editor.exec(btn.name, val);
-            }
-            $menu.hide();
-            $btn.attr('aria-expanded', 'false');
-            self.updateState();
-            if (fromKeyboard) editor.$content[0].focus();
-          });
-          $menu.append($item);
-        }
+        var dropdown = self.buildDropdownItems(btn, $menu);
+        // Seleção de antes de abrir: o campo de busca tira o foco do conteúdo
+        var openSelection = null;
+
+        $menu.on('mousedown', '.editor-dropdown-item', function(e) { e.preventDefault(); }); // Evita perder o foco
+        $menu.on('click', '.editor-dropdown-item', function(e) {
+          var val = $(this).attr('data-value');
+          var fromKeyboard = $menu[0].contains(document.activeElement);
+          if (openSelection && !editor.selection.isInsideEditor()) {
+            editor.$content[0].focus();
+            editor.selection.deserialize(openSelection);
+          }
+          if (val && btn.action) {
+            btn.action(editor, val, $btn);
+          } else if (val) {
+            editor.exec(btn.name, val);
+          }
+          $menu.hide();
+          $btn.attr('aria-expanded', 'false');
+          self.updateState();
+          if (fromKeyboard) editor.$content[0].focus();
+        });
 
         $btn.on('mousedown', function(e) { e.preventDefault(); });
         $btn.on('click', function(e) {
           var isVisible = $menu.is(':visible');
+          if (btn.action) editor.saveSelection();
           editor.$toolbar.find('.editor-dropdown-menu').hide(); // Esconde os outros painéis abertos
           editor.$toolbar.find('.editor-dropdown-btn').attr('aria-expanded', 'false');
           if (!isVisible) {
+            openSelection = editor.selection.isInsideEditor() ? editor.selection.serialize() : null;
+            dropdown.open();
             $menu.removeClass('right-0').addClass('left-0').show();
             $btn.attr('aria-expanded', 'true');
+            dropdown.shown();
             
             // Verifica se o menu vazou a tela pela direita
             if ($menu[0].getBoundingClientRect().right > editor.$container[0].getBoundingClientRect().right) {
@@ -2707,14 +3394,14 @@ ToolbarPlugin.prototype.render = function () {
         $btn.on('click', function (e) {
           // e.detail === 0: ativado pelo teclado (Enter/Espaço)
           if (e.detail === 0 && $menu.is(':visible')) {
-            $menu.find('[role="menuitem"]').first().focus();
+            dropdown.focusFirst();
           }
         });
         $btn.on('keydown', function (e) {
           if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (!$menu.is(':visible')) $btn.trigger('click');
-            $menu.find('[role="menuitem"]').first().focus();
+            dropdown.focusFirst();
           }
         });
 
@@ -2876,7 +3563,13 @@ ToolbarPlugin.prototype.render = function () {
           .html(btn.label)
           .on('mousedown', function(e) { e.preventDefault(); })
           .on('click', function () {
-          editor.exec(btn.name);
+          if (btn.action) {
+            // O action costuma abrir um modal: guarda o cursor antes
+            editor.saveSelection();
+            btn.action(editor, $element);
+          } else {
+            editor.exec(btn.name);
+          }
 
           self.updateState();
         });
@@ -2930,7 +3623,11 @@ ToolbarPlugin.prototype.render = function () {
 
     for (var k = 0; k < groupButtons.length; k++) {
       var btnData = defaultButtonLibrary[groupButtons[k]];
-      if (btnData) $groupWrapper.append(createButtonElement(btnData));
+      if (btnData) {
+        $groupWrapper.append(createButtonElement(btnData));
+      } else if (window.console && console.warn) {
+        console.warn('Weaver: botão "' + groupButtons[k] + '" não existe. Defina-o na opção `buttons` ou com WysiwygEditor.registerButton().');
+      }
     }
 
     if (groupButtons.length > 0) editor.$toolbar.append($groupWrapper);
@@ -2953,6 +3650,124 @@ ToolbarPlugin.prototype.render = function () {
   if ($fsGroup.children().length > 0) editor.$toolbar.append($fsGroup);
 
   WysiwygEditor.renderIcons(editor.$toolbar[0]);
+};
+
+/**
+ * Monta os itens de um dropdown. Com `btn.lazy`, os itens só são criados na
+ * primeira abertura; com `btn.search`, um campo filtra os itens pelo texto;
+ * com `btn.lazyFonts`, o font-family de cada item (span[data-font]) só é
+ * aplicado, e a fonte carregada, quando o item fica visível na lista.
+ * @returns {{open: function, shown: function, focusFirst: function}}
+ */
+ToolbarPlugin.prototype.buildDropdownItems = function (btn, $menu) {
+  var editor = this.editor;
+  var self = this;
+  var built = false;
+  var $search = null;
+  var $empty = null;
+  var observer = null;
+
+  function normalize(text) {
+    text = String(text || '').toLowerCase();
+    return text.normalize ? text.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : text;
+  }
+
+  function showFont(span) {
+    if (span.style.fontFamily) return;
+    var name = span.getAttribute('data-font');
+    editor.loadFont(name);
+    span.style.fontFamily = '"' + name.replace(/["\\]/g, '') + '", sans-serif';
+  }
+
+  function build() {
+    if (built) return;
+    built = true;
+
+    var html = [];
+    for (var j = 0; j < btn.options.length; j++) {
+      html.push('<div class="editor-dropdown-item px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100 border-b border-gray-50 last:border-0 leading-tight" role="menuitem" tabindex="-1" data-value="' +
+        HtmlSanitizer.escapeHtml(btn.options[j].value) + '">' + btn.options[j].label + '</div>');
+    }
+    // Uma única inserção: com 1.500 itens, append um a um travava a abertura
+    $menu.append(html.join(''));
+
+    $menu.children('.editor-dropdown-item').each(function () {
+      this._weaverSearch = normalize($(this).text());
+    });
+
+    if (btn.lazyFonts) {
+      var spans = $menu.find('span[data-font]').get();
+      if (window.IntersectionObserver) {
+        observer = new IntersectionObserver(function (entries) {
+          for (var i = 0; i < entries.length; i++) {
+            if (!entries[i].isIntersecting) continue;
+            showFont(entries[i].target);
+            observer.unobserve(entries[i].target);
+          }
+        }, { root: $menu[0], rootMargin: '100px 0px' });
+        for (var s = 0; s < spans.length; s++) observer.observe(spans[s]);
+        self.observers.push(observer);
+      } else {
+        // Sem IntersectionObserver: limita aos primeiros itens
+        for (var k = 0; k < spans.length && k < 50; k++) showFont(spans[k]);
+      }
+    }
+  }
+
+  function filter() {
+    var term = normalize($.trim($search.val()));
+    var visible = 0;
+    $menu.children('.editor-dropdown-item').each(function () {
+      var match = !term || this._weaverSearch.indexOf(term) !== -1;
+      this.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    $empty.toggle(visible === 0);
+  }
+
+  if (btn.search) {
+    $search = $('<input type="search" class="editor-dropdown-search-input" autocomplete="off"/>')
+      .attr('placeholder', btn.search.placeholder || 'Buscar...')
+      .attr('aria-label', btn.search.placeholder || 'Buscar');
+    $empty = $('<div class="editor-dropdown-empty" role="status"/>').text(btn.search.empty || 'Nada encontrado').hide();
+    $menu.append($('<div class="editor-dropdown-search"/>').append($search), $empty);
+
+    $search.on('input', filter);
+    $search.on('keydown', function (e) {
+      var $first = $menu.children('.editor-dropdown-item').filter(':visible').first();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        $first.focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        $first.trigger('click');
+      }
+      // Esc e Tab seguem para o menu (fechar); o resto é digitação
+      if (e.key !== 'Escape' && e.key !== 'Tab') e.stopPropagation();
+    });
+  }
+
+  if (!btn.lazy) build();
+
+  return {
+    open: function () {
+      build();
+      if ($search && $search.val()) {
+        $search.val('');
+        filter();
+      }
+    },
+    shown: function () {
+      if ($search) $search[0].focus();
+    },
+    focusFirst: function () {
+      if ($search) {
+        $search[0].focus();
+      } else {
+        $menu.find('[role="menuitem"]').first().focus();
+      }
+    }
+  };
 };
 
 ToolbarPlugin.prototype.updateState = function () {
@@ -2987,6 +3802,44 @@ ToolbarPlugin.prototype.updateState = function () {
   if (this.editor.$content.hasClass('editor-show-blocks') && this.buttons.showBlocks) {
     this.buttons.showBlocks.removeClass('bg-white').addClass('bg-gray-200 shadow-inner active');
   }
+
+  // Botões do integrador com isActive(editor)
+  for (var name in this.customButtons) {
+    var def = this.customButtons[name];
+    if (!def || typeof def.isActive !== 'function' || !this.buttons[name]) continue;
+    var active = false;
+    try { active = !!def.isActive(this.editor); } catch (e) { /* erro do integrador */ }
+    if (active) this.buttons[name].removeClass('bg-white').addClass('bg-gray-200 shadow-inner active').attr('aria-pressed', 'true');
+  }
+};
+
+/**
+ * Converte a definição de um botão do integrador para o formato interno.
+ * @param {string} name
+ * @param {{icon?: string, html?: string, text?: string, title?: string,
+ *   type?: 'button'|'dropdown', options?: Array, action?: function,
+ *   isActive?: function}} def
+ */
+ToolbarPlugin.normalizeButton = function (name, def) {
+  var btn = $.extend({}, def, { name: name });
+  var title = def.title || name;
+
+  if (def.html) {
+    btn.label = def.html;
+  } else if (def.icon) {
+    btn.label = '<i data-lucide="' + HtmlSanitizer.escapeHtml(def.icon) + '"></i>';
+  } else if (!def.label) {
+    btn.label = '<span class="px-1 text-xs">' + HtmlSanitizer.escapeHtml(def.text || title) + '</span>';
+  }
+  btn.title = title;
+
+  if (btn.type === 'dropdown') {
+    btn.options = $.map(def.options || [], function (opt) {
+      return typeof opt === 'string' ? { label: HtmlSanitizer.escapeHtml(opt), value: opt } : opt;
+    });
+  }
+
+  return btn;
 };
 window.BasicCommandsPlugin = BasicCommandsPlugin;
 
@@ -3010,10 +3863,10 @@ BasicCommandsPlugin.prototype.init = function () {
     editor.$content.focus();
 
     var range = editor.selection.getRange();
-    if (!range || range.collapsed || !editor.selection.isInsideEditor()) return;
+    if (!range || range.collapsed || !editor.selection.isInsideEditor()) return false;
 
     var texts = editor.selection._textNodesInRange(range);
-    if (!texts.length) return;
+    if (!texts.length) return false;
 
     for (var i = 0; i < texts.length; i++) {
       var text = texts[i];
@@ -3039,6 +3892,7 @@ BasicCommandsPlugin.prototype.init = function () {
 
     editor.trigger('change');
     editor.updateToolbar();
+    return true;
   }
 
   // Blocos que recebem alinhamento, recuo e troca de formato.
@@ -3306,7 +4160,10 @@ BasicCommandsPlugin.prototype.init = function () {
   });
 
   editor.registerCommand('fontName', function (editor, value) {
-    applySpanStyle('fontFamily', value);
+    editor.loadFont(value);
+    if (applySpanStyle('fontFamily', value) && typeof editor.options.onFontApply === 'function') {
+      try { editor.options.onFontApply(value, editor); } catch (e) { /* erro do integrador */ }
+    }
   });
 
   editor.registerCommand('fontSize', function (editor, value) {
@@ -3552,6 +4409,16 @@ SanitizerPlugin.prototype.bind = function () {
     var plain = self.editor._plainPaste;
     self.editor._plainPaste = false;
 
+    // Print ou imagem copiada: vai pelo mesmo caminho do upload/arrastar.
+    // Word e Excel mandam um PNG junto com o HTML; aí vale o HTML.
+    var imagePlugin = self.editor.getPlugin('ImagePlugin');
+    var files = imagePlugin && !plain ? ImagePlugin.imageFiles(clipboard) : [];
+    if (files.length && ImagePlugin.isOnlyImage(html) && (html || !$.trim(text))) {
+      imagePlugin.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
+      for (var f = 0; f < files.length; f++) imagePlugin.insertImage(files[f]);
+      return;
+    }
+
     // Texto puro é escapado: "<b>" colado como texto continua sendo texto.
     var content = html && !plain
       ? SanitizerPlugin.cleanOfficeHtml(html)
@@ -3561,6 +4428,8 @@ SanitizerPlugin.prototype.bind = function () {
     self.rangeFormatter.insertHTML(content); // insertHTML sanitiza
     self.editor.history.save();
     self.editor.trigger('change');
+
+    if (imagePlugin && html && !plain) imagePlugin.uploadEmbeddedImages(content);
   });
 };
 
@@ -3801,9 +4670,19 @@ PreviewPlugin.prototype.enable = function () {
   var html = this.editor.sanitize(this.editor.getContent());
 
   var cssLinks = this.buildCssLinks();
-  var googleFonts = this.editor.options.googleFonts
-    ? '<link rel="stylesheet" referrerpolicy="no-referrer" href="' + HtmlSanitizer.escapeHtml(WysiwygEditor.GOOGLE_FONTS_URL) + '">'
-    : '';
+  var googleFonts = '';
+  if (this.editor.options.googleFonts) {
+    // Fontes do menu + as usadas no conteúdo (ex.: 'Lobster' escolhida no menu)
+    var fontUrls = [WysiwygEditor.GOOGLE_FONTS_URL];
+    var used = this.editor.contentFonts();
+    for (var i = 0; i < used.length; i++) {
+      var url = WysiwygEditor.googleFontUrl(used[i]);
+      if (url) fontUrls.push(url);
+    }
+    for (var u = 0; u < fontUrls.length; u++) {
+      googleFonts += '<link rel="stylesheet" referrerpolicy="no-referrer" href="' + HtmlSanitizer.escapeHtml(fontUrls[u]) + '">';
+    }
+  }
 
   // Segunda camada além do sandbox: CSP que proíbe qualquer script
   var csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
@@ -3929,6 +4808,9 @@ NormalizerPlugin.prototype.bind = function () {
 };
 
 NormalizerPlugin.prototype.normalize = function () {
+  // normalize: false desliga; conteúdo sem edição fica como foi carregado
+  if (this.editor.options.normalize === false || this.editor.isPristine()) return;
+
   var root = this.editor.$content[0];
   var before = root.innerHTML;
 
@@ -3981,7 +4863,9 @@ NormalizerPlugin.prototype.removeEmpty = function (root) {
       el.parentNode &&
       el.childNodes.length === 0 &&
       NormalizerPlugin.KEEP_EMPTY.indexOf(el.tagName) === -1 &&
-      !el.hasAttribute('id') // âncoras de link interno (<a id="...">)
+      // Só sobras de formatação (<b></b>, <span></span>). Com atributos, o
+      // vazio é intencional: âncoras (<a id>), <div class="clearfix">, ícones
+      !el.attributes.length
     ) {
       el.parentNode.removeChild(el);
     }
@@ -4691,17 +5575,35 @@ ImagePlugin.prototype.buildToolbar = function () {
   this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-white border border-gray-200 p-1.5 rounded flex flex-row flex-nowrap w-max gap-1 z-50 shadow-lg" role="toolbar" aria-label="Ferramentas da imagem"></div>');
 
   var buttons = [
-    { label: '100%', title: 'Largura 100%', action: function() { self.resizeImage('100%'); } },
-    { label: '50%', title: 'Largura 50%', action: function() { self.resizeImage('50%'); } },
-    { label: '25%', title: 'Largura 25%', action: function() { self.resizeImage('25%'); } },
-    { label: 'Original', title: 'Tamanho Original', action: function() { self.setOriginalSize(); } },
-    { label: '<i data-lucide="align-left"></i>', title: 'Flutuar à Esquerda', action: function() { self.setFloat('left'); } },
-    { label: '<i data-lucide="align-center"></i>', title: 'Centralizar', action: function() { self.setFloat('center'); } },
-    { label: '<i data-lucide="align-right"></i>', title: 'Flutuar à Direita', action: function() { self.setFloat('right'); } },
-    { label: '<i data-lucide="align-justify"></i>', title: 'Remover Flutuação', action: function() { self.removeFloat(); } },
+    { label: '100%', title: 'Largura 100%', name: 'w100', action: function() { self.resizeImage('100%'); } },
+    { label: '50%', title: 'Largura 50%', name: 'w50', action: function() { self.resizeImage('50%'); } },
+    { label: '25%', title: 'Largura 25%', name: 'w25', action: function() { self.resizeImage('25%'); } },
+    { label: 'Original', title: 'Tamanho Original', name: 'original', action: function() { self.setOriginalSize(); } },
+    { label: '<i data-lucide="align-left"></i>', title: 'Flutuar à Esquerda', name: 'floatLeft', action: function() { self.setFloat('left'); } },
+    { label: '<i data-lucide="align-center"></i>', title: 'Centralizar', name: 'center', action: function() { self.setFloat('center'); } },
+    { label: '<i data-lucide="align-right"></i>', title: 'Flutuar à Direita', name: 'floatRight', action: function() { self.setFloat('right'); } },
+    { label: '<i data-lucide="align-justify"></i>', title: 'Remover Flutuação', name: 'noFloat', action: function() { self.removeFloat(); } },
     { label: 'Alt', title: 'Texto alternativo', name: 'alt', action: function() { self.toggleAltEditor(); } },
-    { label: '<i data-lucide="trash-2"></i>', title: 'Remover Imagem', action: function() { self.removeImage(); } }
+    { label: '<i data-lucide="trash-2"></i>', title: 'Remover Imagem', name: 'remove', action: function() { self.removeImage(); } }
   ];
+
+  // imageToolbar: lista de botões extras, ou { add: [...], remove: ['w25'] }
+  var custom = this.editor.options.imageToolbar || {};
+  if ($.isArray(custom)) custom = { add: custom };
+  var removed = custom.remove || [];
+  buttons = $.grep(buttons, function (b) { return removed.indexOf(b.name) === -1; });
+
+  $.each(custom.add || [], function (i, def) {
+    var normalized = ToolbarPlugin.normalizeButton(def.name || 'custom' + i, def);
+    buttons.push({
+      label: normalized.label,
+      title: normalized.title,
+      name: normalized.name,
+      action: function () {
+        if (self.activeImage) def.action(self.editor, self.activeImage);
+      }
+    });
+  });
 
   $.each(buttons, function(i, btnData) {
     var $btn = $('<button type="button" class="flex items-center justify-center min-w-[32px] h-8 px-2 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none [&>svg]:w-4 [&>svg]:h-4 text-xs font-medium"></button>')
@@ -5041,9 +5943,10 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
 
     if (hasFiles(e)) {
       self.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
-      var files = dt.files;
-      if (files && files.length > 0) {
-        self.insertImage(files[0]); // valida formato e tamanho
+      var files = ImagePlugin.imageFiles(dt);
+      if (!files.length && dt.files && dt.files.length) files = [dt.files[0]]; // insertImage avisa do formato
+      for (var f = 0; f < files.length; f++) {
+        self.insertImage(files[f]); // valida formato e tamanho
       }
       return;
     }
@@ -5057,6 +5960,7 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
     self.rangeFormatter.insertHTML(html || self.editor.sanitizer.textToHtml(text));
     self.editor.history.save();
     self.editor.trigger('change');
+    if (html) self.uploadEmbeddedImages(html);
   });
 };
 
@@ -5071,23 +5975,12 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
 ImagePlugin.prototype.insertImage = function (file) {
   var self = this;
   var editor = this.editor;
-  var options = editor.options;
-  var uploadFn = options.uploadImage;
 
-  if (!file || ImagePlugin.ACCEPTED_TYPES.indexOf(file.type) === -1) {
-    editor.notify('Formato de imagem não suportado. Use PNG, JPG, GIF, WebP ou AVIF.', { type: 'error' });
-    return;
-  }
-
-  if (options.maxImageSize && file.size > options.maxImageSize) {
-    editor.notify('A imagem tem ' + ImagePlugin.formatSize(file.size) + '. O máximo é ' + ImagePlugin.formatSize(options.maxImageSize) + '.', { type: 'error' });
-    return;
-  }
-
-  var doInsert = function (url) {
+  this.processFile(file, function (url, extra) {
     // A URL pode vir do callback de upload do integrador: valida o protocolo.
     // data: só para formatos raster (SVG pode carregar script).
-    if (!editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
+    var img = editor._buildImage(url, $.extend({ alt: '' }, extra));
+    if (!img) {
       editor.notify('O endereço da imagem foi recusado por segurança.', { type: 'error' });
       return;
     }
@@ -5096,43 +5989,160 @@ ImagePlugin.prototype.insertImage = function (file) {
     if (self.savedRange) {
       editor.selection.setRange(self.savedRange);
     }
-    
-    // Cria o elemento img
-    var img = document.createElement('img');
-    img.src = url;
-    img.setAttribute('alt', '');
-    
+
     editor.history.save();
-    self.rangeFormatter.insertNode(img, false);
+    self.rangeFormatter.insertNode(document.importNode(img, true), false);
     editor.history.save();
-    
+
+    // Várias imagens (colar/soltar) entram uma depois da outra
+    self.savedRange = editor.selection.isInsideEditor() ? editor.selection.getRange() : null;
+
     editor.trigger('change');
-  };
+  });
+};
+
+/**
+ * Valida o arquivo e devolve a URL final: a do uploadImage ou, sem ele,
+ * um data: reduzido para imageMaxWidth.
+ * @param {File} file
+ * @param {function(string, Object)} done - recebe a URL e os atributos que o
+ *   integrador passou em done(url, { alt, width }) (ou null)
+ * @param {function(string)} [fail]
+ */
+ImagePlugin.prototype.processFile = function (file, done, fail) {
+  var editor = this.editor;
+  var options = editor.options;
+  var uploadFn = options.uploadImage;
+
+  function error(message) {
+    editor.notify(message, { type: 'error' });
+    if (fail) fail(message);
+  }
+
+  if (!file || ImagePlugin.ACCEPTED_TYPES.indexOf(file.type) === -1) {
+    error('Formato de imagem não suportado. Use PNG, JPG, GIF, WebP ou AVIF.');
+    return;
+  }
+
+  if (options.maxImageSize && file.size > options.maxImageSize) {
+    error('A imagem tem ' + ImagePlugin.formatSize(file.size) + '. O máximo é ' + ImagePlugin.formatSize(options.maxImageSize) + '.');
+    return;
+  }
 
   if (uploadFn && typeof uploadFn === 'function') {
     editor.notify('Enviando imagem…', { timeout: 0 });
     var finished = false;
-    uploadFn(file, function (url, error) {
+    uploadFn(file, function (url, extra) {
       if (finished) return;
       finished = true;
-      if (error || !url) {
-        editor.notify(typeof error === 'string' ? error : 'Não foi possível enviar a imagem.', { type: 'error' });
+      // done(null, 'mensagem') no erro; done(url) ou done(url, { alt, width }) no sucesso
+      if (!url) {
+        error(typeof extra === 'string' ? extra : 'Não foi possível enviar a imagem.');
         return;
       }
       editor.notify('');
-      doInsert(url);
+      done(url, $.isPlainObject(extra) ? extra : null);
     }, editor);
     return;
   }
 
   var reader = new FileReader();
   reader.onerror = function () {
-    editor.notify('Não foi possível ler a imagem.', { type: 'error' });
+    error('Não foi possível ler a imagem.');
   };
   reader.onload = function (e) {
-    ImagePlugin.downscale(e.target.result, file.type, options.imageMaxWidth, doInsert);
+    ImagePlugin.downscale(e.target.result, file.type, options.imageMaxWidth, function (url) { done(url, null); });
   };
   reader.readAsDataURL(file);
+};
+
+/**
+ * Envia pelo uploadImage as imagens em data: de um HTML que acabou de ser
+ * colado ou solto e troca o src delas pela URL devolvida.
+ * Só age com uploadPastedImages: true e uploadImage configurado.
+ * @param {string} html - o HTML inserido
+ */
+ImagePlugin.prototype.uploadEmbeddedImages = function (html) {
+  var self = this;
+  var editor = this.editor;
+  if (!editor.options.uploadPastedImages || typeof editor.options.uploadImage !== 'function') return;
+
+  var sources = [];
+  var imgs = HtmlSanitizer.parseInert(html).querySelectorAll('img[src^="data:image/"]');
+  for (var i = 0; i < imgs.length; i++) {
+    var src = imgs[i].getAttribute('src');
+    if (sources.indexOf(src) === -1) sources.push(src);
+  }
+
+  $.each(sources, function (n, src) {
+    var file = ImagePlugin.dataUrlToFile(src, 'imagem-colada-' + (n + 1));
+    if (!file) return;
+    self.processFile(file, function (url, extra) {
+      if (!editor.sanitizer.isSafeUrl(url, 'img', 'src')) return;
+      var live = editor.$content.find('img').filter(function () { return this.getAttribute('src') === src; });
+      if (!live.length) return;
+      editor.history.save();
+      live.each(function () {
+        this.setAttribute('src', url);
+        for (var name in extra || {}) {
+          if (extra.hasOwnProperty(name) && name !== 'src' && extra[name] !== null && extra[name] !== undefined) this.setAttribute(name, extra[name]);
+        }
+      });
+      editor.history.save();
+      editor.trigger('change');
+    });
+  });
+};
+
+/** Converte data:image/...;base64 em File (null se não for possível). */
+ImagePlugin.dataUrlToFile = function (dataUrl, name) {
+  var match = /^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i.exec(dataUrl);
+  if (!match) return null;
+  try {
+    var binary = atob(match[2].replace(/\s/g, ''));
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var type = match[1].toLowerCase();
+    var ext = type.split('/')[1].replace('jpeg', 'jpg').replace(/\+.*/, '');
+    return new File([bytes], name + '.' + ext, { type: type });
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * Arquivos de imagem de uma área de transferência ou de um drop.
+ * @param {DataTransfer} dt
+ * @returns {File[]}
+ */
+ImagePlugin.imageFiles = function (dt) {
+  var files = [];
+  if (!dt) return files;
+  var i;
+  if (dt.files && dt.files.length) {
+    for (i = 0; i < dt.files.length; i++) {
+      if (/^image\//.test(dt.files[i].type)) files.push(dt.files[i]);
+    }
+  } else if (dt.items) {
+    for (i = 0; i < dt.items.length; i++) {
+      if (dt.items[i].kind === 'file' && /^image\//.test(dt.items[i].type)) {
+        var f = dt.items[i].getAsFile();
+        if (f) files.push(f);
+      }
+    }
+  }
+  return files;
+};
+
+/**
+ * Indica se o HTML colado é só uma imagem (ex.: "copiar imagem" no
+ * navegador). Word e Excel também mandam um PNG junto com o HTML, e nesse
+ * caso o HTML é que vale.
+ */
+ImagePlugin.isOnlyImage = function (html) {
+  if (!html) return true;
+  var body = HtmlSanitizer.parseInert(html);
+  return body.querySelectorAll('img').length <= 1 && !body.querySelector('table') && !$.trim(body.textContent);
 };
 
 ImagePlugin.formatSize = function (bytes) {
@@ -5465,6 +6475,11 @@ CodeViewPlugin.prototype.init = function () {
   });
 };
 
+/** Indica se o código foi alterado desde que o code view foi aberto. */
+CodeViewPlugin.prototype.isModified = function () {
+  return this.$textarea.val() !== this.shownCode;
+};
+
 CodeViewPlugin.prototype.formatHtml = function (html) {
   var escaped = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // Regex que busca tudo que estiver entre &lt; e &gt; para pintar de amarelo
@@ -5573,13 +6588,14 @@ CodeViewPlugin.prototype.toggle = function () {
   var $codeViewBtn = this.editor.$toolbar.find('[data-name="codeview"]');
 
   if (this.active) {
-    // Lê direto do conteúdo: getContent() já considera o code view ativo
-    var html = this.editor.$content.html();
-    
+    // Lê do conteúdo com o código protegido (<weaver-raw>) já restaurado
+    var html = WysiwygEditor.cleanOutput(this.editor.$content.html());
+
     // Aplica a formatação em cascata inteligente no HTML
     html = this.beautifyHtml(html);
 
     this.$textarea.val(html);
+    this.shownCode = this.$textarea.val();
     this.updateView();
 
     this.editor.$content.hide();
@@ -5588,11 +6604,14 @@ CodeViewPlugin.prototype.toggle = function () {
     this.editor.$toolbar.find('button').not($codeViewBtn).prop('disabled', true);
     $codeViewBtn.addClass('active');
   } else {
-    var val = this.$textarea.val();
-    this.editor.history.save();
-    this.editor.setContent(val); // setContent sanitiza
-    this.editor.history.save();
-    this.editor.trigger('change');
+    // Código não alterado: o conteúdo fica como estava (e o HTML original
+    // continua valendo no getContent)
+    if (this.isModified()) {
+      this.editor.history.save();
+      this.editor._loadContent(this.$textarea.val()); // sanitiza
+      this.editor.history.save();
+      this.editor.trigger('change');
+    }
     this.$wrapper.hide();
     this.editor.$content.show();
     

@@ -13,14 +13,30 @@
     this.init();
   }
 
+  /** Versão do editor (a mesma do package.json e do tag no GitHub). */
+  Editor.VERSION = '1.1.0';
+
   Editor.instanceCount = 0;
+
+  /** Botões registrados para todos os editores da página (registerButton). */
+  Editor.buttons = {};
+
+  /**
+   * Registra um botão de toolbar para todos os editores. Use o nome dele
+   * na opção `toolbar`. Formato igual ao da opção `buttons`.
+   * @param {string} name
+   * @param {Object} def - { icon|html|text, title, action(editor, $button), isActive(editor) }
+   */
+  Editor.registerButton = function (name, def) {
+    Editor.buttons[name] = def;
+  };
 
   /**
    * Opções que são listas ou mapas SUBSTITUEM o padrão em vez de serem fundidas.
    * Com $.extend(true), arrays eram mesclados por posição: pedir só
    * [['font', ['bold']]] gerava a toolbar padrão inteira com 'redo' no meio.
    */
-  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources'];
+  Editor.REPLACE_OPTIONS = ['toolbar', 'plugins', 'extraPlugins', 'fontNames', 'previewCss', 'allowedTags', 'allowedAttributes', 'allowedStyles', 'allowedIframeSources', 'forbiddenTags'];
 
   Editor.mergeOptions = function (defaults, options) {
     var merged = $.extend(true, {}, defaults);
@@ -71,14 +87,16 @@
   };
 
   Editor.prototype.buildLayout = function () {
-    this.$container = $('<div class="wysiwyg-editor border border-gray-300 rounded-md shadow-sm flex flex-col bg-white font-sans text-gray-800 relative"/>');
+    // Borda, fundo, cor e fonte da raiz vêm das variáveis do tema (base-styles.js)
+    this.$container = $('<div class="wysiwyg-editor"/>');
+    this.setTheme(this.options.theme);
     this.$toolbar = $('<div class="editor-toolbar flex flex-wrap gap-1 p-2 border-b border-gray-200 rounded-t-md bg-gray-50 items-center z-10" role="toolbar" aria-label="Ferramentas de formatação"/>');
     
     // Configurações herdadas na inicialização do plugin
     var minHeight = this.options.height ? this.options.height + 'px' : '300px';
     var placeholder = this.options.placeholder || this.$el.attr('placeholder') || 'Digite aqui...';
 
-    this.$content = $('<div contenteditable="true" class="editor-content p-4 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto prose max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>')
+    this.$content = $('<div contenteditable="true" class="editor-content p-4 outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 overflow-y-auto max-w-none w-full rounded-b-md" role="textbox" aria-multiline="true" aria-label="Editor de conteúdo"/>')
       .css('min-height', minHeight)
       .attr('data-placeholder', placeholder);
 
@@ -138,6 +156,134 @@
     this.history = new HistoryManager(this);
 
     this.history.init();
+
+    this.rangeFormatter = new RangeFormatter(this);
+  };
+
+  // =========================
+  // INSERÇÃO E SELEÇÃO (API pública)
+  // =========================
+
+  /**
+   * Guarda a posição do cursor/seleção, se estiver dentro do editor.
+   * Use antes de abrir um modal que tira o foco do editor.
+   * @returns {boolean} true se havia seleção no editor
+   */
+  Editor.prototype.saveSelection = function () {
+    var saved = this.selection.isInsideEditor() ? this.selection.serialize() : null;
+    if (saved) this._savedSelection = saved;
+    return !!saved;
+  };
+
+  /**
+   * Foca o editor e restaura a seleção salva (por saveSelection ou, na
+   * falta dela, a última antes de o editor perder o foco). Sem nenhuma,
+   * coloca o cursor no fim do conteúdo.
+   * @returns {boolean} true se uma seleção salva foi restaurada
+   */
+  Editor.prototype.restoreSelection = function () {
+    var root = this.$content[0];
+    var saved = this._savedSelection || this._blurSelection;
+
+    root.focus();
+    if (saved && this.selection.deserialize(saved)) return true;
+
+    var range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    this.selection.setRange(range);
+    return false;
+  };
+
+  /** Foca a área de edição, mantendo a seleção que havia. */
+  Editor.prototype.focus = function () {
+    if (this.selection.isInsideEditor()) {
+      this.$content[0].focus();
+    } else {
+      this.restoreSelection();
+    }
+  };
+
+  /**
+   * Insere HTML (sanitizado) na seleção salva, como um passo de desfazer.
+   * @param {string} html
+   * @returns {boolean} false se não havia nada para inserir
+   */
+  Editor.prototype.insertHTML = function (html) {
+    this.restoreSelection();
+    this.history.save();
+    var inserted = this.rangeFormatter.insertHTML(html);
+    this._savedSelection = null;
+    if (!inserted) return false;
+
+    this.history.save();
+    this.updateToolbar();
+    this.trigger('change');
+    return true;
+  };
+
+  /**
+   * Insere uma imagem na seleção salva.
+   * @param {string} url - http(s), relativa ou data:image (PNG, JPG, GIF, WebP, AVIF)
+   * @param {Object} [attrs] - atributos do <img> (alt, style, width...)
+   * @returns {boolean} false se a URL for recusada
+   */
+  Editor.prototype.insertImage = function (url, attrs) {
+    var img = this._buildImage(url, attrs);
+    return img ? this.insertHTML(img.outerHTML) : false;
+  };
+
+  /**
+   * Imagem selecionada (clicada) no editor, ou null.
+   * @returns {HTMLImageElement|null}
+   */
+  Editor.prototype.getSelectedImage = function () {
+    var plugin = this.getPlugin('ImagePlugin');
+    return plugin && plugin.activeImage && this.$content[0].contains(plugin.activeImage) ? plugin.activeImage : null;
+  };
+
+  /**
+   * Troca o src de uma imagem do editor, mantendo estilo, alt e
+   * alinhamento. Um passo de desfazer.
+   * @param {HTMLImageElement} img
+   * @param {string} url
+   * @param {Object} [attrs] - atributos a aplicar (null remove o atributo)
+   * @returns {boolean} false se a URL for recusada ou a imagem não estiver no editor
+   */
+  Editor.prototype.replaceImage = function (img, url, attrs) {
+    if (!img || !this.$content[0].contains(img) || !url || !this.sanitizer.isSafeUrl(url, 'img', 'src')) return false;
+
+    this.history.save();
+    img.setAttribute('src', url);
+    for (var name in attrs || {}) {
+      if (!attrs.hasOwnProperty(name) || name === 'src' || /^on/i.test(name)) continue;
+      if (attrs[name] === null) {
+        img.removeAttribute(name);
+      } else {
+        img.setAttribute(name, attrs[name]);
+      }
+    }
+    this.history.save();
+
+    var plugin = this.getPlugin('ImagePlugin');
+    if (plugin && plugin.activeImage === img) plugin.positionToolbar();
+    this.trigger('change');
+    return true;
+  };
+
+  /** @private Cria o <img> num documento inerte; null se a URL for recusada. */
+  Editor.prototype._buildImage = function (url, attrs) {
+    if (!url || !this.sanitizer.isSafeUrl(url, 'img', 'src')) return null;
+
+    var doc = document.implementation.createHTMLDocument('');
+    var img = doc.createElement('img');
+    var all = $.extend({}, this.options.imageDefaults, attrs);
+    for (var name in all) {
+      if (!all.hasOwnProperty(name) || all[name] === null || all[name] === undefined || name === 'src') continue;
+      img.setAttribute(name, all[name]);
+    }
+    img.setAttribute('src', url);
+    return img;
   };
 
   // =========================
@@ -186,7 +332,19 @@
         }
       }
 
+      // Sem o botão `image` (ex.: gerenciador de imagens próprio), o plugin
+      // ainda é preciso para colar prints, redimensionar e trocar imagens
+      if ((this.options.uploadImage || this.options.imageToolbar) && activeOptionalPlugins.indexOf(window.ImagePlugin) === -1) {
+        activeOptionalPlugins.push(window.ImagePlugin);
+      }
+
       plugins = corePlugins.concat(activeOptionalPlugins).filter(Boolean);
+    }
+
+    // extraPlugins soma aos plugins (automáticos ou da opção `plugins`)
+    var extra = this.options.extraPlugins || [];
+    for (var x = 0; x < extra.length; x++) {
+      if (extra[x] && plugins.indexOf(extra[x]) === -1) plugins = plugins.concat([extra[x]]);
     }
 
     for (var i = 0; i < plugins.length; i++) {
@@ -380,6 +538,13 @@
       self.updateToolbar();
     });
 
+    // Lembra onde estava o cursor quando o foco sai (ex.: para um modal),
+    // para insertHTML/insertImage inserirem no lugar certo
+    this.$content.on('blur' + this.ns, function () {
+      var saved = self.selection.serialize();
+      if (saved) self._blurSelection = saved;
+    });
+
     // Alt+F10 leva o foco para a barra de ferramentas (padrão de editores)
     this.$content.on('keydown' + this.ns, function (e) {
       if (e.altKey && e.key === 'F10') {
@@ -407,6 +572,22 @@
         self.$content[0].focus();
       }
     });
+  };
+
+  Editor.THEMES = ['light', 'dark', 'auto'];
+
+  /**
+   * Troca o tema do editor.
+   * - 'light' ou 'dark': fixa o tema, ignorando a página;
+   * - 'auto': escuro quando o sistema está em modo escuro (ou há .dark num ancestral);
+   * - sem valor: segue a classe .dark num ancestral (ex.: <html class="dark">).
+   * @param {string} [theme]
+   */
+  Editor.prototype.setTheme = function (theme) {
+    if (Editor.THEMES.indexOf(theme) === -1) theme = null;
+    this.options.theme = theme;
+    if (theme) this.$container.attr('data-weaver-theme', theme);
+    else this.$container.removeAttr('data-weaver-theme');
   };
 
   /**
@@ -454,23 +635,44 @@
     // uma barreira de segurança, pois o POST pode ser forjado.
 
     // Com o code view aberto, o conteúdo vigente é o que está no código
-    // (antes, enviar o formulário nesse modo descartava as edições)
-    if (this.codeView && this.codeView.active) {
+    // (antes, enviar o formulário nesse modo descartava as edições).
+    // Código não alterado: vale o conteúdo do editor (e o HTML original).
+    if (this.codeView && this.codeView.active && this.codeView.isModified()) {
       return this.sanitize(this.codeView.$textarea.val());
     }
 
-    return Editor.cleanOutput(this.$content.html());
+    var html = Editor.cleanOutput(this.$content.html());
+
+    // Nada foi editado desde o carregamento: devolve o HTML original byte a
+    // byte (aspas, entidades, ordem de atributos e formatação do CSS)
+    if (this._source && html === this._source.dom) {
+      return this._source.html;
+    }
+
+    return html;
+  };
+
+  /**
+   * Indica se o conteúdo continua igual ao último carregado por setContent
+   * (ou pelo textarea), ou seja, se o usuário ainda não editou nada.
+   * @returns {boolean}
+   */
+  Editor.prototype.isPristine = function () {
+    return !!this._source && Editor.cleanOutput(this.$content.html()) === this._source.dom;
   };
 
   /**
    * Remove do HTML final os estados visuais do editor (imagem selecionada,
-   * marcadores), que não devem ser salvos no conteúdo.
+   * marcadores) e devolve o código protegido (<weaver-raw>, atributos
+   * renomeados) ao original.
    */
   Editor.cleanOutput = function (html) {
     if (html.indexOf('weaver-') === -1) return html;
 
-    var holder = document.createElement('div');
-    holder.innerHTML = html;
+    // Documento inerte: o código restaurado (onerror, <script>) não executa
+    var holder = HtmlSanitizer.parseInert(html);
+
+    HtmlSanitizer.unprotect(holder);
 
     var states = holder.querySelectorAll('.weaver-selected');
     for (var i = 0; i < states.length; i++) {
@@ -536,7 +738,26 @@
     return null;
   };
 
+  /**
+   * Troca todo o conteúdo do editor. O HTML é guardado: enquanto nada for
+   * editado, getContent() devolve exatamente esta string (desde que a
+   * sanitização não tenha removido nada dela).
+   * @param {string} html
+   */
   Editor.prototype.setContent = function (html) {
+    html = HtmlSanitizer.toStr(html);
+    this._loadContent(html);
+
+    var dom = Editor.cleanOutput(this.$content.html());
+    this._source = HtmlSanitizer.serialize(html) === dom ? { html: html, dom: dom } : null;
+  };
+
+  /**
+   * Carrega HTML no editor sem mudar o HTML de referência (usado pelo
+   * desfazer/refazer e pelo code view).
+   * @private
+   */
+  Editor.prototype._loadContent = function (html) {
     // Sempre sanitiza e insere nós vindos de um documento inerte: nenhum
     // <script> ou handler (onerror, onload...) chega a executar.
     var content = this.$content[0];
@@ -546,6 +767,7 @@
     }
 
     content.appendChild(this.sanitizer.toFragment(html));
+    this.loadContentFonts();
   };
 
   Editor.prototype.updateToolbar = function () {
@@ -661,6 +883,81 @@
     document.head.appendChild(fontLink);
   };
 
+  /** Fontes do sistema e famílias genéricas: nunca são pedidas ao Google. */
+  Editor.LOCAL_FONTS = ['arial', 'helvetica', 'helvetica neue', 'courier', 'courier new', 'georgia', 'tahoma', 'times',
+    'times new roman', 'verdana', 'trebuchet ms', 'impact', 'comic sans ms', 'segoe ui', 'calibri', 'cambria',
+    'consolas', 'menlo', 'monaco', 'lucida console', 'lucida sans unicode', 'palatino linotype', 'garamond',
+    'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui', 'ui-serif', 'ui-sans-serif',
+    'ui-monospace', 'ui-rounded', 'emoji', 'math', 'inherit', 'initial', 'unset', 'revert', '-apple-system',
+    'blinkmacsystemfont'];
+
+  /** Famílias já pedidas nesta página (compartilhado entre os editores). */
+  Editor.loadedFonts = {};
+
+  /**
+   * URL do Google Fonts para uma família, ou null se ela é local ou tem
+   * caracteres que não existem em nomes do Google (evita montar URL com
+   * texto vindo do conteúdo).
+   * @param {string} name ex.: 'Open Sans', "'Lobster', cursive"
+   */
+  Editor.googleFontUrl = function (name) {
+    var family = Editor.primaryFontFamily(name);
+    if (!family || !/^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/.test(family)) return null;
+    if ($.inArray(family.toLowerCase(), Editor.LOCAL_FONTS) !== -1) return null;
+    return 'https://fonts.googleapis.com/css2?family=' + family.replace(/ /g, '+') + '&display=swap';
+  };
+
+  /** Primeira família de um valor de font-family, sem aspas. */
+  Editor.primaryFontFamily = function (value) {
+    var first = String(value || '').split(',')[0];
+    return $.trim(first.replace(/^\s*["']|["']\s*$/g, ''));
+  };
+
+  /**
+   * Carrega uma família do Google Fonts sob demanda (uma vez por página).
+   * Não faz nada com `googleFonts: false`.
+   * @returns {boolean} true se a família foi (ou já estava) pedida
+   */
+  Editor.prototype.loadFont = function (name) {
+    if (!this.options.googleFonts) return false;
+    var url = Editor.googleFontUrl(name);
+    if (!url) return false;
+    if (Editor.loadedFonts[url]) return true;
+
+    Editor.loadedFonts[url] = true;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.referrerPolicy = 'no-referrer';
+    link.href = url;
+    link.setAttribute('data-weaver-font', Editor.primaryFontFamily(name));
+    document.head.appendChild(link);
+    return true;
+  };
+
+  /**
+   * Famílias usadas no conteúdo (style="font-family" e <font face>).
+   * @returns {string[]}
+   */
+  Editor.prototype.contentFonts = function () {
+    var found = {};
+    var list = [];
+    this.$content.find('[style*="font-family"], font[face]').each(function () {
+      var family = Editor.primaryFontFamily(this.style.fontFamily || this.getAttribute('face'));
+      if (family && !found[family.toLowerCase()]) {
+        found[family.toLowerCase()] = true;
+        list.push(family);
+      }
+    });
+    return list;
+  };
+
+  /** Carrega as fontes usadas no conteúdo, para o editor exibi-las. */
+  Editor.prototype.loadContentFonts = function () {
+    if (!this.options.googleFonts) return;
+    var fonts = this.contentFonts();
+    for (var i = 0; i < fonts.length; i++) this.loadFont(fonts[i]);
+  };
+
   Editor.prototype.injectStyles = function () {
     this.loadIcons();
     this.loadFonts();
@@ -672,31 +969,35 @@
       '.weaver-icon-fallback { font-size: 11px; line-height: 1; padding: 0 2px; white-space: nowrap; }\n' +
       '.wysiwyg-editor .editor-toolbar-group { flex-wrap: wrap; }\n' +
       '.wysiwyg-editor button:has(.weaver-icon-fallback) { width: auto; min-width: 32px; }\n' +
-      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid #2563eb !important; outline-offset: 1px; }\n' +
-      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; background: #eff6ff; color: #1e40af; }\n' +
-      '.wysiwyg-editor .editor-notice[data-type="error"] { background: #fef2f2; color: #b91c1c; }\n' +
+      '.wysiwyg-editor button:focus-visible, .wysiwyg-editor [role="menuitem"]:focus-visible, .wysiwyg-editor .editor-table-grid:focus-visible, .wysiwyg-editor input:focus-visible, .wysiwyg-editor textarea:focus-visible { outline: 2px solid var(--weaver-accent) !important; outline-offset: 1px; }\n' +
+      '.wysiwyg-editor .editor-notice { padding: 6px 12px; font-size: 13px; border-bottom: 1px solid var(--weaver-border-soft); background: var(--weaver-notice-bg); color: var(--weaver-notice-fg); }\n' +
+      '.wysiwyg-editor .editor-notice[data-type="error"] { background: var(--weaver-error-bg); color: var(--weaver-error-fg); }\n' +
       '.wysiwyg-editor .editor-image-resize { position: absolute; width: 12px; height: 12px; background: #2563eb; border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; z-index: 51; touch-action: none; box-shadow: 0 0 0 1px #2563eb; }\n' +
       '.wysiwyg-editor .editor-image-alt { display: flex; gap: 4px; align-items: center; }\n' +
-      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-image-alt input { height: 32px; width: 180px; padding: 0 8px; border: 1px solid var(--weaver-border); border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-search { position: sticky; top: 0; z-index: 1; padding: 6px; background: var(--weaver-menu-bg); border-bottom: 1px solid var(--weaver-border-soft); }\n' +
+      '.wysiwyg-editor .editor-dropdown-search-input { box-sizing: border-box; width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--weaver-border); border-radius: 4px; font-size: 13px; }\n' +
+      '.wysiwyg-editor .editor-dropdown-empty { padding: 8px 12px; font-size: 13px; color: var(--weaver-muted); }\n' +
+      '.wysiwyg-editor weaver-raw { display: inline-block; margin: 0 2px; padding: 0 6px; border: 1px dashed var(--weaver-placeholder); border-radius: 3px; background: var(--weaver-hover-strong); color: var(--weaver-fg-soft); font: 12px/1.6 Menlo, Monaco, Consolas, monospace; cursor: default; user-select: none; vertical-align: middle; }\n' +
       '.editor-fullscreen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 99999; display: flex; flex-direction: column; border: none !important; border-radius: 0 !important; }\n' +
       '.editor-fullscreen .editor-content { flex: 1; overflow-y: auto; }\n' +
       '.editor-show-blocks p, .editor-show-blocks div, .editor-show-blocks ul, .editor-show-blocks ol, .editor-show-blocks blockquote, .editor-show-blocks table {\n' +
-      '  border: 1px dashed #adb5bd !important; padding: 2px;\n' +
+      '  border: 1px dashed var(--weaver-blocks) !important; padding: 2px;\n' +
       '}\n' +
       '.editor-content:empty:before {\n' +
       '  content: attr(data-placeholder);\n' +
-      '  color:#999;\n' +
+      '  color: var(--weaver-placeholder);\n' +
       '}\n' +
       '.editor-preview-frame {\n' +
       '  width:100%;\n' +
       '  height:400px;\n' +
-      '  border:1px solid #ddd;\n' +
+      '  border:1px solid var(--weaver-border);\n' +
       '  background:#fff;\n' +
       '  transition: width 0.3s ease; \n' +
       '}\n' +
       '.editor-content.drag-over {\n' +
-      '  background: #f0f8ff; \n' +
-      '  border: 1px dashed #007bff; \n' +
+      '  background: var(--weaver-drop-bg); \n' +
+      '  border: 1px dashed var(--weaver-accent); \n' +
       '}\n' +
       '.img-resize-wrapper {\n' +
       '  display: inline-block;\n' +
@@ -724,7 +1025,7 @@
       '  display: none;\n' +
       '  width: 100%;\n' +
       '  height: 400px;\n' +
-      '  background: #363636;\n' +
+      '  background: var(--weaver-code-bg);\n' +
       '  position: relative;\n' +
       '  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;\n' +
       '  font-size: 14px;\n' +
@@ -738,9 +1039,9 @@
       '  width: 50px;\n' +
       '  padding: 15px 5px 15px 0;\n' +
       '  text-align: right;\n' +
-      '  color: #888;\n' +
-      '  background: #2c2c2c;\n' +
-      '  border-right: 1px solid #555;\n' +
+      '  color: var(--weaver-code-line);\n' +
+      '  background: var(--weaver-code-gutter);\n' +
+      '  border-right: 1px solid var(--weaver-code-border);\n' +
       '  box-sizing: border-box;\n' +
       '  overflow: hidden;\n' +
       '  user-select: none;\n' +
@@ -782,13 +1083,13 @@
       '  background: rgba(100, 150, 255, 0.3) !important;\n' +
       '}\n' +
       '.editor-codeview-highlight {\n' +
-      '  color: #e0e0e0;\n' +
+      '  color: var(--weaver-code-fg);\n' +
       '  z-index: 1;\n' +
       '  pointer-events: none;\n' +
       '  overflow: auto;\n' +
       '}\n' +
       '.editor-codeview-highlight .html-tag {\n' +
-      '  color: #f9eb26;\n' +
+      '  color: var(--weaver-code-tag);\n' +
       '}\n';
 
     // Estilos base (equivalentes às classes Tailwind usadas): o editor
@@ -809,6 +1110,17 @@
   // =========================
   Editor.defaults = {
     plugins: [],
+    // Plugins somados aos automáticos (sem desligar link, tabela, imagem...)
+    extraPlugins: [],
+    // Botões próprios: { nome: { icon|html|text, title, action(editor, $button), isActive(editor) } }
+    buttons: {},
+    // Atributos aplicados a toda imagem inserida (ex.: { style: 'width:100%;height:auto' })
+    imageDefaults: null,
+    // Botões extras na barra da imagem: [ { icon|html|text, title, action(editor, img) } ]
+    // ou { add: [...], remove: ['w25', 'original'] }
+    imageToolbar: null,
+    // Imagens em data: dentro do HTML colado/solto sobem pelo uploadImage
+    uploadPastedImages: false,
     toolbar: [
       ['history', ['undo', 'redo']],
       ['style', ['formatBlock', 'fontName', 'fontSize']],
@@ -819,8 +1131,14 @@
       ['view', ['preview', 'fullscreen', 'showBlocks', 'codeview']]
     ],
     fontNames: null,
+    // Campo de busca no menu de fontes: true, false ou 'auto' (mais de 20 fontes)
+    fontSearch: 'auto',
+    // Chamado ao aplicar uma fonte: function (fontName, editor) {}
+    onFontApply: null,
     placeholder: '',
     height: null,
+    // Tema: 'light', 'dark', 'auto' (segue o sistema) ou null (segue .dark na página)
+    theme: null,
     aiEndpoint: 'ai-api.php',
     onAiGenerate: null,
     // Ícones: versão fixa do Lucide. Para servir do seu domínio, aponte para

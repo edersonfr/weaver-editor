@@ -28,17 +28,35 @@ ImagePlugin.prototype.buildToolbar = function () {
   this.$toolbar = $('<div class="editor-image-toolbar absolute hidden bg-white border border-gray-200 p-1.5 rounded flex flex-row flex-nowrap w-max gap-1 z-50 shadow-lg" role="toolbar" aria-label="Ferramentas da imagem"></div>');
 
   var buttons = [
-    { label: '100%', title: 'Largura 100%', action: function() { self.resizeImage('100%'); } },
-    { label: '50%', title: 'Largura 50%', action: function() { self.resizeImage('50%'); } },
-    { label: '25%', title: 'Largura 25%', action: function() { self.resizeImage('25%'); } },
-    { label: 'Original', title: 'Tamanho Original', action: function() { self.setOriginalSize(); } },
-    { label: '<i data-lucide="align-left"></i>', title: 'Flutuar à Esquerda', action: function() { self.setFloat('left'); } },
-    { label: '<i data-lucide="align-center"></i>', title: 'Centralizar', action: function() { self.setFloat('center'); } },
-    { label: '<i data-lucide="align-right"></i>', title: 'Flutuar à Direita', action: function() { self.setFloat('right'); } },
-    { label: '<i data-lucide="align-justify"></i>', title: 'Remover Flutuação', action: function() { self.removeFloat(); } },
+    { label: '100%', title: 'Largura 100%', name: 'w100', action: function() { self.resizeImage('100%'); } },
+    { label: '50%', title: 'Largura 50%', name: 'w50', action: function() { self.resizeImage('50%'); } },
+    { label: '25%', title: 'Largura 25%', name: 'w25', action: function() { self.resizeImage('25%'); } },
+    { label: 'Original', title: 'Tamanho Original', name: 'original', action: function() { self.setOriginalSize(); } },
+    { label: '<i data-lucide="align-left"></i>', title: 'Flutuar à Esquerda', name: 'floatLeft', action: function() { self.setFloat('left'); } },
+    { label: '<i data-lucide="align-center"></i>', title: 'Centralizar', name: 'center', action: function() { self.setFloat('center'); } },
+    { label: '<i data-lucide="align-right"></i>', title: 'Flutuar à Direita', name: 'floatRight', action: function() { self.setFloat('right'); } },
+    { label: '<i data-lucide="align-justify"></i>', title: 'Remover Flutuação', name: 'noFloat', action: function() { self.removeFloat(); } },
     { label: 'Alt', title: 'Texto alternativo', name: 'alt', action: function() { self.toggleAltEditor(); } },
-    { label: '<i data-lucide="trash-2"></i>', title: 'Remover Imagem', action: function() { self.removeImage(); } }
+    { label: '<i data-lucide="trash-2"></i>', title: 'Remover Imagem', name: 'remove', action: function() { self.removeImage(); } }
   ];
+
+  // imageToolbar: lista de botões extras, ou { add: [...], remove: ['w25'] }
+  var custom = this.editor.options.imageToolbar || {};
+  if ($.isArray(custom)) custom = { add: custom };
+  var removed = custom.remove || [];
+  buttons = $.grep(buttons, function (b) { return removed.indexOf(b.name) === -1; });
+
+  $.each(custom.add || [], function (i, def) {
+    var normalized = ToolbarPlugin.normalizeButton(def.name || 'custom' + i, def);
+    buttons.push({
+      label: normalized.label,
+      title: normalized.title,
+      name: normalized.name,
+      action: function () {
+        if (self.activeImage) def.action(self.editor, self.activeImage);
+      }
+    });
+  });
 
   $.each(buttons, function(i, btnData) {
     var $btn = $('<button type="button" class="flex items-center justify-center min-w-[32px] h-8 px-2 border border-gray-300 bg-white rounded text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none [&>svg]:w-4 [&>svg]:h-4 text-xs font-medium"></button>')
@@ -378,9 +396,10 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
 
     if (hasFiles(e)) {
       self.savedRange = self.editor.selection.isInsideEditor() ? self.editor.selection.getRange() : null;
-      var files = dt.files;
-      if (files && files.length > 0) {
-        self.insertImage(files[0]); // valida formato e tamanho
+      var files = ImagePlugin.imageFiles(dt);
+      if (!files.length && dt.files && dt.files.length) files = [dt.files[0]]; // insertImage avisa do formato
+      for (var f = 0; f < files.length; f++) {
+        self.insertImage(files[f]); // valida formato e tamanho
       }
       return;
     }
@@ -394,6 +413,7 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
     self.rangeFormatter.insertHTML(html || self.editor.sanitizer.textToHtml(text));
     self.editor.history.save();
     self.editor.trigger('change');
+    if (html) self.uploadEmbeddedImages(html);
   });
 };
 
@@ -408,23 +428,12 @@ ImagePlugin.prototype.bindDragAndDrop = function () {
 ImagePlugin.prototype.insertImage = function (file) {
   var self = this;
   var editor = this.editor;
-  var options = editor.options;
-  var uploadFn = options.uploadImage;
 
-  if (!file || ImagePlugin.ACCEPTED_TYPES.indexOf(file.type) === -1) {
-    editor.notify('Formato de imagem não suportado. Use PNG, JPG, GIF, WebP ou AVIF.', { type: 'error' });
-    return;
-  }
-
-  if (options.maxImageSize && file.size > options.maxImageSize) {
-    editor.notify('A imagem tem ' + ImagePlugin.formatSize(file.size) + '. O máximo é ' + ImagePlugin.formatSize(options.maxImageSize) + '.', { type: 'error' });
-    return;
-  }
-
-  var doInsert = function (url) {
+  this.processFile(file, function (url, extra) {
     // A URL pode vir do callback de upload do integrador: valida o protocolo.
     // data: só para formatos raster (SVG pode carregar script).
-    if (!editor.sanitizer.isSafeUrl(url, 'img', 'src')) {
+    var img = editor._buildImage(url, $.extend({ alt: '' }, extra));
+    if (!img) {
       editor.notify('O endereço da imagem foi recusado por segurança.', { type: 'error' });
       return;
     }
@@ -433,43 +442,160 @@ ImagePlugin.prototype.insertImage = function (file) {
     if (self.savedRange) {
       editor.selection.setRange(self.savedRange);
     }
-    
-    // Cria o elemento img
-    var img = document.createElement('img');
-    img.src = url;
-    img.setAttribute('alt', '');
-    
+
     editor.history.save();
-    self.rangeFormatter.insertNode(img, false);
+    self.rangeFormatter.insertNode(document.importNode(img, true), false);
     editor.history.save();
-    
+
+    // Várias imagens (colar/soltar) entram uma depois da outra
+    self.savedRange = editor.selection.isInsideEditor() ? editor.selection.getRange() : null;
+
     editor.trigger('change');
-  };
+  });
+};
+
+/**
+ * Valida o arquivo e devolve a URL final: a do uploadImage ou, sem ele,
+ * um data: reduzido para imageMaxWidth.
+ * @param {File} file
+ * @param {function(string, Object)} done - recebe a URL e os atributos que o
+ *   integrador passou em done(url, { alt, width }) (ou null)
+ * @param {function(string)} [fail]
+ */
+ImagePlugin.prototype.processFile = function (file, done, fail) {
+  var editor = this.editor;
+  var options = editor.options;
+  var uploadFn = options.uploadImage;
+
+  function error(message) {
+    editor.notify(message, { type: 'error' });
+    if (fail) fail(message);
+  }
+
+  if (!file || ImagePlugin.ACCEPTED_TYPES.indexOf(file.type) === -1) {
+    error('Formato de imagem não suportado. Use PNG, JPG, GIF, WebP ou AVIF.');
+    return;
+  }
+
+  if (options.maxImageSize && file.size > options.maxImageSize) {
+    error('A imagem tem ' + ImagePlugin.formatSize(file.size) + '. O máximo é ' + ImagePlugin.formatSize(options.maxImageSize) + '.');
+    return;
+  }
 
   if (uploadFn && typeof uploadFn === 'function') {
     editor.notify('Enviando imagem…', { timeout: 0 });
     var finished = false;
-    uploadFn(file, function (url, error) {
+    uploadFn(file, function (url, extra) {
       if (finished) return;
       finished = true;
-      if (error || !url) {
-        editor.notify(typeof error === 'string' ? error : 'Não foi possível enviar a imagem.', { type: 'error' });
+      // done(null, 'mensagem') no erro; done(url) ou done(url, { alt, width }) no sucesso
+      if (!url) {
+        error(typeof extra === 'string' ? extra : 'Não foi possível enviar a imagem.');
         return;
       }
       editor.notify('');
-      doInsert(url);
+      done(url, $.isPlainObject(extra) ? extra : null);
     }, editor);
     return;
   }
 
   var reader = new FileReader();
   reader.onerror = function () {
-    editor.notify('Não foi possível ler a imagem.', { type: 'error' });
+    error('Não foi possível ler a imagem.');
   };
   reader.onload = function (e) {
-    ImagePlugin.downscale(e.target.result, file.type, options.imageMaxWidth, doInsert);
+    ImagePlugin.downscale(e.target.result, file.type, options.imageMaxWidth, function (url) { done(url, null); });
   };
   reader.readAsDataURL(file);
+};
+
+/**
+ * Envia pelo uploadImage as imagens em data: de um HTML que acabou de ser
+ * colado ou solto e troca o src delas pela URL devolvida.
+ * Só age com uploadPastedImages: true e uploadImage configurado.
+ * @param {string} html - o HTML inserido
+ */
+ImagePlugin.prototype.uploadEmbeddedImages = function (html) {
+  var self = this;
+  var editor = this.editor;
+  if (!editor.options.uploadPastedImages || typeof editor.options.uploadImage !== 'function') return;
+
+  var sources = [];
+  var imgs = HtmlSanitizer.parseInert(html).querySelectorAll('img[src^="data:image/"]');
+  for (var i = 0; i < imgs.length; i++) {
+    var src = imgs[i].getAttribute('src');
+    if (sources.indexOf(src) === -1) sources.push(src);
+  }
+
+  $.each(sources, function (n, src) {
+    var file = ImagePlugin.dataUrlToFile(src, 'imagem-colada-' + (n + 1));
+    if (!file) return;
+    self.processFile(file, function (url, extra) {
+      if (!editor.sanitizer.isSafeUrl(url, 'img', 'src')) return;
+      var live = editor.$content.find('img').filter(function () { return this.getAttribute('src') === src; });
+      if (!live.length) return;
+      editor.history.save();
+      live.each(function () {
+        this.setAttribute('src', url);
+        for (var name in extra || {}) {
+          if (extra.hasOwnProperty(name) && name !== 'src' && extra[name] !== null && extra[name] !== undefined) this.setAttribute(name, extra[name]);
+        }
+      });
+      editor.history.save();
+      editor.trigger('change');
+    });
+  });
+};
+
+/** Converte data:image/...;base64 em File (null se não for possível). */
+ImagePlugin.dataUrlToFile = function (dataUrl, name) {
+  var match = /^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i.exec(dataUrl);
+  if (!match) return null;
+  try {
+    var binary = atob(match[2].replace(/\s/g, ''));
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var type = match[1].toLowerCase();
+    var ext = type.split('/')[1].replace('jpeg', 'jpg').replace(/\+.*/, '');
+    return new File([bytes], name + '.' + ext, { type: type });
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * Arquivos de imagem de uma área de transferência ou de um drop.
+ * @param {DataTransfer} dt
+ * @returns {File[]}
+ */
+ImagePlugin.imageFiles = function (dt) {
+  var files = [];
+  if (!dt) return files;
+  var i;
+  if (dt.files && dt.files.length) {
+    for (i = 0; i < dt.files.length; i++) {
+      if (/^image\//.test(dt.files[i].type)) files.push(dt.files[i]);
+    }
+  } else if (dt.items) {
+    for (i = 0; i < dt.items.length; i++) {
+      if (dt.items[i].kind === 'file' && /^image\//.test(dt.items[i].type)) {
+        var f = dt.items[i].getAsFile();
+        if (f) files.push(f);
+      }
+    }
+  }
+  return files;
+};
+
+/**
+ * Indica se o HTML colado é só uma imagem (ex.: "copiar imagem" no
+ * navegador). Word e Excel também mandam um PNG junto com o HTML, e nesse
+ * caso o HTML é que vale.
+ */
+ImagePlugin.isOnlyImage = function (html) {
+  if (!html) return true;
+  var body = HtmlSanitizer.parseInert(html);
+  return body.querySelectorAll('img').length <= 1 && !body.querySelector('table') && !$.trim(body.textContent);
 };
 
 ImagePlugin.formatSize = function (bytes) {
