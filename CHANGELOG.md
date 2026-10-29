@@ -2,6 +2,12 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Cada versão tem um tag no GitHub (`v1.1.0`) e pode ser carregada pelo jsDelivr com a versão fixada (veja [Instalação](README.md#instalação)).
 
+## [Não lançado]
+
+### Correções
+
+- **Pré-visualização em branco ao reabrir:** no Chrome, a segunda abertura do preview ficava em branco, embora o conteúdo estivesse no iframe. Agora cada abertura usa um iframe novo.
+
 ## [1.1.0] - 2026-10-28
 
 Ajustes para o Weaver substituir o SunEditor em painéis administrativos. As novas opções são desligadas por padrão: o editor continua seguro e com a mesma aparência de antes, exceto pela área de edição sem a classe `prose` (veja "Mudanças").
