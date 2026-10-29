@@ -5,3 +5,5 @@ node_modules/
 /index.php
 /upload.php
 /uploads/
+# Arquivos de trabalho do taste-skill (inspeção do site)
+.taste-skill/
