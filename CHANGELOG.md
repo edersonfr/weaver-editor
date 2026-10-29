@@ -2,7 +2,7 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Cada versão tem um tag no GitHub (`v1.1.0`) e pode ser carregada pelo jsDelivr com a versão fixada (veja [Instalação](README.md#instalação)).
 
-## [Não lançado]
+## [1.1.1] - 2026-10-29
 
 ### Correções
 
@@ -35,5 +35,6 @@ Ajustes para o Weaver substituir o SunEditor em painéis administrativos. As nov
 
 Primeira versão pública, sem tag: editor com toolbar, tabelas, imagens, vídeos, code view, pré-visualização, assistente de IA, colar limpo do Word e do Google Docs, acessibilidade por teclado e sanitizador contra XSS.
 
+[1.1.1]: https://github.com/edersonfr/weaver-editor/releases/tag/v1.1.1
 [1.1.0]: https://github.com/edersonfr/weaver-editor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/edersonfr/weaver-editor/tree/f631df56c44ad9727548e9c2629d93557162870e
