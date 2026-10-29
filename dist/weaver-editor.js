@@ -4627,14 +4627,17 @@ PreviewPlugin.prototype.init = function () {
 };
 
 PreviewPlugin.prototype.build = function () {
+  this.$preview = this.createFrame();
+  this.editor.$container.append(this.$preview);
+};
+
+PreviewPlugin.prototype.createFrame = function () {
   // sandbox sem allow-scripts e sem allow-same-origin: o conteúdo é exibido,
   // mas nada nele executa nem acessa a página do editor (cookies, DOM, parent).
-  this.$preview = $('<iframe class="editor-preview-frame" title="Pré-visualização"/>')
+  return $('<iframe class="editor-preview-frame" title="Pré-visualização"/>')
     .attr('sandbox', 'allow-popups allow-popups-to-escape-sandbox')
     .attr('referrerpolicy', 'no-referrer')
     .hide();
-
-  this.editor.$container.append(this.$preview);
 };
 
 PreviewPlugin.prototype.bind = function () {
@@ -4686,6 +4689,13 @@ PreviewPlugin.prototype.enable = function () {
 
   // Segunda camada além do sandbox: CSP que proíbe qualquer script
   var csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
+
+  // Um iframe novo a cada abertura. O iframe com sandbox roda isolado, em
+  // outro processo; ao voltar de display:none com o mesmo srcdoc, o Chrome
+  // não o pintava de novo e o preview reabria em branco.
+  var $frame = this.createFrame();
+  this.$preview.replaceWith($frame);
+  this.$preview = $frame;
 
   // srcdoc em vez de document.write: com o sandbox sem allow-same-origin,
   // a página do editor não tem (nem precisa ter) acesso ao documento do iframe
