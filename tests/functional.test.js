@@ -1479,6 +1479,30 @@ test('APS: Tailwind da página com outra paleta não muda a aparência do editor
   assert.deepStrictEqual(content, { list: 'disc', h1: '700', prose: false });
 });
 
+test('Preview reaberto mostra o conteúdo (iframe novo a cada abertura)', async function () {
+  // No Chrome com janela, o iframe com sandbox que voltava de display:none com o
+  // mesmo srcdoc não era pintado de novo: a segunda abertura ficava em branco.
+  var page = await setup('<p>Texto</p><hr><ul><li>Item</li></ul>', { toolbar: [['view', ['preview']]] });
+  var result = await page.evaluate(function () {
+    var ed = window.$('#t').data('weaver');
+    var frames = [];
+    for (var i = 0; i < 2; i++) {
+      ed.exec('preview');
+      var $f = ed.$container.find('.editor-preview-frame');
+      frames.push({ el: $f[0], count: $f.length, visible: $f.is(':visible'), item: /<li>Item<\/li>/.test($f.attr('srcdoc')) });
+      ed.exec('closePreview');
+    }
+    return {
+      counts: [frames[0].count, frames[1].count],
+      visible: [frames[0].visible, frames[1].visible],
+      item: [frames[0].item, frames[1].item],
+      newFrame: frames[0].el !== frames[1].el,
+      contentBack: ed.$content.is(':visible')
+    };
+  });
+  assert.deepStrictEqual(result, { counts: [1, 1], visible: [true, true], item: [true, true], newFrame: true, contentBack: true });
+});
+
 test('APS: WysiwygEditor.VERSION é a versão do package.json', async function () {
   var page = await setup();
   var version = await page.evaluate(function () { return window.WysiwygEditor.VERSION; });

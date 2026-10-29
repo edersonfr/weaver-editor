@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Weaver Editor — editor de texto rico para jQuery</title>
-  <meta name="description" content="Editor HTML WYSIWYG leve e open source para jQuery. Transforma qualquer textarea em um editor completo, com sanitização contra XSS, colar do Word, imagens, tabelas e uso pelo teclado.">
+  <meta name="description" content="Editor HTML WYSIWYG leve e open source para jQuery. Transforma qualquer textarea em um editor completo, com sanitização contra XSS, colar do Word, imagens, tabelas, tema escuro e uso pelo teclado.">
   <link rel="canonical" href="https://edersonfr.github.io/weaver-editor/">
-  <meta name="theme-color" content="#1b2340">
+  <meta name="theme-color" content="#121a33">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <meta property="og:type" content="website">
@@ -20,13 +20,17 @@
   <meta property="og:locale" content="pt_BR">
   <meta name="twitter:card" content="summary_large_image">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/site.css">
+  <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
   <a class="skip" href="#conteudo">Pular para o conteúdo</a>
 
   <header class="site-header">
-    <div class="wrap">
+    <div class="bar">
       <a class="brand" href="#topo" aria-label="Weaver Editor, início">
         <svg aria-hidden="true" focusable="false" viewBox="0 0 24 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_1_37)">
@@ -59,7 +63,8 @@
 
       <nav class="site-nav" id="site-nav" aria-label="Principal">
         <ul>
-          <li><a href="#demonstracao">Demonstração</a></li>
+          <li><a href="#saida">O que sai</a></li>
+          <li><a href="#recursos">Recursos</a></li>
           <li><a href="#instalacao">Instalação</a></li>
           <li><a href="#documentacao">Documentação</a></li>
           <li><a href="https://github.com/edersonfr/weaver-editor">GitHub</a></li>
@@ -69,159 +74,196 @@
   </header>
 
   <main id="conteudo">
-    <section class="intro" id="topo">
-      <div class="wrap">
-        <h1>Um editor de texto rico que cabe em qualquer formulário.</h1>
-        <p class="lede">O Weaver transforma um <code>&lt;textarea&gt;</code> num editor completo com uma linha de jQuery. O HTML gerado continua indo no envio do formulário, já limpo contra XSS.</p>
+    <section class="hero" id="topo" aria-labelledby="hero-title">
+      <h1 class="hero-title lines" id="hero-title">
+        <span class="line"><span data-line style="--i:0">Seu textarea,</span></span>
+        <span class="line"><span data-line style="--i:1">agora um editor.</span></span>
+      </h1>
 
-        <div class="actions">
-          <a class="button button-primary" href="#instalacao">Instalar</a>
-          <a class="button button-quiet" href="weaver-editor.min.js" download>Baixar weaver-editor.min.js <small>(118 KB)</small></a>
+      <div class="hero-text">
+        <p class="hero-lead" data-rise style="--i:2">Uma linha de jQuery transforma o campo num editor completo. O HTML continua indo no envio do formulário, já limpo contra XSS.</p>
+        <div class="hero-actions" data-rise style="--i:3">
+          <a class="button" href="#instalacao">Instalar a versão 1.1.0</a>
+          <a class="text-link" href="weaver-editor.min.js" download>Baixar o arquivo</a>
         </div>
-
-        <dl class="facts">
-          <div><dt>com gzip, num único arquivo</dt><dd>30 KB</dd></div>
-          <div><dt>testes automáticos em navegador real</dt><dd>73</dd></div>
-          <div><dt>licença livre para uso comercial</dt><dd>MIT</dd></div>
-        </dl>
+        <p class="hero-facts" data-rise style="--i:4">Um arquivo de 141 KB (37 KB com gzip), só depende do jQuery, licença MIT e 127 testes num navegador real.</p>
       </div>
-    </section>
 
-    <section class="demo" id="demonstracao" aria-labelledby="demo-title">
-      <div class="wrap">
-        <h2 class="visually-hidden" id="demo-title">Demonstração</h2>
-        <div class="loom">
-          <label class="visually-hidden" for="weaver-demo">Texto de demonstração</label>
-          <textarea id="weaver-demo"><h2>Experimente aqui mesmo</h2>
-<p>Selecione um trecho e use a barra acima, ou os atalhos de sempre: <b>Ctrl+B</b>, <i>Ctrl+I</i> e <b>Ctrl+K</b> para links.</p>
+      <div class="stage shutter" id="demonstracao" aria-label="Demonstração">
+        <div class="stage-inner">
+          <div class="stage-editor" data-ui>
+            <label class="visually-hidden" for="weaver-demo">Texto de demonstração</label>
+            <textarea id="weaver-demo"><p><b>Experimente aqui mesmo.</b> Selecione um trecho e use a barra acima, ou os atalhos de sempre: <b>Ctrl+B</b>, <i>Ctrl+I</i> e <b>Ctrl+K</b> para links.</p>
 <ul>
   <li>Cole um texto do Word ou do Google Docs e veja as listas chegarem inteiras.</li>
   <li>Arraste uma imagem para cá e redimensione pela alça no canto.</li>
   <li>Abra o código-fonte ou a pré-visualização em celular pelos botões da direita.</li>
 </ul>
 <p>Use <b>Tab</b> numa lista para criar subitens, e <b>Alt+F10</b> para chegar à barra pelo teclado.</p></textarea>
-        </div>
-        <p class="demo-note">Na demonstração, o assistente de IA responde com um texto de exemplo. No seu site, ele usa o Gemini ou a OpenAI pelo <code>ai-api.php</code>.</p>
-      </div>
-    </section>
-
-    <section class="section section-mist" id="recursos" aria-labelledby="recursos-title">
-      <div class="wrap">
-        <h2 id="recursos-title">O que vem pronto</h2>
-        <p class="section-lede">Tudo o que um painel administrativo ou uma loja virtual costuma precisar, sem configurar nada além da barra de ferramentas.</p>
-
-        <ul class="features">
-          <li>
-            <h3>Substitui o textarea</h3>
-            <p>O formulário continua igual: o HTML é copiado para o campo a cada alteração e no envio.</p>
-          </li>
-          <li>
-            <h3>Seguro contra XSS</h3>
-            <p>Tudo o que entra passa por um sanitizador: colar, arrastar, código-fonte, IA e desfazer. Scripts, eventos e links <code>javascript:</code> ficam de fora.</p>
-          </li>
-          <li>
-            <h3>Colar do Word e do Google Docs</h3>
-            <p>Listas viram listas de verdade, e classes e estilos repetidos são descartados. <code>Ctrl+Shift+V</code> cola só o texto.</p>
-          </li>
-          <li>
-            <h3>Imagens sem complicação</h3>
-            <p>Envie pelo botão ou arraste o arquivo, redimensione pela alça e defina o texto alternativo. O upload vai para o seu servidor.</p>
-          </li>
-          <li>
-            <h3>Tabelas</h3>
-            <p>Escolha o tamanho numa grade, adicione linhas e colunas pelo menu e ande entre as células com <code>Tab</code>.</p>
-          </li>
-          <li>
-            <h3>Acessível pelo teclado</h3>
-            <p>Barra, menus e janelas funcionam sem mouse e são anunciados por leitores de tela.</p>
-          </li>
-          <li>
-            <h3>Código-fonte e pré-visualização</h3>
-            <p>Edite o HTML com realce de sintaxe e veja o resultado em desktop, tablet e celular.</p>
-          </li>
-          <li>
-            <h3>Assistente de IA, se quiser</h3>
-            <p>Gera textos em HTML com Gemini ou OpenAI. O backend de exemplo já vem com login, limite de uso e sanitização.</p>
-          </li>
-        </ul>
-      </div>
-    </section>
-
-    <section class="section" id="instalacao" aria-labelledby="instalacao-title">
-      <div class="wrap">
-        <h2 id="instalacao-title">Instalação</h2>
-        <p class="section-lede">O editor depende só do jQuery. Ícones e estilos são carregados sozinhos, com ou sem Tailwind na página.</p>
-
-        <ol class="steps">
-          <li>
-            <div>
-              <h3>Inclua o jQuery e o Weaver</h3>
-              <p>Pelo CDN do jsDelivr ou com o arquivo baixado no seu servidor.</p>
-              <pre><code data-lang="html">&lt;script src="https://code.jquery.com/jquery-3.6.0.min.js"&gt;&lt;/script&gt;
-&lt;script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@v1.1.0/dist/weaver-editor.min.js"&gt;&lt;/script&gt;</code></pre>
-            </div>
-          </li>
-          <li>
-            <div>
-              <h3>Tenha um textarea no formulário</h3>
-              <p>O conteúdo que já estiver nele é carregado no editor.</p>
-              <pre><code data-lang="html">&lt;label for="artigo"&gt;Artigo&lt;/label&gt;
-&lt;textarea id="artigo" name="conteudo_html"&gt;&lt;/textarea&gt;</code></pre>
-            </div>
-          </li>
-          <li>
-            <div>
-              <h3>Inicie o editor</h3>
-              <p>Sem opções, você recebe a barra completa.</p>
-              <pre><code data-lang="js">$(function () {
-  $('#artigo').weaver({ height: 400 });
-});</code></pre>
-            </div>
-          </li>
-        </ol>
-
-        <div class="callout">
-          <h3>Vindo do Summernote?</h3>
-          <p>A barra usa a mesma sintaxe e os mesmos nomes, como <code>style</code>, <code>clear</code>, <code>picture</code>, <code>color</code> e <code>paragraph</code>. Copie a configuração da barra, troque <code>.summernote(</code> por <code>.weaver(</code> e revise as demais opções.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="section section-mist" id="documentacao" aria-labelledby="documentacao-title">
-      <div class="wrap">
-        <h2 id="documentacao-title">Documentação</h2>
-        <p class="section-lede">Opções, API, eventos, imagens, IA e segurança. Este conteúdo vem do <a href="https://github.com/edersonfr/weaver-editor#readme">README do repositório</a>, então está sempre atualizado.</p>
-
-        <div class="docs-layout">
-          <nav class="docs-toc" aria-label="Seções da documentação">
-            <ol id="docs-toc"></ol>
-          </nav>
-          <div class="docs-body" id="docs-body" data-readme="https://raw.githubusercontent.com/edersonfr/weaver-editor/main/README.md" aria-live="polite">
-            <p class="docs-status">Carregando a documentação… Se ela não aparecer, leia o <a href="https://github.com/edersonfr/weaver-editor#readme">README no GitHub</a>.</p>
+          </div>
+          <div class="stage-controls">
+            <button class="stage-toggle" type="button" id="theme-toggle" aria-pressed="false">Ver no tema escuro</button>
+            <p class="stage-note">O assistente de IA desta demonstração responde com um texto de exemplo. No seu site, ele usa o Gemini ou a OpenAI pelo <code>ai-api.php</code>.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section" id="apoio" aria-labelledby="apoio-title">
-      <div class="wrap support">
-        <div>
-          <h2 id="apoio-title">Apoie o projeto</h2>
-          <p>O Weaver é gratuito e open source. Se ele poupou tempo no seu projeto, uma doação ajuda a manter o desenvolvimento.</p>
+    <section class="output" id="saida" aria-labelledby="saida-title">
+      <h2 class="visually-hidden" id="saida-title">O que o formulário recebe</h2>
+      <div class="output-index">
+        <div class="output-names" role="group" aria-label="Exemplos de saída">
+          <button type="button" class="output-name" data-sample="live" aria-pressed="true" aria-controls="sheet">O seu texto</button>
+          <button type="button" class="output-name" data-sample="word" aria-pressed="false" aria-controls="sheet">Colado do Word</button>
+          <button type="button" class="output-name" data-sample="xss" aria-pressed="false" aria-controls="sheet">Um ataque XSS</button>
+          <button type="button" class="output-name" data-sample="trusted" aria-pressed="false" aria-controls="sheet">Modo confiável</button>
         </div>
-        <a class="button button-quiet" href="https://www.paypal.com/donate?campaign_id=K9JYEZJHMTSGE" rel="noopener noreferrer">Doar pelo PayPal</a>
+        <p class="output-text" data-reveal>Ao lado, o HTML que o formulário envia. Tudo o que entra passa pelo sanitizador, seja o que você digita, o que cola ou o que chega da IA. Os exemplos rodam no editor desta página.</p>
       </div>
+
+      <div class="output-stage">
+        <div class="sheet" id="sheet" data-ui aria-live="polite">
+          <div class="sheet-head">
+            <span class="sheet-method">POST</span>
+            <span class="sheet-url">/salvar</span>
+            <span class="sheet-field" id="sheet-field">conteudo_html</span>
+          </div>
+          <div class="sheet-body" id="sheet-body">
+            <p class="sheet-label">Enviado no formulário</p>
+            <pre><code data-lang="html">&lt;h2&gt;Experimente aqui mesmo&lt;/h2&gt;</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="recursos" aria-labelledby="recursos-title">
+      <h2 class="section-title" id="recursos-title" data-reveal>O que vem pronto</h2>
+
+      <ul class="cells">
+        <li class="cell cell-top" data-reveal style="--i:0">
+          <div class="cell-text">
+            <h3>Imagens</h3>
+            <p>Envie pelo botão, arraste o arquivo ou cole um print. Redimensione pela alça e alinhe pela barra da imagem; o upload vai para o seu servidor.</p>
+          </div>
+          <figure class="cell-shot dock-bottom-left"><img src="assets/shots/image.png" width="464" height="350" alt="Imagem selecionada no editor, com a barra de tamanhos 100%, 50% e 25%, alinhamentos, texto alternativo e excluir, e a alça de redimensionar no canto" loading="lazy"></figure>
+        </li>
+        <li class="cell cell-bottom" data-reveal style="--i:1">
+          <figure class="cell-shot dock-top-right zoom"><img src="assets/shots/table.png" width="282" height="318" alt="Grade de tamanho da tabela com 4 colunas por 3 linhas marcadas" loading="lazy"></figure>
+          <div class="cell-text">
+            <h3>Tabelas</h3>
+            <p>Escolha o tamanho numa grade, inclua linhas e colunas pelo menu da célula e ande entre as células com Tab.</p>
+          </div>
+        </li>
+        <li class="cell cell-top" data-reveal style="--i:2">
+          <div class="cell-text">
+            <h3>Fontes do Google</h3>
+            <p>O catálogo inteiro cabe no menu, com busca. Cada família só é baixada quando aparece na lista ou já está no texto.</p>
+          </div>
+          <figure class="cell-shot dock-bottom-right zoom"><img src="assets/shots/fonts.png" width="294" height="333" alt="Menu de fontes com a busca mo, mostrando Monoton, Montserrat e Montserrat Alternates" loading="lazy"></figure>
+        </li>
+        <li class="cell cell-bottom" data-reveal style="--i:3">
+          <figure class="cell-shot dock-top-left"><img src="assets/shots/code.png" width="1020" height="487" alt="Código-fonte do texto com numeração de linhas e tags realçadas em amarelo" loading="lazy"></figure>
+          <div class="cell-text">
+            <h3>Código-fonte</h3>
+            <p>Edite o HTML com realce e numeração de linhas. O que você muda no código volta para o editor já sanitizado.</p>
+          </div>
+        </li>
+        <li class="cell cell-top" data-reveal style="--i:4">
+          <div class="cell-text">
+            <h3>Tema escuro</h3>
+            <p>Segue a classe <code>.dark</code> da sua página ou a opção <code>theme</code>. As cores são variáveis CSS que você ajusta.</p>
+          </div>
+          <figure class="cell-shot dock-bottom-left"><img src="assets/shots/dark.png" width="1020" height="347" alt="Editor no tema escuro com a descrição de uma camiseta" loading="lazy"></figure>
+        </li>
+        <li class="cell cell-bottom" data-reveal style="--i:5">
+          <figure class="cell-shot dock-top-right zoom"><img src="assets/shots/link.png" width="385" height="320" alt="Janela de link com texto de exibição, URL de uma loja e a opção abrir em nova aba" loading="lazy"></figure>
+          <div class="cell-text">
+            <h3>Pelo teclado</h3>
+            <p>Alt+F10 leva à barra, as setas andam entre os botões e Ctrl+K abre o link. Leitores de tela anunciam menus e janelas.</p>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="steps-section" id="instalacao" aria-labelledby="instalacao-title">
+      <h2 class="section-title" id="instalacao-title" data-reveal>Instalação em três trechos</h2>
+
+      <ol class="exchanges">
+        <li class="exchange" data-reveal>
+          <p class="exchange-say">Primeiro, inclua o jQuery e o Weaver.</p>
+          <pre class="call"><code data-lang="html">&lt;script src="https://code.jquery.com/jquery-3.6.0.min.js"&gt;&lt;/script&gt;
+&lt;script src="https://cdn.jsdelivr.net/gh/edersonfr/weaver-editor@v1.1.0/dist/weaver-editor.min.js"
+        integrity="sha384-c7oOrLnhc5mQo12f2DljdvdQaiIwxCPiayKwrUFwT1x+GMGIye3R7D91P5y1U92N"
+        crossorigin="anonymous"&gt;&lt;/script&gt;</code></pre>
+          <div class="response console" data-ui>
+            <span class="console-prompt">&gt;</span> <span>WysiwygEditor.VERSION</span>
+            <span class="console-out">'1.1.0'</span>
+          </div>
+        </li>
+        <li class="exchange" data-reveal>
+          <p class="exchange-say">Depois, aponte para o seu textarea.</p>
+          <pre class="call"><code data-lang="js">$(function () {
+  $('#artigo').weaver({ height: 400 });
+});</code></pre>
+          <figure class="response response-video">
+            <video src="assets/shots/word-paste.webm" poster="assets/shots/word-paste.png" width="880" height="480" muted loop playsinline autoplay preload="none" aria-label="Gravação do editor: um texto do Word é colado e vira título, parágrafo e lista limpos; depois o código-fonte é aberto"></video>
+          </figure>
+        </li>
+        <li class="exchange exchange-last" data-reveal>
+          <p class="exchange-say">No envio, o HTML chega no campo de sempre.</p>
+          <pre class="call"><code data-lang="php">$html = $_POST['conteudo_html'];
+// Limpo no navegador. No modo confiável, valide também no servidor.</code></pre>
+          <div class="response request" data-ui>
+            <div class="request-head"><span>Dados do formulário</span><span id="request-size"></span></div>
+            <div class="request-row">
+              <span class="request-key">conteudo_html</span>
+              <code class="request-value" id="request-value"></code>
+            </div>
+          </div>
+        </li>
+      </ol>
+
+      <p class="steps-note" data-reveal><strong>Vindo do Summernote?</strong> A barra usa a mesma sintaxe e os mesmos nomes (<code>style</code>, <code>clear</code>, <code>picture</code>, <code>color</code>, <code>paragraph</code>). Troque <code>.summernote(</code> por <code>.weaver(</code> e revise as demais opções.</p>
+    </section>
+
+    <section class="docs" id="documentacao" aria-labelledby="documentacao-title">
+      <div class="docs-head" data-reveal>
+        <h2 class="docs-title" id="documentacao-title"><span>Documentação</span> <span>completa, do README.</span></h2>
+        <a class="button button-dark" href="https://github.com/edersonfr/weaver-editor#readme">Abrir no GitHub</a>
+      </div>
+
+      <div class="docs-layout">
+        <nav class="docs-toc" aria-label="Seções da documentação">
+          <ol id="docs-toc"></ol>
+        </nav>
+        <div class="docs-body" id="docs-body" data-readme="https://raw.githubusercontent.com/edersonfr/weaver-editor/main/README.md" aria-live="polite">
+          <p class="docs-status">Carregando a documentação… Se ela não aparecer, leia o <a href="https://github.com/edersonfr/weaver-editor#readme">README no GitHub</a>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="start" id="comecar" aria-labelledby="comecar-title">
+      <form class="start-form" id="start-form">
+        <h2 class="visually-hidden" id="comecar-title">Comece agora</h2>
+        <label class="visually-hidden" for="start-id">Id do seu textarea</label>
+        <div class="start-sentence">
+          <span class="start-line">Ative o Weaver no</span>
+          <span class="start-line"><span class="start-hash" aria-hidden="true">#</span><input class="start-input" id="start-id" name="id" value="artigo" autocomplete="off" spellcheck="false" maxlength="40"><button class="start-button" type="submit">copiar</button></span>
+        </div>
+        <p class="start-explain">Copia <code id="start-code">$('#artigo').weaver();</code> com o id que você digitar. Gostou? <a href="https://www.paypal.com/donate?campaign_id=K9JYEZJHMTSGE" rel="noopener noreferrer">Apoie o projeto pelo PayPal</a>.</p>
+      </form>
     </section>
   </main>
 
   <footer class="site-footer">
-    <div class="wrap">
-      <p>© 2026 Ederson F. Ribeiro. Distribuído sob a <a href="https://github.com/edersonfr/weaver-editor/blob/main/LICENSE">licença MIT</a>.</p>
-      <ul>
-        <li><a href="https://github.com/edersonfr/weaver-editor">Código no GitHub</a></li>
-        <li><a href="https://github.com/edersonfr/weaver-editor/issues">Reportar um problema</a></li>
-      </ul>
-    </div>
+    <p class="footer-what">Weaver Editor 1.1.0, editor de texto rico para jQuery.</p>
+    <ul class="footer-links">
+      <li><a href="https://github.com/edersonfr/weaver-editor">Código no GitHub</a></li>
+      <li><a href="https://github.com/edersonfr/weaver-editor/issues">Reportar um problema</a></li>
+      <li><a href="https://github.com/edersonfr/weaver-editor/blob/main/CHANGELOG.md">Novidades</a></li>
+      <li><a href="https://github.com/edersonfr/weaver-editor/blob/main/LICENSE">Licença MIT</a></li>
+    </ul>
+    <p class="footer-who">© 2026 Ederson F. Ribeiro. Foto na captura de imagem: Mike Wilson, <a href="https://unsplash.com/license">licença Unsplash</a>.</p>
   </footer>
 
   <script src="assets/jquery-3.6.0.min.js"></script>
